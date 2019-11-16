@@ -1,0 +1,17 @@
+Linux Static samba mount--How to.
+
+1. install samba utilities:
+sudo apt install cifs-utils
+
+2. add line to /etc/fstab to mount a smb share called "vault":
+//192.168.15.6/vault /mnt/vault cifs credentials=/etc/samba/passwd_file,iocharset=utf8,file_mode=0777,dir_mode=0777,uid=bcaster,gid=bcaster,nofail 0 0
+
+3. create /etc/samba/passwd_file with root only read access for smb share credentials:
+username=<username>
+password=<password>
+domain=WORKGROUP
+
+4. run to mount (or attempt to mount if there is a proble) any new entries with out rebooting:
+mount -av 
+
+

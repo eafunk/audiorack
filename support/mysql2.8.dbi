@@ -1,0 +1,9 @@
+ALTER TABLE [prefix]file ADD Prefix varchar(4095) default NULL;
+ALTER TABLE [prefix]file ADD Path varchar(4095) default NULL;
+ALTER TABLE [prefix]file ADD KEY [prefix]file_pre (Prefix (255));
+ALTER TABLE [prefix]file ADD KEY [prefix]file_path (Path (255));
+ALTER TABLE [prefix]file DROP KEY [prefix]file_inode;
+ALTER TABLE [prefix]file DROP KEY [prefix]file_md5;
+ALTER TABLE [prefix]file DROP FileID;
+ALTER TABLE [prefix]file DROP MD5;
+UPDATE [prefix]info SET Value = '4.0' WHERE Property = 'Version';

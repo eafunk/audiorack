@@ -1,0 +1,13 @@
+./arRecorder4 -p -b 1 test ars9550 12 ars9550:Monitor_ch0,ars9550:Monitor_ch1 "appsrc name=audiosrc ! audioconvert ! lamemp3enc target=bitrate cbr=true bitrate=192 ! filesink location=out.mp3"
+
+Pipelines:
+General form: "appsrc name=audiosrc ! audioconvert ! <compression coder> ! <conatiner muxer> ! <sink>
+
+MP3 file: "appsrc name=audiosrc ! audioconvert ! lamemp3enc target=bitrate cbr=true bitrate=192 ! filesink location=out.mp3"
+
+shout/icecast: "appsrc name=audiosrc ! audioconvert ! lamemp3enc target=bitrate cbr=true bitrate=192 ! shout2send ip=127.0.0.1 port=8000 password=hackme mount=/test"
+
+NOTES TO SELF:
+faac ! mp4mux
+
+opusenc ! oggmux 

@@ -1,0 +1,2 @@
+ALTER TABLE [prefix]schedule MODIFY Fill int(4) unsigned default 0;
+UPDATE [prefix]info SET Value = '2.7' WHERE Property = 'Version';

@@ -1,0 +1,381 @@
+*** System/Configuartion Commands ***
+
+info
+shows version information, etc.
+
+stat
+returns the current general status of the playlist, automation, logs, etc.
+
+settings [key string (optional)] [value string(optional)]
+Returns all the current setting (automation, database, etc.) keys and values.
+
+get [key string]
+Returns the setting value (automation, database, etc.) for the specified key, the value for that key will be
+
+set [key string] [value string]
+Sets the specified setting key (automation, database, etc.) to the specified value.
+
+setpath [path string]
+sets the save path to the settings configuration file.
+
+saveset
+saves all the current settings to the settings configuration file, if the setpath path has been set.
+
+config [path string]
+loads/executes a configuration file.  Partial paths are interpreted relative to 
+arserver's working directory when it was launched.
+
+clients
+shows a list of the currently connected client ip addresses.
+
+echo [message string]
+prints a message to back out the sending control port.
+
+dblist 
+prints a list of the (libdbi) database drivers installed on this machine.
+
+dbsync 
+Scans through the files in the current database, updating Hash and mount information for each file URL. This function is useful for updating the database in some cases when directed by the version upgrade directions. 
+
+dbfilesearch [optional path string]
+Scans through all the files in either the specified file path tree (if given) or all the mount found in the database, checking all the file Hash code and mount information against the database to locate any files that may have been moved or renamed.  The system setting db_file_search_pace sets the delay, in milliseconds, between each file checked; or 250 mS be default.
+
+dbinit 
+sets up a the database structure of a new database for use. Settings for db_name, db_type and (server) db_user, db_pw, db_server or (SQLite) db_dir must point to the new database.
+Running this command on with settings pointing to an existing database will cause the database audiorack version to be checked and upgraded to a new version (as required by this audiorack installation's version) if needed.
+
+inpath [path string]
+sets the save path to the line input definition configuration file.
+
+outpath [path string]
+sets the save path to the audio output setup configuration file.
+
+tasks
+returns an indexed list of all the running tasks.
+
+task [name string] [timeout integer seconds] [command string]
+runs the specified arserver command as a background task, independent of the control session that issued this command.  The task will appear in the task list with the specified name (no spaces) and will run until the command is completed or until timeout seconds has elapsed.  If timeout is zero, then the task will run until the command is completed.
+
+deltask
+deletes/stops the specified (by index) task from running.
+
+execute [command string]
+executes (via fork and exec) the specified unix shell command.
+
+attach [command string]
+same as execute, except the forked process stdin and stdout streams are attached to the issuing session streams and control is not returned to arserver until the process is complete.
+
+external [command string]
+similar to execute, except the forked process stdin and stdout streams are attached to the issuing arserver control session allowing for the execution of custom control scripts.  The usual arserver control session command prompt "ars>" will have a new line character added to the end to allow for easy shell scripting where stdin line reading is used.  Control will not be returned to the issuing session until the forked process is complete.  This command may be useful if used along with the "task" command so it will run as a background task instead of taking over the issuing control session.
+
+modbusset IP-address UnitID CoilAddress
+Send a modbus/TCP coil on command to the modbus interface at the specified IP-address (must be numeric, not named) on port 502. UnitID is one byte hex (usually 01), CoilAddress is two byte hex.
+
+modbusclear IP-address UnitID CoilAddress
+Send a modbus/TCP coil off command to the modbus interface at the specified IP-address (must be numeric, not named) on port 502. UnitID is one byte hex (usually 01), CoilAddress is two byte hex.
+
+modbuspoll period IP-address UnitID InputAddress config_file
+Creates a non-expiring task that runs in the background (see task functions) to pool the specified modbus device's digital input.  When the polling discovers that the input has changes state, the specified configuration file (found in the directory specified in the system setting file_trigger_dir) with either .on or .off appended to the file name to representing the input's new state is executed. Period is an decimal integer indicating the polling period in seconds. IP-address of the device to poll must be in numeric, not named, on port 502. UnitID is one byte hex (usually 01), InputAddress is two byte hex.
+
+iaxstream 
+Starts a tcp<->udp tunnel on the controlling terminal with udp destination set to the local computer on the iax port. This command is intended to allow iax telephone usage by a remote ARStudio client. Control WILL NOT return to arserver on the connection used to issue this command.  If you plan to use this function, you should open a new connection to arserver just for this purpose.
+
+vuon
+vuoff
+turns on or off notification vu meters reporting for a client after notification has been enabled.
+
+notify 
+registers the connection this command was issued on to receive server state change notice packets.
+
+iaxinit
+shutdown and re-initializes the iax telephone system using the current iax_ group of key/value settings (see 'settings' command).
+
+exit
+close this control session (remote connection). Notification to this client (if enabled) is stopped also.
+
+restart
+Shuts down arserver and closes all control sessions. If arserver was run in keep-alive mode, it will be restarted
+
+shutdown
+Shuts down arserver and closes all control sessions. No restarting even if run in keep alive mode.
+
+*** Audio Control Commands ***
+srcports
+returns a list JACK audio source ports (audio sources).
+
+dstports
+returns a list JACK audio destination ports (audio sinks).
+
+meters
+returns the current peak and avarage VU meter readings for each output channel
+
+setin [input-name string] [bus hex] [available-controls hex] [jack port list]
+creates or updates a line input definition using the jack port list to map connections from the specified Jack Audio source ports
+to corrisponding input channels on the AR mixer when this input is loaded into a player. The mixer input bus assignment are also specified. 
+Bus number bits 0 through 23 are stereo mixer output bus enables, bits 24 through 26 are mute group A, B and C enables. Mute group is 
+enables/disabled at play/stop.
+
+available-controls is used to notifies clients what controls the input supports setting a bit indicates that the corresponding control is supported:
+0-volume, 1-position, 2-skip ahead, 3-skip back, 4-fade, 5-feed.
+
+The jack port list format is by example:
+	client:port1+client:port2&client:port3+client:port4
+... which connects the input's first channel to client source port1 AND port2, then connects the input's second channel to client port3 AND port4.  
+Multiple ports per channel are optional, specified with the + delimiter. The & delimiter incrementing the list to the next input channel connection.
+Input connections are persistent - arServer will attempt to reconnect if the client goes away and comes back while a player is loaded with an input.
+
+delin [name string]
+deletes specified line input definition.
+
+getin [name string]
+returns specified line input definition.
+
+dumpin
+returns a list of all the line input settings.
+
+inuid [name string]
+returns the UID of the named input if it is currently loaded in a player or is in the playlist queue.  Return 0 if the named input is not found.
+
+savein
+saves the current line input definitions to the line input definition configuration file if the path to the file has been set and the file permissions allow writing.
+
+setout [name string] [muteGain integer] [bus integer] [jack port list]
+creates or updates the named output device definition mapping the specified mixer output bus to the given Jack Audio sink ports therough
+and output group with controllable gain, muting, and delay. The muteGain integer (hex format) sets the output device gains when cue (LSB),
+mute-A, mute-B, or mute-C (MSB) mute groups are enables. 00=off, ff=mute attenuation gain = ((hex val) / 255).
+
+The jack port list format is by example:
+	client:port1+client:port2&client:port3+client:port4
+... which connects the output's first channel to client destination port1 AND port2, then connects the output's second channel to client port3 AND port4.  
+Multiple ports per channel are optional, specified with the + delimiter. The & delimiter incrementing the list to the next input channel connection.
+Output connections are persistent - arServer will attempt to reconnect if the client goes away and comes back.
+
+delout [name string]
+deletes specified output group definition.
+
+getout [name string]
+returns specified output group definition.
+
+outvol [name string] [volume float]
+sets the specified output group volume (1.0 = unity gain, scalar).
+
+setdly [destination name string] [delay float (in seconds)]
+sets the specified output group delay in seconds (0.0 to 10.0).
+
+dump
+sets the delay to zero of all output groups.
+
+getdly
+returns a list of all the output group (output groups and recorders) and their delay in seconds (0 to 10).
+
+dumpout
+returns a list of all the output group definitions.
+
+saveout
+saves the current output group definitions to the output device definition configuration file if the path to the file has been set and the file permissions allow writing.
+
+jackconn [source port name string]>[destination port name string] 
+jackdisc [source port name string]>[destination port name string]
+Manually connect or disconnect the specified jack-audio ports.  Strings are of the typical jack format: client_name:port_name.  Note the ">" delimiter 
+between sourec and destinations.
+
+jconlist
+Returns the current list of persistent jack connections, including connections that might be waiting to reconnect when a jack client comes back on-line.  This list is manipulated with the jackconn and jackdisc commands.
+
+setmm [input-name string] [jack port list]
+sets a list of jack destination ports to which monitor mix-minus connection will be made when the specified input is loaded, between 
+the corrisponding mmIn source of the input the input was loaded into and ports in the list.  When the player is unloaded, these connections will be
+disconnected.  This is intended to implement a monitor-mix-minux.  For example, an input named Telephone, coming from a telephone hybid, can have an jack audio 
+destination connected to the arServer MixBus0 channels (monitor bus).  The Telephone input would then have it's mix-minus list set the the same destination
+channel list.  When the Telephone is loaded into a player, the corrisponding mix-minus output from the player is connected to the destination.  The player 
+mix-minus output is a phase inverted copy of the monitor mix contribution from that player's input.  The end result is that the output destination will contain
+all the monitor bus audio WITHOUT the audio from the telephone, allowing that destination to be used as a "feed" to the caller on the other end of the telephone.
+NOTE:  This only works when the Bus0 channels (monitor) are used as the feed source.  Output groups can not be used as the monitor feed, even when set to the
+monitor bus, due to output group delay and volume settings messing up the mix-minus audio cancelation for non-zero delay and non-unity gain. See setin command
+for jack port list format. Providing an empty list clears the existing list, if any.
+
+getmm
+returns the monitor mix-minus jack port list of the associated input monitor bus.
+
+(x)setdm [source channel integer] [destination ID integer] [device string (UID)]
+Sets the direct monitoring destination for the specified source channel of an audio input device to the given destination ID, or 0 to disable. The source is the device's input channel number and the destination is an available dm destination obtained via the 'listdm' command.
+
+(x)getdm [device string (UID)]
+returns a per channel list of the direct monitoring destination ID and Name (if any) set for the given audio device.
+
+(x)listdm [source channel integer] [device string (UID)]
+returns a list of possible direct monitoring destinations (if any) for the specified source channel of a given audio input device. A text description (if available) and a destination ID (integer) for use with other dm commands, will be returned.
+
+Note: If an output device supports dm, arserver can control the dm volume and panning to mirror arserver channel mixer settings.
+
+*** Player Commands ***
+
+pstat
+returns the current status and other information for each player. Status integer: bit flags b0-loading, b1-standby, b2-playing, b3-hasPlayed, b4-finished reading file, b5-logged, b6-waiting, b7-position has changes
+
+load [pNum integer] [url string]
+loads the specified player number with the specified resource. URL is a reference to the resource to load, for example:
+  file://localhost/url_encoded_unix_path_to_audio_file
+  jack://source:port1+source2:port1&source:port2+source2:port2	NOTE: + delimited second sources are optional
+  input:///input_name (see setin and dumpin)
+  item://database_item_id# (for database items)
+  (x)iax:///line_number (for iax phone lines)
+Note: pNum may be substituted with a $ to make use of the last pNum used/generated by the session.
+Note: pNum may be substituted with -1 to load the next avalable player.  The session last pNum will be update to the pNum used.
+
+cue [url string]
+The Same as loads except the next available player is loaded and the player is placed in cue. This function returns the new player's UID in hex format AND the player number that was loaded.
+
+unload [pNum integer]
+unloads the specified player
+Note: pNum may be substituted with a $ to make use of the last pNum used/generated by the session.
+
+stop [pNum integer]
+stops the specified player from playing
+Note: pNum may be substituted with a $ to make use of the last pNum used/generated by the session.
+
+play [pNum integer]
+starts playing the specified player
+Note: pNum may be substituted with a $ to make use of the last pNum used/generated by the session.
+
+playnow [UID or URL]
+If UID of a playlist item, or -1 for last UID in the session UID is specified, the playlist item will be loaded into a player (if not already loaded) and playing of the item will be started.
+If a URL is specified, the next available player will be loaded with the specified URL, and the playing of the player will be started.  When a URL is specified, the play will have a spacial status flag set such that the player will automatically unload when it is stopped or finishes playing.
+
+pos [pNum integer] [position float]
+sets the play position (seconds) of the specified player
+Note: pNum may be substituted with a $ to make use of the last pNum used/generated by the session.
+
+vol [pNum integer] [volume float]
+sets the specified player's volume (1.0 = unity gain, scalar)
+Note: pNum may be substituted with a $ to make use of the last pNum used/generated by the session.
+
+bal [pNum integer] [balance float]
+sets the specified player's balance (-1.0 = L, 1.0 = R)
+Note: pNum may be substituted with a $ to make use of the last pNum used/generated by the session.
+
+bus [pNum integer] [bus hex]
+sets the specified player's output bus (set bit enables the corresponding output)
+Note: pNum may be substituted with a $ to make use of the last pNum used/generated by the session.
+
+(x)feed [pNum integer] [bus integer] [(optional)volume float]
+sets the specified player's 'feed bus' (audio sent back to the source) and feed volume (1.0 = unity gain, scalar) to the specified mixer output bus number: 0=mon, 1=cue, 2=main, 3=alt (iax phone line players only).
+Note: pNum may be substituted with a $ to make use of the last pNum used/generated by the session.
+
+fade [pNum integer] [time float]
+sets the time position to start fading out the specified player number
+Note: pNum may be substituted with a $ to make use of the last pNum used/generated by the session.
+
+fadeprior
+Fade all items playing except for the item that started most recently.
+
+next [pNum integer] [next integer] [time float]
+sets the time position for the specified player (pNum) to start playing the next player (next)
+Note: both pNums may be substituted with a $ to make use of the last pNum used/generated by the session.
+
+*** Playlist Commands ***
+
+list
+Dumps the current play list queue
+
+add [pos or UID integer] [url string]
+add [pos or UID integer] [pNum integer]
+inserts the specified item or player into the play list at index (decimal) pos (-1 for end of list, -2 for next) or at the same position as the list item with (hex) pos UID.  
+Note: url supports stop:/// to add a playlist stop.
+
+uadd [pos or UID integer] [url string]
+Unique add: The same as add above except it does not accept player numbers and will only add the item if the url is not yet in the playlist.  If an item with the specified url is already in the playlist, it simply sets lastuid to that items uid value and returns the value. 
+
+split [UID integer] [url string]
+inserts the specified (by URL) item into the play list at the same position as an existing list item with the specified (hex) UID or -1 for the last used UID or the parent UID. The new item inherits the exiting item's meta properties for def_segout, def_bus, SegIn, Volume, Duration, FadeOut, Priority, Together, TargetTime, FillTime and FadeTime.
+
+segnow
+If an item is currently playing and is set to segue into another item, this command will forces it to immediately fade out and segue into the next item.
+
+segall
+This command will forces all playing items from the playlist to immediately fade out and segue into the next non-playing item in the list.
+
+waitseg [pNum or UID integer]
+This command blocks until the next item in the playlist AFTER the item in the  specified player number or item with specified UID starts playing.  This command will also continue if the specified item is no longer in a player, has been deleted, or is no longer in the playlist.  This is useful for a task item that executes arserver command to make execution of commands wait until an item has segued to the next item.
+
+delete [pos integer]
+deletes the play list item at index (decimal) pos ot UID (hex) pos. If the item is in a player, it will be unloaded too.
+
+move [from-pos integer] [to-pos integer]
+moves the play list item at index from-pos to index to-pos if decimal or UID to UID in hex format.
+
+run
+starts the automatic loading and playing of items in the playlist queue.
+
+halt
+stops the automatic loading and playing of items in the playlist queue. Items currently loaded into a
+	player unloaded unless thay are playing.
+
+expand [UID integer]
+Starts the expansion of a file or database playlist item in the playlist into it's containing items.
+
+*** Item metadata Commands ***
+
+urlmeta [url string]
+returns a list of metadata (if any) for the item referenced from the given url.
+
+setmeta [metaUID or pNum integer] [key string] [value string]
+set specified player number (decimal) or UID (hex) meta data key/value pair
+
+delmeta [metaUID integer] [key string]
+deletes specified player number (decimal) or UID (hex) meta data key/value pair
+
+getmeta [metaUID integer] [key string]
+returns specified player number (decimal) or UID (hex) meta string for the given property key.
+
+dumpmeta [metaUID integer]
+returns a list of all the meta data key/value pairs for the specified UID
+
+logmeta [metaUID integer]
+Updates Name, Artist, Album, Comment, Owner, Source properties in the program log to match the specified UID current properties where the program log record ID = UID's property logID.
+
+logsync
+Program logs have been added/changed by the client directly through the database...
+This command will send a notice to all clients to sync to the new log entry.
+
+(x)setstat [pNum integer] [status integer]
+sets the specified player number status integer: bit flags b0-loading, b1-standby, b2-playing, b3-hasPlayed, b4-finished reading file, b5-logged, b6-waiting, b7-position has changes
+
+logrotate
+Causes the current arserver log to be renamed with .old appended to the end, replacing any previous file with that name and then closes the log file causeing a new log file to start.
+
+getuid [property string] [value string]
+returns the UID of the first item found that has a specified metadata property value set to the specified value.  This function first searches the players in ascending order, then searches the playlist in next to last order. Return 0 if none not found.
+
+*** Recorder/Encoder Commands ***
+
+rstat
+returns the current status and other information for all the current recorders
+
+newrec
+Creates a new file recorder/streamer instance with no specified properties.  The UID of the new instance is returned to reference it in the commands that follow
+
+initrec [UID integer]
+Initializes the specified file recorder/streamer instance UID, in hex format or -1 for last used UID. MetaData properties for the specified UID, set prior to issuing this command, are used to set up and initialize recorder/encoder. See appendix C for details on the recorder properties.
+
+startrec [UID integer]
+starts or re-starts the recorder with the associated UID (hex format)
+
+stoprec [UID integer]
+stops the recorder with the associated UID (hex format)
+
+recgain [UID integer] [float gain]
+Sets the recorder with the associated UID (hex format) input gain scalar.
+
+lockrec [UID integer]
+Locks the recorder with the associated UID (hex format) so no changes can be made to it.
+
+unlockrec [UID integer]
+Unlocks the recorder with the associated UID (hex format).
+
+closerec [UID integer]
+closes out the recorder with the associated UID (hex format), deleting the recorder instance.
+
+jsonpost [UID integer] [string]
+Causes the specified (by UID) rsp stream encoder to queue the given json string for transmission as a new stream meta data object. UID may be a hex formatted UID number, zero for all encoders or -1 to use the last session UID. The json string must be a properly formatted json object in non-printable (no LF/CR) text format.  This is handy for sending out alerts and such. Rsp encoders that have not yet been initialized ignore this command.
+

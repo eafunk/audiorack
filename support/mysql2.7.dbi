@@ -1,0 +1,3 @@
+ALTER TABLE [prefix]logs ADD OwnerID int(10) unsigned default NULL;
+ALTER TABLE [prefix]logs ADD KEY [prefix]logs_ownerid (OwnerID);
+UPDATE [prefix]info SET Value = '2.8' WHERE Property = 'Version';
