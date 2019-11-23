@@ -325,10 +325,12 @@ GstFlowReturn pull_samples(GstAppSink *sink, gpointer* data){
 			if(gst_buffer_map(buf, &info, GST_MAP_READ)){
 				/* write the data into the real-time-thread-safe ring buffer 
 				 * for the JACK realtime thread to read and send */
-				bytes = jack_ringbuffer_write(appData->ringbuffer, info.data, info.size);	
+				bytes = jack_ringbuffer_write(appData->ringbuffer, info.data, info.size);
 				gst_buffer_unmap(buf, &info);
+				gst_sample_unref(sample);
 				return GST_FLOW_OK;
 			}
+			gst_buffer_unmap(buf, &info);
 		}
 		gst_sample_unref(sample);
 	}
