@@ -848,6 +848,7 @@ fprintf(stderr, "hadling close: closewait=1, status=%d\n", data->status);
 							data->closeReq = TRUE;
 						}
 					}
+					gst_buffer_unmap(buffer, &info);
 					buffer = NULL;
 				}
 				if(buffer)
