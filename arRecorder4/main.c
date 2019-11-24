@@ -953,7 +953,7 @@ void* handleCtlQueues(void *refCon){
 					if(obj = cJSON_Parse(packet->data)){
 						if(item = obj->child){
 							tags = gst_tag_list_new_empty();
-							memset(&logRec, sizeof(ProgramLogRecord), 0);
+							memset(&logRec, 0, sizeof(ProgramLogRecord));
 							do{
 								if(item->child && item->string){
 									if(jstr = cJSON_PrintUnformatted(item)){
@@ -1001,14 +1001,13 @@ void* handleCtlQueues(void *refCon){
 									if((item = cJSON_GetObjectItem(ar, "ArtistID")) && (item->valueint))
 										logRec.artistID = item->valueint;
 									if((item = cJSON_GetObjectItem(ar, "AlbumID")) && (item->valueint))
-										logRec.albumID = item->valueint;																				
+										logRec.albumID = item->valueint;
 									if((item = cJSON_GetObjectItem(ar, "Owner")) && (item->valuestring))
-										logRec.owner = item->valuestring;							
+										logRec.owner = item->valuestring;
 									if((item = cJSON_GetObjectItem(ar, "Source")) && (item->valuestring))
 										logRec.source = item->valuestring;
 									if((item = cJSON_GetObjectItem(ar, "Comment")) && (item->valuestring))
 										logRec.comment = item->valuestring;
-
 								}
 								AddFPLEntryFromProgramLogStruct(data->ascPlayList, data->curPos, &logRec, &data->fpFilePos);
 							}
@@ -1072,7 +1071,7 @@ g_print("status set to ready\n");
 					data->settingsChanged = TRUE;
 					pthread_cond_broadcast(&data->ctlSemaphore);
 				}
-				if((new_state == GST_STATE_PLAYING) && !data->closeWaiting){						
+				if((new_state == GST_STATE_PLAYING) && !data->closeWaiting){
 					data->status = data->status | (rec_ready | rec_running);
 					if(data->status & rec_conn)
 						data->status = data->status & ~(rec_err_con_fail | rec_conn);
