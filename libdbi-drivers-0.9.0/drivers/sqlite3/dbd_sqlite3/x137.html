@@ -1,0 +1,327 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<HTML
+><HEAD
+><TITLE
+>SQLite3 (mis)features</TITLE
+><META
+NAME="GENERATOR"
+CONTENT="Modular DocBook HTML Stylesheet Version 1.79"><LINK
+REL="HOME"
+TITLE="sqlite3 driver manual"
+HREF="index.html"><LINK
+REL="UP"
+TITLE="Peculiarities you should know about"
+HREF="c134.html"><LINK
+REL="PREVIOUS"
+TITLE="Peculiarities you should know about"
+HREF="c134.html"><LINK
+REL="NEXT"
+TITLE="sqlite driver misfeatures"
+HREF="x209.html"></HEAD
+><BODY
+CLASS="SECT1"
+BGCOLOR="#FFFFFF"
+TEXT="#000000"
+LINK="#0000FF"
+VLINK="#840084"
+ALINK="#0000FF"
+><DIV
+CLASS="NAVHEADER"
+><TABLE
+SUMMARY="Header navigation table"
+WIDTH="100%"
+BORDER="0"
+CELLPADDING="0"
+CELLSPACING="0"
+><TR
+><TH
+COLSPAN="3"
+ALIGN="center"
+>sqlite3 driver manual: A libdbi driver using the SQLite3 embedded database engine</TH
+></TR
+><TR
+><TD
+WIDTH="10%"
+ALIGN="left"
+VALIGN="bottom"
+><A
+HREF="c134.html"
+ACCESSKEY="P"
+>Prev</A
+></TD
+><TD
+WIDTH="80%"
+ALIGN="center"
+VALIGN="bottom"
+>Chapter 4. Peculiarities you should know about</TD
+><TD
+WIDTH="10%"
+ALIGN="right"
+VALIGN="bottom"
+><A
+HREF="x209.html"
+ACCESSKEY="N"
+>Next</A
+></TD
+></TR
+></TABLE
+><HR
+ALIGN="LEFT"
+WIDTH="100%"></DIV
+><DIV
+CLASS="SECT1"
+><H1
+CLASS="SECT1"
+><A
+NAME="AEN137"
+>4.1. SQLite3 (mis)features</A
+></H1
+><P
+>As the SQLite3 package is constantly being improved, you should refer to the original documentation about the SQL features it <A
+HREF="http://www.sqlite.org/lang.html"
+TARGET="_top"
+>supports</A
+> and about the SQL features it <A
+HREF="http://www.sqlite.org/omitted.html"
+TARGET="_top"
+>doesn't support</A
+>.</P
+><P
+>One noticeable difference between SQLite3 and other SQL database engines is that the former uses something called "manifest typing". The practical difference to the typeless nature of SQLite 2.x is negligible as it still does not support the rich typing used by most other SQL database engines. In order to satisfy the needs of the strongly typed retrieval functions of libdbi, the only way out is to declare the column types in a <B
+CLASS="COMMAND"
+>CREATE TABLE</B
+> statement just as you would with any other SQL database engine. As an example, the following statement is perfectly fine with SQLite3, but not with the sqlite3 driver:</P
+><TABLE
+BORDER="0"
+BGCOLOR="#000000"
+WIDTH="100%"
+><TR
+><TD
+><FONT
+COLOR="#32CD32"
+><PRE
+CLASS="SCREEN"
+><KBD
+CLASS="USERINPUT"
+>CREATE TABLE foo (a,b,c)</KBD
+></PRE
+></FONT
+></TD
+></TR
+></TABLE
+><P
+>However, the following statement is fine with SQLite3, the sqlite3 driver, and just about any other SQL database engine out there:</P
+><TABLE
+BORDER="0"
+BGCOLOR="#000000"
+WIDTH="100%"
+><TR
+><TD
+><FONT
+COLOR="#32CD32"
+><PRE
+CLASS="SCREEN"
+><KBD
+CLASS="USERINPUT"
+>CREATE TABLE foo (a INTEGER,b TEXT,c VARCHAR(64))</KBD
+></PRE
+></FONT
+></TD
+></TR
+></TABLE
+><P
+>The following table lists the column types which are positively recognized by the sqlite driver. Essentially all column types supported by MySQL and PostgreSQL are supported by this driver as well, making it reasonably easy to write portable SQL code. All other column types are treated as strings.</P
+><DIV
+CLASS="TABLE"
+><A
+NAME="AEN150"
+></A
+><P
+><B
+>Table 4-1. SQL column types supported by the sqlite driver</B
+></P
+><TABLE
+BORDER="1"
+CLASS="CALSTABLE"
+><COL><COL><THEAD
+><TR
+><TH
+>type</TH
+><TH
+>description</TH
+></TR
+></THEAD
+><TBODY
+><TR
+><TD
+>TINYBLOB, BLOB, MEDIUMBLOB, LONGBLOB, BYTEA</TD
+><TD
+>String types of unlimited length. Binary data must be safely encoded, see text.</TD
+></TR
+><TR
+><TD
+>CHAR(), VARCHAR(), TINYTEXT, TEXT, MEDIUMTEXT, LONGTEXT</TD
+><TD
+>String types of unlimited length. There is no chopping or padding performed by the database engine.</TD
+></TR
+><TR
+><TD
+>ENUM</TD
+><TD
+>String type of unlimited length. In contrast to MySQL, choosing ENUM over VARCHAR does not save any storage space.</TD
+></TR
+><TR
+><TD
+>SET</TD
+><TD
+>String type of unlimited length. In contrast to MySQL, the input is not checked against the list of allowed values.</TD
+></TR
+><TR
+><TD
+>YEAR</TD
+><TD
+>String type of unlimited length. MySQL stores 2 or 4 digit years as a 1 byte value, whereas the SQLite drivers stores the string as provided.</TD
+></TR
+><TR
+><TD
+>TINYINT, INT1, CHAR</TD
+><TD
+>A 1 byte type used to store one character, a signed integer between -128 and 127, or an unsigned integer between 0 and 255.</TD
+></TR
+><TR
+><TD
+>SMALLINT, INT2</TD
+><TD
+>2 byte (short) integer type used to store a signed integer between -32768 and 32767 or an unsigned integer between 0 and 65535.</TD
+></TR
+><TR
+><TD
+>MEDIUMINT</TD
+><TD
+>3 byte integer type used to store a signed integer between -8388608 and 8388607 or an unsigned integer between 0 and 16777215.</TD
+></TR
+><TR
+><TD
+>INT, INTEGER, INT4</TD
+><TD
+>4 byte (long) integer type used to store a signed integer between -2147483648 and 2147483647 or an unsigned integer between 0 and 4294967295.</TD
+></TR
+><TR
+><TD
+>BIGINT, INT8, INTEGER PRIMARY KEY</TD
+><TD
+>8 byte (long long) integer type used to store a signed integer between -9223372036854775808 and 9223372036854775807 or an unsigned integer between 0 and 18446744073709551615. See below for a discussion of INTEGER PRIMARY KEY.</TD
+></TR
+><TR
+><TD
+>DECIMAL, NUMERIC</TD
+><TD
+>A string type of unlimited length used to store floating-point numbers of arbitrary precision.</TD
+></TR
+><TR
+><TD
+>TIMESTAMP, DATETIME</TD
+><TD
+>A string type of unlimited length used to store date/time combinations. The required format is 'YYYY-MM-DD HH:MM:SS', anything following this pattern is ignored.</TD
+></TR
+><TR
+><TD
+>DATE</TD
+><TD
+>A string type of unlimited length used to store a date. The required format is 'YYYY-MM-DD', anything following this pattern is ignored.</TD
+></TR
+><TR
+><TD
+>TIME</TD
+><TD
+>A string type of unlimited length used to store a time. The required format is 'HH:MM:SS', anything following this pattern is ignored.</TD
+></TR
+><TR
+><TD
+>FLOAT, FLOAT4, REAL</TD
+><TD
+>A 4 byte floating-point number. The range is -3.402823466E+38 to -1.175494351E-38, 0, and 1.175494351E-38 to 3.402823466E+38. Please note that MySQL treats REAL as an 8 byte instead of a 4 byte float like PostgreSQL.</TD
+></TR
+><TR
+><TD
+>DOUBLE, DOUBLE PRECISION, FLOAT8</TD
+><TD
+>An 8 byte floating-point number. The range is -1.7976931348623157E+308 to -2.2250738585072014E-308, 0, and 2.2250738585072014E-308 to 1.7976931348623157E+308.</TD
+></TR
+></TBODY
+></TABLE
+></DIV
+><P
+>Another difference is the lack of access control on the database engine level. Most SQL database servers implement some mechanisms to restrict who is allowed to fiddle with the databases and who is not. As SQLite3 uses regular files to store its databases, all available access control is on the filesystem level. There is no SQL interface to this kind of access control, but <B
+CLASS="COMMAND"
+>chmod</B
+> and <B
+CLASS="COMMAND"
+>chown</B
+> are your friends.</P
+></DIV
+><DIV
+CLASS="NAVFOOTER"
+><HR
+ALIGN="LEFT"
+WIDTH="100%"><TABLE
+SUMMARY="Footer navigation table"
+WIDTH="100%"
+BORDER="0"
+CELLPADDING="0"
+CELLSPACING="0"
+><TR
+><TD
+WIDTH="33%"
+ALIGN="left"
+VALIGN="top"
+><A
+HREF="c134.html"
+ACCESSKEY="P"
+>Prev</A
+></TD
+><TD
+WIDTH="34%"
+ALIGN="center"
+VALIGN="top"
+><A
+HREF="index.html"
+ACCESSKEY="H"
+>Home</A
+></TD
+><TD
+WIDTH="33%"
+ALIGN="right"
+VALIGN="top"
+><A
+HREF="x209.html"
+ACCESSKEY="N"
+>Next</A
+></TD
+></TR
+><TR
+><TD
+WIDTH="33%"
+ALIGN="left"
+VALIGN="top"
+>Peculiarities you should know about</TD
+><TD
+WIDTH="34%"
+ALIGN="center"
+VALIGN="top"
+><A
+HREF="c134.html"
+ACCESSKEY="U"
+>Up</A
+></TD
+><TD
+WIDTH="33%"
+ALIGN="right"
+VALIGN="top"
+>sqlite driver misfeatures</TD
+></TR
+></TABLE
+></DIV
+></BODY
+></HTML
+>

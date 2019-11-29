@@ -1,0 +1,55 @@
+FIREBIRD/INTERBASE DRIVER:
+--------------------------
+
+This driver allows libdbi-enabled applications to use Firebird or Interbase  as a database
+backend. 
+
+Eventually there will be a documentation worth its name, so we'll be
+able to proudly say:
+
+"See the included driver documentation for installation instructions, usage,
+and information about driver-specific peculiarities."
+
+For the time being, this README will have to do.
+
+Driver status
+=============
+
+The firebird driver still has some rough edges:
+
+- On Linux only the superserver was found to cooperate well with
+libdbi. The classic architecture was less encouraging.
+
+- On FreeBSD there is no superserver. The classic server dumps core
+  when libdbi tries to connect to a database.
+
+
+Common pitfalls
+===============
+
+- In order to work with the firebird driver at all, you'll need an
+  existing database to connect to. Virtually anything will do. Either
+  create a database with the isql command-line tool (which is called
+  isql-fb on Debian to make things a little more challenging), or use
+  the database which is created when running "make check"
+
+- The permission stuff is quite tricky to get used to. First of all
+  you need a database user which is allowed to use firebird at
+  all. Use the gsec command-line tool to add or manage users. Next you
+  need to make sure the firebird process has sufficient permissions to
+  create or change database files. It is recommended anyway to put all
+  firebird databases managed by libdbi into a single directory. Make
+  sure this directory is owned by and has write and traverse access for
+  the account that runs the firebird server. On most systems firebird
+  runs in the "firebird" user account. chown the database directory to
+  firebird:firebird and set the permissions to 744
+
+
+CONTACT INFO:
+-------------
+
+libdbi-drivers-devel@lists.sourceforge.net
+http://libdbi-drivers.sourceforge.net
+Christian Stamgren <christian@stamgren.com>
+
+

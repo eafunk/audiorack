@@ -1,0 +1,37 @@
+
+libdbi-drivers - drivers for libdbi, the Database
+Independent Abstraction Layer for C
+
+Copyright (C) 2001-2008, Markus Hoenicka <markus at mhoenicka.de>
+http://libdbi-drivers.sourceforge.net
+Ingres driver Copyright (C) 2006-2008 Toby Thain <qu1j0t3 at sourceforge.net>
+
+
+INGRES DRIVER:
+--------------
+
+This driver allows libdbi-enabled applications to use Ingres(R) as a database
+backend. Internally, it provides a libdbi driver around the Ingres OpenAPI 
+client library.
+
+See the included driver documentation for installation instructions, usage,
+and information about driver-specific peculiarities.
+
+Tested with the Ingres Community Edition releases 9.0.4 and 9.2
+on Gentoo Linux/x86.
+
+For more information about the Ingres(R) open source RDBMS, see http://ingres.com/
+
+STATUS
+------
+See TODO for missing/incomplete features.
+
+CONTACT INFO:
+-------------
+
+libdbi-drivers-devel@lists.sourceforge.net
+http://libdbi-drivers.sourceforge.net
+
+
+$Id: README,v 1.4 2008/03/24 01:47:24 qu1j0t3 Exp $
+

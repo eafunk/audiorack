@@ -1,0 +1,185 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<HTML
+><HEAD
+><TITLE
+>Driver options</TITLE
+><META
+NAME="GENERATOR"
+CONTENT="Modular DocBook HTML Stylesheet Version 1.79"><LINK
+REL="HOME"
+TITLE="Ingres Driver Notes"
+HREF="index.html"><LINK
+REL="PREVIOUS"
+TITLE="Build and install the driver"
+HREF="install-build.html"><LINK
+REL="NEXT"
+TITLE="Ingres-specific Peculiarities"
+HREF="specific.html"></HEAD
+><BODY
+CLASS="CHAPTER"
+BGCOLOR="#FFFFFF"
+TEXT="#000000"
+LINK="#0000FF"
+VLINK="#840084"
+ALINK="#0000FF"
+><DIV
+CLASS="NAVHEADER"
+><TABLE
+SUMMARY="Header navigation table"
+WIDTH="100%"
+BORDER="0"
+CELLPADDING="0"
+CELLSPACING="0"
+><TR
+><TH
+COLSPAN="3"
+ALIGN="center"
+>Ingres Driver Notes: Details about the libdbi driver providing support for Ingres backends</TH
+></TR
+><TR
+><TD
+WIDTH="10%"
+ALIGN="left"
+VALIGN="bottom"
+><A
+HREF="install-build.html"
+ACCESSKEY="P"
+>Prev</A
+></TD
+><TD
+WIDTH="80%"
+ALIGN="center"
+VALIGN="bottom"
+></TD
+><TD
+WIDTH="10%"
+ALIGN="right"
+VALIGN="bottom"
+><A
+HREF="specific.html"
+ACCESSKEY="N"
+>Next</A
+></TD
+></TR
+></TABLE
+><HR
+ALIGN="LEFT"
+WIDTH="100%"></DIV
+><DIV
+CLASS="CHAPTER"
+><H1
+><A
+NAME="OPTIONS"
+></A
+>Chapter 3. Driver options</H1
+><P
+>		Before you can initiate a connection, you must usually specify options
+		that tell the database driver what to connect to. This driver supports
+		the standard options of
+		<CODE
+CLASS="VARNAME"
+>username</CODE
+>, <CODE
+CLASS="VARNAME"
+>password</CODE
+> and
+		<CODE
+CLASS="VARNAME"
+>dbname</CODE
+>. The latter parameter is in Ingres syntax,
+		<TT
+CLASS="LITERAL"
+>[node_id::]dbname[/svr_class]</TT
+> - 
+		see Ingres documentation for details.
+		(When running as the Ingres admin user on the same host as the DBMS,
+		only the <TT
+CLASS="LITERAL"
+>dbname</TT
+> is normally required.)
+		Sensible defaults will be used for all unspecified options.
+	</P
+><P
+>		This driver also offers the following non-standard options, and/or
+		redefines the meaning of the following standard options:
+	</P
+><P
+></P
+><DIV
+CLASS="VARIABLELIST"
+><DL
+><DT
+>ingres_autocommit</DT
+><DD
+><P
+>					Set this option to <EM
+>string value</EM
+> "0" 
+					to disable Ingres autocommit mode
+					for the connection (it is enabled by default).
+				</P
+></DD
+></DL
+></DIV
+></DIV
+><DIV
+CLASS="NAVFOOTER"
+><HR
+ALIGN="LEFT"
+WIDTH="100%"><TABLE
+SUMMARY="Footer navigation table"
+WIDTH="100%"
+BORDER="0"
+CELLPADDING="0"
+CELLSPACING="0"
+><TR
+><TD
+WIDTH="33%"
+ALIGN="left"
+VALIGN="top"
+><A
+HREF="install-build.html"
+ACCESSKEY="P"
+>Prev</A
+></TD
+><TD
+WIDTH="34%"
+ALIGN="center"
+VALIGN="top"
+><A
+HREF="index.html"
+ACCESSKEY="H"
+>Home</A
+></TD
+><TD
+WIDTH="33%"
+ALIGN="right"
+VALIGN="top"
+><A
+HREF="specific.html"
+ACCESSKEY="N"
+>Next</A
+></TD
+></TR
+><TR
+><TD
+WIDTH="33%"
+ALIGN="left"
+VALIGN="top"
+>Build and install the driver</TD
+><TD
+WIDTH="34%"
+ALIGN="center"
+VALIGN="top"
+>&nbsp;</TD
+><TD
+WIDTH="33%"
+ALIGN="right"
+VALIGN="top"
+>Ingres-specific Peculiarities</TD
+></TR
+></TABLE
+></DIV
+></BODY
+></HTML
+>

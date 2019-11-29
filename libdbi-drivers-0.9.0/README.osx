@@ -1,0 +1,62 @@
+
+libdbi-drivers - drivers for libdbi, the Database
+Independent Abstraction Layer for C
+
+Copyright (C) 2001-2003, Markus Hoenicka
+http://libdbi-drivers.sourceforge.net
+
+
+OS X-SPECIFIC INSTALLATION INSTRUCTIONS:
+----------------------------------------
+
+(Tested on 10.4.9/PowerPC)
+
+	LIBTOOLIZE=glibtoolize ./autogen.sh
+	./configure --disable-docs --with-mysql --with-pgsql --with-sqlite --with-pgsql-dir=/opt/local/pgsql LDFLAGS="-L/sw/lib"
+	make
+	sudo make install
+
+Adjust configure options and paths according to which databases you are
+using, and where their headers and libraries are installed.
+
+
+QUICKSTART - MYSQL
+------------------
+If you are using the MySQL.com Community[1] or Enterprise[2] package,
+or a source install in the default location:
+
+	sudo ln -s /usr/local/mysql/include /usr/include/mysql
+	./configure --with-mysql --with-mysql-dir=/usr/local/mysql --disable-docs
+	make
+	sudo make install
+
+[1] http://dev.mysql.com/downloads/
+[2] https://enterprise.mysql.com/software/enterprise.php
+
+
+QUICKSTART - POSTGRESQL
+-----------------------
+There are several options for installing PostgreSQL on OS X, including:
+- Marc Liyanage's package at http://www.entropy.ch/software/macosx/postgresql/
+- Druware's package at http://postgresqlformac.com/
+- Fink package manager, see http://developer.apple.com/internet/opensource/postgres.html
+
+If using the entropy.ch package, configure libdbi-drivers as follows:
+	./configure --with-pgsql --with-pgsql-dir=/usr/local/pgsql --disable-docs
+
+If using the postgresqlformac.com package,
+	./configure --with-pgsql --with-pgsql-dir=/Library/PostgreSQL8 --disable-docs
+
+In all cases, build and install libdbi-drivers as follows:
+	make
+	sudo make install
+
+
+MODIFICATIONS AND REDISTRIBUTION (GPL):
+---------------------------------------
+
+See the file COPYING or http://www.gnu.org for more details.
+
+
+$Id: README.osx,v 1.2 2007/05/01 22:27:28 qu1j0t3 Exp $
+

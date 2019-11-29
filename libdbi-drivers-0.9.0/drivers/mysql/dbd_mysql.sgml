@@ -1,0 +1,241 @@
+<!DOCTYPE Book PUBLIC "-//OASIS//DTD DocBook V4.1//EN" [
+<!ENTITY freedoc-license SYSTEM "../../doc/include/copying-fdl.sgml">
+]>
+<!-- $Id: dbd_mysql.sgml,v 1.7 2013/01/27 01:28:18 mhoenicka Exp $ -->
+<book>
+  <bookinfo>
+    <title>mysql driver manual</title>
+    <subtitle>A libdbi driver providing connectivity to MySQL databases using libmysqlclient.</subtitle>
+  <author>
+      <firstname>Mark</firstname>
+      <surname>Tobenkin</surname>
+      <affiliation>
+	<address><email>mmt@users.sourceforge.net</email></address>
+      </affiliation>
+    </author>
+    <legalnotice>
+      <para>
+	Permission is granted to copy, distribute and/or modify this
+	document under the terms of the <link linkend="copying-FDL">
+	  <citetitle>GNU Free Documentation License</citetitle></link>,
+	Version 1.1 or any later version published by the Free Software
+	Foundation; with no Invariant Sections, with no	Front-Cover Texts,
+	and with no Back-Cover Texts.  A copy of the license is included in
+	<xref linkend="copying-FDL">.
+      </para>
+    </legalnotice>
+    <revhistory>
+      <revision>
+	<revnumber>0.5</revnumber>
+	<date>2012-01-27</date>
+      </revision>
+      <revision>
+	<revnumber>0.4</revnumber>
+	<date>2005-07-15</date>
+      </revision>
+      <revision>
+	<revnumber>0.3</revnumber>
+	<date>2003-4-12</date>
+      </revision>
+      <revision>
+	<revnumber>0.2</revnumber>
+	<date>2003-2-4</date>
+      </revision>
+      <revision>
+	<revnumber>0.1</revnumber>
+	<date>2002-11-5</date>
+      </revision>
+    </revhistory>
+  </bookinfo>
+  <preface>
+    <title>Preface</title>
+    <para><ulink url="http://libdbi.sourceforge.net">libdbi</ulink> is a database abstraction layer written in C. It implements a framework that can utilize separate driver libraries for specific database servers. The <ulink url="http://libdbi-drivers.sourceforge.net">libdbi-drivers</ulink> project provides the drivers necessary to talk to the supported database servers.</para>
+    <para>This manual provides information about the MySQL driver. The manual is intended for programmers who write applications linked against libdbi and who want their applications to work with the MySQL driver.</para>
+    <para>Questions and comments about the MySQL driver should be sent to the <ulink url="mailto:libdbi-drivers-devel@lists.sourceforge.net">libdbi-drivers-devel</ulink> mailing list. Visit the <ulink url="http://lists.sourceforge.net/lists/listinfo/libdbi-drivers-devel">libdbi-drivers-devel list page</ulink> to subscribe and for further information. Questions and comments about the libdbi library should be sent to the appropriate libdbi mailing list.</para>
+    <para>The MySQL driver is maintained by <ulink url="mailto:mmt@users.sourceforge.net">Mark Tobenkin</ulink>.</para>
+  </preface>
+  <chapter>
+    <title>Introduction</title>
+    <para><ulink url="http://www.mysql.org">MySQL</ulink>, as of the time of this document's writing, is one of the fastest growing database systems worldwide. With approximately 4 million installations, and 30,000 daily downloads, the server has found a niche in the website development community. Quick deployment and ease of use are among it's assets.</para>
+  </chapter>
+  <chapter>
+    <title>Installation</title>
+    <para>This chapter describes the prerequisites and the procedures to build and install the mysql driver from the sources.</para>
+    <sect1>
+      <title>Prerequisites</title>
+      <para>The following packages have to be installed on your system:</para>
+      <variablelist>
+	<varlistentry>
+	  <term>libdbi</term>
+	  <listitem>
+	    <para>This library provides the framework of the database abstraction layer which can utilize the MySQL driver to perform database operations. The download page as well as the mailing lists with bug reports and patches are accessible at <ulink url="http://sourceforge.net/projects/libdbi">sourceforge.net/projects/libdbi</ulink>. The current version of the MySQL driver requires libdbi version 0.8.x.</para>
+	  </listitem>
+	</varlistentry>
+	<varlistentry>
+	  <term>libmysqlclient</term>
+	  <listitem>
+	    <para>This library implements the client API for MySQL programs. Find the most recent release at <ulink url="http://www.mysql.org">www.mysql.com</ulink>. The current version of the mysql driver should work with versions 4.x and 5.x.</para>
+	  </listitem>
+	</varlistentry>
+      </variablelist>
+    </sect1>
+    <sect1>
+      <title>Build and install the mysql driver</title>
+      <para>First you have to unpack the libdbi-drivers archive in a suitable directory. Unpacking will create a new subdirectory <filename class="directory">libdbi-drivers-X.Y</filename> where "X.Y" denotes the version:</para>
+      <screen><prompt>$ </prompt><userinput>tar -xzf libdbi-drivers-X.Y.tar.gz</userinput></screen>
+      <para>The libdbi-drivers project consists of several drivers that use a common build system. Therefore you <emphasis>must</emphasis> tell configure explicitly that you want to build the mysql driver (you can list as many drivers as you want to build):</para>
+      <screen><prompt>$ </prompt><userinput>cd libdbi-drivers</userinput></screen>
+      <screen><prompt>$ </prompt><userinput>./configure --with-mysql</userinput></screen>
+      <para>Run <command>./configure --help</command> to find out about additional options.</para>
+      <para>Then build the driver with the command:</para>
+      <screen><prompt>$ </prompt><userinput>make</userinput></screen>
+      <note>
+	<para>Please note that you may have to invoke <command>gmake</command>, the GNU version of make, on some systems.</para>
+      </note>
+      <para>Then install the driver with the command (you'll need root permissions to do this):</para>
+      <screen><prompt>$ </prompt><userinput>make install</userinput></screen>
+      <para>To test the operation of the newly installed driver, use the command:</para>
+      <screen><prompt>$ </prompt><userinput>make check</userinput></screen>
+      <para>This command creates and runs a test program that performs a few basic input and output tests. The program will ask for an administrator username and password. This user can be any user who has database creation priveleges. Be sure to provide the name of a database which does not already exist (avoid 'test' which is used on many systems).</para>
+      <note>
+	<para>If for some reason you need to re-create the autoconf/automake-related files, try running <command moreinfo="none">./autogen.sh</command>. I've found out that the current stable autoconf/automake/libtool versions (as found in FreeBSD 4.7 and Debian 3.0) do not cooperate well, so I found it necessary to run the older autoconf 2.13. If necessary, edit <filename moreinfo="none">autogen.sh</filename> so that it will catch the older autoconf version on your system.</para>
+      </note>
+    </sect1>
+  </chapter>
+  <chapter>
+    <title>Driver options</title>
+    <para>Your application has to initialize libdbi drivers by setting some driver options with the <function>dbi_conn_set_option()</function> and the <function>dbi_conn_set_option_numeric()</function> library functions. The mysql driver supports the following options:</para>
+    <variablelist>
+      <varlistentry>
+	<term>host</term>
+	<listitem>
+	  <para>The hostname or IP address of the MySQL database server. Use an empty string or "localhost" to connect to a MySQL server running on the local machine.</para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term>port (numeric)</term>
+	<listitem>
+	  <para>The port used to remotely connect to the MySQL database server over TCP. Use "0" (zero) to accept the default socket.</para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term>username</term>
+	<listitem>
+	  <para>The name of the user accessing the database.</para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term>password</term>
+	<listitem>
+	  <para>The password of the user accessing the database.</para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term>dbname</term>
+	<listitem>
+	  <para>The name of the database used for the initial connection. If your program must be able to connect to a fresh MySQL installation, use the system database <filename moreinfo="none">mysql</filename>.</para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term>timeout (numeric)</term>
+	<listitem>
+	  <para>The connection timeout in seconds.</para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term>encoding</term>
+	<listitem>
+	  <para>The IANA name of a character encoding which is to be used as the connection encoding. Input and output data will be silently converted from and to this character encoding, respectively. The list of available character encodings depends on your local MySQL installation. If you set this option to "auto", the connection encoding will be the same as the default encoding of the database.</para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term>mysql_include_trailing_null (numeric)</term>
+	<listitem>
+	  <para>This item will tell the driver whether or not to include trailing null values ('\0') at the end of binary strings. This applies to the types BLOB, MEDIUMBLOB, LARGEBLOB etc. A numeric value of 0 will tell the driver to leave off the NULL value. A value of 1 will tell the driver to include the trailing NULL character. </para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term>mysql_unix_socket</term>
+	<listitem>
+	  <para>The filename of the Unix socket used to connect to a MySQL database server running on the local machine. Provide an empty string to use the default socket.</para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term>mysql_client_compress (numeric)</term>
+	<listitem>
+	  <para>A value larger than zero causes the client/server communication to be compressed. Set this to zero to use no data compression.</para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term>mysql_client_found_rows (numeric)</term>
+	<listitem>
+	  <para>A value larger than zero causes the server to return the number of matched rows, not the number of affected rows.</para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term>mysql_client_ignore_space (numeric)</term>
+	<listitem>
+	  <para>A value larger than zero causes the server to accept spaces after function names.</para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term>mysql_client_interactive (numeric)</term>
+	<listitem>
+	  <para>A value larger than zero causes the client/server communication to use interactive_timeout instead of wait_timeout before closing an inactive connection.</para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term>mysql_client_local_files (numeric)</term>
+	<listitem>
+	  <para>A value larger than zero enables LOAD DATA LOCAL handling.</para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term>mysql_client_multi_statements (numeric)</term>
+	<listitem>
+	  <para>A value larger than zero causes server to accept multiple SQL statements in a single string, separated by semicolons (requires MySQL 4.1 or later).</para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term>mysql_client_multi_results (numeric)</term>
+	<listitem>
+	  <para>A value larger than zero tells the server that the client can handle multiple result sets from multiple statements. This flag is automatically set if you use mysql_client_multi_statements (requires MySQL 4.1 or later).</para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term>mysql_client_no_schema (numeric)</term>
+	<listitem>
+	  <para>A value larger than zero tells the server not to accept the db_name.tbl_name.col_name syntax..</para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term>mysql_client_odbc (numeric)</term>
+	<listitem>
+	  <para>A value larger than zero causes the server to behave more ODBC-friendly.</para>
+	</listitem>
+      </varlistentry>
+    </variablelist>
+  </chapter>
+  <chapter>
+    <title>Peculiarities you should know about</title>
+    <para>This chapter lists known peculiarities of the mysql driver. This includes MySQL features that differ from what you know from the other database servers supported by libdbi, and it includes features and misfeatures introduced by the mysql driver. It is the intention of the driver author to reduce the number of misfeatures in future releases if possible.</para>
+    <sect1>
+      <title>MySQL (mis)features</title>
+      <itemizedlist>
+        <listitem>
+	  <para>To allow for row seeking, results are loaded into memory. This is very inefficient and may provide a bottleneck for large applications.</para>
+	</listitem>
+	<listitem>
+	  <para>DATETIME, TIMESTAMP, DATE and TIME are all treated as the DBI type DATETIME. This is currently a string, but will change in later releases.</para>
+	</listitem>
+	<listitem>
+	  <para>The DECIMAL type is treated as a string, as it has arbitrary precision.</para>
+	</listitem>
+	<listitem>
+	  <para>The driver per se supports transactions and savepoints and reports this when asked through the dbi_conn_cap_get() function. However, for transactions and savepoints to actually work, several conditions have to be met. First, the database server needs to support transactional table types. Recent versions do have transactional storage engines by default, but they may be switched off during compilation or by runtime configuration. Second, the tables used with transaction or savepoint queries must be of a transactional type. Non-transactional MyISAM tables have been replaced by transactional InnoDB tables as default table type no earlier than in MySQL version 5.5.5. If you intend to use transactions and savepoints, make sure to select an appropriate engine type like InnoDB explicitly in each CREATE TABLE statement.</para>
+	</listitem>
+      </itemizedlist>
+    </sect1>
+  </chapter>
+  &freedoc-license;
+</book>

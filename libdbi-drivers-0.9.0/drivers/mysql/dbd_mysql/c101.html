@@ -1,0 +1,262 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<HTML
+><HEAD
+><TITLE
+>Driver options</TITLE
+><META
+NAME="GENERATOR"
+CONTENT="Modular DocBook HTML Stylesheet Version 1.79"><LINK
+REL="HOME"
+TITLE="mysql driver manual"
+HREF="index.html"><LINK
+REL="PREVIOUS"
+TITLE="Build and install the mysql driver"
+HREF="x64.html"><LINK
+REL="NEXT"
+TITLE="Peculiarities you should know about"
+HREF="c180.html"></HEAD
+><BODY
+CLASS="CHAPTER"
+BGCOLOR="#FFFFFF"
+TEXT="#000000"
+LINK="#0000FF"
+VLINK="#840084"
+ALINK="#0000FF"
+><DIV
+CLASS="NAVHEADER"
+><TABLE
+SUMMARY="Header navigation table"
+WIDTH="100%"
+BORDER="0"
+CELLPADDING="0"
+CELLSPACING="0"
+><TR
+><TH
+COLSPAN="3"
+ALIGN="center"
+>mysql driver manual: A libdbi driver providing connectivity to MySQL databases using libmysqlclient.</TH
+></TR
+><TR
+><TD
+WIDTH="10%"
+ALIGN="left"
+VALIGN="bottom"
+><A
+HREF="x64.html"
+ACCESSKEY="P"
+>Prev</A
+></TD
+><TD
+WIDTH="80%"
+ALIGN="center"
+VALIGN="bottom"
+></TD
+><TD
+WIDTH="10%"
+ALIGN="right"
+VALIGN="bottom"
+><A
+HREF="c180.html"
+ACCESSKEY="N"
+>Next</A
+></TD
+></TR
+></TABLE
+><HR
+ALIGN="LEFT"
+WIDTH="100%"></DIV
+><DIV
+CLASS="CHAPTER"
+><H1
+><A
+NAME="AEN101"
+></A
+>Chapter 3. Driver options</H1
+><P
+>Your application has to initialize libdbi drivers by setting some driver options with the <CODE
+CLASS="FUNCTION"
+>dbi_conn_set_option()</CODE
+> and the <CODE
+CLASS="FUNCTION"
+>dbi_conn_set_option_numeric()</CODE
+> library functions. The mysql driver supports the following options:</P
+><P
+></P
+><DIV
+CLASS="VARIABLELIST"
+><DL
+><DT
+>host</DT
+><DD
+><P
+>The hostname or IP address of the MySQL database server. Use an empty string or "localhost" to connect to a MySQL server running on the local machine.</P
+></DD
+><DT
+>port (numeric)</DT
+><DD
+><P
+>The port used to remotely connect to the MySQL database server over TCP. Use "0" (zero) to accept the default socket.</P
+></DD
+><DT
+>username</DT
+><DD
+><P
+>The name of the user accessing the database.</P
+></DD
+><DT
+>password</DT
+><DD
+><P
+>The password of the user accessing the database.</P
+></DD
+><DT
+>dbname</DT
+><DD
+><P
+>The name of the database used for the initial connection. If your program must be able to connect to a fresh MySQL installation, use the system database <TT
+CLASS="FILENAME"
+>mysql</TT
+>.</P
+></DD
+><DT
+>timeout (numeric)</DT
+><DD
+><P
+>The connection timeout in seconds.</P
+></DD
+><DT
+>encoding</DT
+><DD
+><P
+>The IANA name of a character encoding which is to be used as the connection encoding. Input and output data will be silently converted from and to this character encoding, respectively. The list of available character encodings depends on your local MySQL installation. If you set this option to "auto", the connection encoding will be the same as the default encoding of the database.</P
+></DD
+><DT
+>mysql_include_trailing_null (numeric)</DT
+><DD
+><P
+>This item will tell the driver whether or not to include trailing null values ('\0') at the end of binary strings. This applies to the types BLOB, MEDIUMBLOB, LARGEBLOB etc. A numeric value of 0 will tell the driver to leave off the NULL value. A value of 1 will tell the driver to include the trailing NULL character. </P
+></DD
+><DT
+>mysql_unix_socket</DT
+><DD
+><P
+>The filename of the Unix socket used to connect to a MySQL database server running on the local machine. Provide an empty string to use the default socket.</P
+></DD
+><DT
+>mysql_client_compress (numeric)</DT
+><DD
+><P
+>A value larger than zero causes the client/server communication to be compressed. Set this to zero to use no data compression.</P
+></DD
+><DT
+>mysql_client_found_rows (numeric)</DT
+><DD
+><P
+>A value larger than zero causes the server to return the number of matched rows, not the number of affected rows.</P
+></DD
+><DT
+>mysql_client_ignore_space (numeric)</DT
+><DD
+><P
+>A value larger than zero causes the server to accept spaces after function names.</P
+></DD
+><DT
+>mysql_client_interactive (numeric)</DT
+><DD
+><P
+>A value larger than zero causes the client/server communication to use interactive_timeout instead of wait_timeout before closing an inactive connection.</P
+></DD
+><DT
+>mysql_client_local_files (numeric)</DT
+><DD
+><P
+>A value larger than zero enables LOAD DATA LOCAL handling.</P
+></DD
+><DT
+>mysql_client_multi_statements (numeric)</DT
+><DD
+><P
+>A value larger than zero causes server to accept multiple SQL statements in a single string, separated by semicolons (requires MySQL 4.1 or later).</P
+></DD
+><DT
+>mysql_client_multi_results (numeric)</DT
+><DD
+><P
+>A value larger than zero tells the server that the client can handle multiple result sets from multiple statements. This flag is automatically set if you use mysql_client_multi_statements (requires MySQL 4.1 or later).</P
+></DD
+><DT
+>mysql_client_no_schema (numeric)</DT
+><DD
+><P
+>A value larger than zero tells the server not to accept the db_name.tbl_name.col_name syntax..</P
+></DD
+><DT
+>mysql_client_odbc (numeric)</DT
+><DD
+><P
+>A value larger than zero causes the server to behave more ODBC-friendly.</P
+></DD
+></DL
+></DIV
+></DIV
+><DIV
+CLASS="NAVFOOTER"
+><HR
+ALIGN="LEFT"
+WIDTH="100%"><TABLE
+SUMMARY="Footer navigation table"
+WIDTH="100%"
+BORDER="0"
+CELLPADDING="0"
+CELLSPACING="0"
+><TR
+><TD
+WIDTH="33%"
+ALIGN="left"
+VALIGN="top"
+><A
+HREF="x64.html"
+ACCESSKEY="P"
+>Prev</A
+></TD
+><TD
+WIDTH="34%"
+ALIGN="center"
+VALIGN="top"
+><A
+HREF="index.html"
+ACCESSKEY="H"
+>Home</A
+></TD
+><TD
+WIDTH="33%"
+ALIGN="right"
+VALIGN="top"
+><A
+HREF="c180.html"
+ACCESSKEY="N"
+>Next</A
+></TD
+></TR
+><TR
+><TD
+WIDTH="33%"
+ALIGN="left"
+VALIGN="top"
+>Build and install the mysql driver</TD
+><TD
+WIDTH="34%"
+ALIGN="center"
+VALIGN="top"
+>&nbsp;</TD
+><TD
+WIDTH="33%"
+ALIGN="right"
+VALIGN="top"
+>Peculiarities you should know about</TD
+></TR
+></TABLE
+></DIV
+></BODY
+></HTML
+>

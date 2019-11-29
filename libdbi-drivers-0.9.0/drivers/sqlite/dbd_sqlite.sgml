@@ -1,0 +1,263 @@
+<!DOCTYPE Book PUBLIC "-//OASIS//DTD DocBook V4.1//EN" [
+<!ENTITY freedoc-license SYSTEM "../../doc/include/copying-fdl.sgml">
+]>
+<!-- $Id: dbd_sqlite.sgml,v 1.11 2008/05/16 15:09:43 mhoenicka Exp $ -->
+<book>
+  <bookinfo>
+    <title>sqlite driver manual</title>
+    <subtitle>A libdbi driver using the SQLite embedded database engine</subtitle>
+  <author>
+      <firstname>Markus</firstname>
+      <surname>Hoenicka</surname>
+      <affiliation>
+	<address><email>mhoenicka@users.sourceforge.net</email></address>
+      </affiliation>
+    </author>
+    <copyright>
+      <year>2005-2007</year>
+      <holder>Markus Hoenicka</holder>
+    </copyright>
+    <legalnotice>
+      <para>
+	Permission is granted to copy, distribute and/or modify this
+	document under the terms of the <link linkend="copying-FDL">
+	  <citetitle>GNU Free Documentation License</citetitle></link>,
+	Version 1.1 or any later version published by the Free Software
+	Foundation; with no Invariant Sections, with no	Front-Cover Texts,
+	and with no Back-Cover Texts.  A copy of the license is included in
+	<xref linkend="copying-FDL">.
+      </para>
+    </legalnotice>
+    <revhistory>
+      <revision>
+	<revnumber>$Revision: 1.11 $</revnumber>
+	<date>$Date: 2008/05/16 15:09:43 $</date>
+      </revision>
+    </revhistory>
+  </bookinfo>
+  <preface>
+    <title>Preface</title>
+    <para><ulink url="http://libdbi.sourceforge.net">libdbi</ulink> is a database abstraction layer written in C. It implements a framework that can utilize separate driver libraries for specific database servers. The <ulink url="http://libdbi-drivers.sourceforge.net">libdbi-drivers</ulink> project provides the drivers necessary to talk to the supported database servers.</para>
+    <para>This manual provides information about the sqlite driver. The manual is intended for programmers who write applications linked against libdbi and who want their applications to work with the sqlite driver.</para>
+    <para>Questions and comments about the sqlite driver should be sent to the <ulink url="mailto:libdbi-drivers-devel@lists.sourceforge.net">libdbi-drivers-devel</ulink> mailing list. Visit the <ulink url="http://lists.sourceforge.net/lists/listinfo/libdbi-drivers-devel">libdbi-drivers-devel list page</ulink> to subscribe and for further information. Questions and comments about the libdbi library should be sent to the appropriate libdbi mailing list.</para>
+    <para>The sqlite driver is maintained by <ulink url="mailto:mhoenicka@users.sourceforge.net">Markus Hoenicka</ulink>.</para>
+  </preface>
+  <chapter>
+    <title>Introduction</title>
+    <para><ulink url="http://www.sqlite.org">SQLite</ulink> is a smart library that implements an embeddable SQL database engine. No need for an external database server - an application linked against libsqlite can do it all by itself. Of course there are a few limitations of this approach compared to "real" SQL database servers, mostly for massively parallel high-throughput database applications, but on the other hand, installation and administration are a breeze. Your application should support the sqlite driver if one of the following applies:</para>
+    <itemizedlist>
+      <listitem>
+	<para>You want to support potential users of your application who don't have the skills to administer a database server.</para>
+      </listitem>
+      <listitem>
+	<para>You want to offer the simplest possible installation of your application.</para>
+      </listitem>
+      <listitem>
+	<para>You want to let users test-drive your application without the need to fiddle with their production database servers.</para>
+      </listitem>
+    </itemizedlist>
+  </chapter>
+  <chapter>
+    <title>Installation</title>
+    <para>This chapter describes the prerequisites and the procedures to build and install the sqlite driver from the sources.</para>
+    <sect1>
+      <title>Prerequisites</title>
+      <para>The following packages have to be installed on your system:</para>
+      <variablelist>
+	<varlistentry>
+	  <term>libdbi</term>
+	  <listitem>
+	    <para>This library provides the framework of the database abstraction layer which can utilize the sqlite driver to perform database operations. The download page as well as the mailing lists with bug reports and patches are accessible at <ulink url="http://sourceforge.net/projects/libdbi">sourceforge.net/projects/libdbi</ulink>.</para>
+	  </listitem>
+	</varlistentry>
+	<varlistentry>
+	  <term>sqlite</term>
+	  <listitem>
+	    <para>This library implements the embeddable database engine. Find the most recent release at <ulink url="http://www.sqlite.org">www.sqlite.org</ulink>. The current version of the sqlite driver was tested with SQLite version 2.7.6. and should work ok with later releases.</para>
+	  </listitem>
+	</varlistentry>
+      </variablelist>
+    </sect1>
+    <sect1>
+      <title>Build and install the sqlite driver</title>
+      <para>First you have to unpack the libdbi-drivers archive in a suitable directory. Unpacking will create a new subdirectory <filename class="directory">libdbi-drivers-X.Y</filename> where "X.Y" denotes the version:</para>
+      <screen><prompt>$ </prompt><userinput>tar -xzf libdbi-drivers-0.3.tar.gz</userinput></screen>
+      <para>The libdbi-drivers project consists of several drivers that use a common build system. Therefore you <emphasis>must</emphasis> tell configure explicitly that you want to build the sqlite driver (you can list as many drivers as you want to build):</para>
+      <screen><prompt>$ </prompt><userinput>cd libdbi-drivers</userinput></screen>
+      <screen><prompt>$ </prompt><userinput>./configure --with-sqlite</userinput></screen>
+      <para>Run <command>./configure --help</command> to find out about additional options.</para>
+      <para>Then build the driver with the command:</para>
+      <screen><prompt>$ </prompt><userinput>make</userinput></screen>
+      <note>
+	<para>Please note that you may have to invoke <command>gmake</command>, the GNU version of make, on some systems.</para>
+      </note>
+      <para>Then install the driver with the command (you'll need root permissions to do this):</para>
+      <screen><prompt>$ </prompt><userinput>make install</userinput></screen>
+      <para>To test the operation of the newly installed driver, use the command:</para>
+      <screen><prompt>$ </prompt><userinput>make check</userinput></screen>
+      <para>This command creates and runs a test program that performs a few basic input and output tests. The program will ask for a database name. This can be any name that is a valid filename on your system. It will also ask for a data directory. This is the directory that is used to create the test database. Needless to say that you need write access to that directory. If you accept the default ".", the database will be created in the <filename class="directory">tests</filename> subdirectory.</para>
+      <note>
+	<para>If for some reason you need to re-create the autoconf/automake-related files, try running <command moreinfo="none">./autogen.sh</command>. I've found out that the current stable autoconf/automake/libtool versions (as found in FreeBSD 4.7 and Debian 3.0) do not cooperate well, so I found it necessary to run the older autoconf 2.13. If necessary, edit <filename moreinfo="none">autogen.sh</filename> so that it will catch the older autoconf version on your system.</para>
+      </note>
+    </sect1>
+  </chapter>
+  <chapter>
+    <title>Driver options</title>
+    <para>Your application has to initialize libdbi drivers by setting some driver options with the <function>dbi_conn_set_option()</function> and the <function>dbi_conn_set_option_numeric()</function> library functions. The sqlite driver supports the following options:</para>
+    <variablelist>
+      <varlistentry>
+	<term>dbname</term>
+	<listitem>
+	  <para>The name of the database you want to work with. As a SQLite database corresponds to one file in your filesystem, <varname>dbname</varname> can be any legal filename. If the database/file doesn't exist when you first try to access it, SQLite will create it on the fly.</para>
+	  <para>It is important to understand that the full path of the database is composed of <varname>sqlite_dbdir</varname> and <varname>dbname</varname>. Therefore <varname>dbname</varname> should not contain the full path of a file, but just the name.</para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term>sqlite_dbdir</term>
+	<listitem>
+	  <para>This is the directory that contains all sqlite databases. Use the full path please. If this option is not specified, a compile-time default directory will be used. By default, this directory (usually <filename class="directory" moreinfo="none">/usr/local/var/lib/libdbi/sqlite</filename>) has read and write permissions for everyone with the sticky bit set. If this is not suitable for your application, use a custom directory with your preferred permissions instead.</para>
+	  <note>
+	    <para>It is necessary to keep all sqlite databases in one directory to make it possible to list all existing databases through the libdbi API. However, you are free to open more than one connection simultaneously, each one using a different setting of <parameter moreinfo="none">sqlite_dbdir</parameter>.</para>
+	  </note>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term>timeout (numeric)</term>
+	<listitem>
+	  <para>The connection timeout in seconds.</para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term>sqlite_timeout (numeric)</term>
+	<listitem>
+	  <para>The design of SQLite does not allow concurrent access by two clients. However, if the timeout is larger than zero, the second client will wait for the given amount of time for the first client to release its lock. If the timeout is set to zero, the second client will return immediately, indicating a busy status. The numerical value of this option specifies the timeout in milliseconds.</para>
+	  <note>
+	    <para>This option is deprecated. Use the generic option <option>timeout</option> instead. In the current implementation, <option>sqlite_timeout</option> overrides <option>timeout</option> if both are set. Please be aware that these options use different time scales.</para>
+	  </note>
+	</listitem>
+      </varlistentry>
+    </variablelist>
+  </chapter>
+  <chapter>
+    <title>Peculiarities you should know about</title>
+    <para>This chapter lists known peculiarities of the sqlite driver. This includes SQLite features that differ from what you know from the other database servers supported by libdbi, and it includes features and misfeatures introduced by the sqlite driver. It is the intention of the driver author to reduce the number of misfeatures in future releases if possible.</para>
+    <sect1>
+      <title>SQLite (mis)features</title>
+      <para>As the SQLite package is constantly being improved, you should refer to the original documentation about the SQL features it <ulink url="http://www.sqlite.org/lang.html">supports</ulink> and about the SQL features it <ulink url="http://www.sqlite.org/omitted.html">doesn't support</ulink>.</para>
+      <para>One noticeable difference between SQLite and other SQL database engines is that the former is typeless. All data are stored as strings, and you can insert any type of data into any column. While the SQLite author has good reasons for this feature, it is an obstacle to using the strongly typed retrieval functions of libdbi. The only way out is to declare the column types in a <command>CREATE TABLE</command> statement just as you would with any other SQL database engine. As an example, the following statement is perfectly fine with SQLite, but not with the sqlite driver:</para>
+      <screen><userinput>CREATE TABLE foo (a,b,c)</userinput></screen>
+      <para>However, the following statement is fine with SQLite, the sqlite driver, and just about any other SQL database server:</para>
+      <screen><userinput>CREATE TABLE foo (a INTEGER,b TEXT,c VARCHAR(64))</userinput></screen>
+      <para>The following table lists the column types which are positively recognized by the sqlite driver. Essentially all column types supported by MySQL and PostgreSQL are supported by this driver as well, making it reasonably easy to write portable SQL code. All other column types are treated as strings.</para>
+      <table>
+	<title>SQL column types supported by the sqlite driver</title>
+	<tgroup cols="2">
+	  <thead>
+	    <row>
+	      <entry>type</entry>
+	      <entry>description</entry>
+	    </row>
+	  </thead>
+	  <tbody>
+	    <row>
+	      <entry>TINYBLOB, BLOB, MEDIUMBLOB, LONGBLOB, BYTEA</entry>
+	      <entry>String types of unlimited length. Binary data must be safely encoded, see text.</entry>
+	    </row>
+	    <row>
+	      <entry>CHAR(), VARCHAR(), TINYTEXT, TEXT, MEDIUMTEXT, LONGTEXT</entry>
+	      <entry>String types of unlimited length. There is no chopping or padding performed by the database engine.</entry>
+	    </row>
+	    <row>
+	      <entry>ENUM</entry>
+	      <entry>String type of unlimited length. In contrast to MySQL, choosing ENUM over VARCHAR does not save any storage space.</entry>
+	    </row>
+	    <row>
+	      <entry>SET</entry>
+	      <entry>String type of unlimited length. In contrast to MySQL, the input is not checked against the list of allowed values.</entry>
+	    </row>
+	    <row>
+	      <entry>YEAR</entry>
+	      <entry>String type of unlimited length. MySQL stores 2 or 4 digit years as a 1 byte value, whereas the SQLite drivers stores the string as provided.</entry>
+	    </row>
+	    <row>
+	      <entry>TINYINT, INT1, CHAR</entry>
+	      <entry>A 1 byte type used to store one character, a signed integer between -128 and 127, or an unsigned integer between 0 and 255.</entry>
+	    </row>
+	    <row>
+	      <entry>SMALLINT, INT2</entry>
+	      <entry>2 byte (short) integer type used to store a signed integer between -32768 and 32767 or an unsigned integer between 0 and 65535.</entry>
+	    </row>
+	    <row>
+	      <entry>MEDIUMINT</entry>
+	      <entry>3 byte integer type used to store a signed integer between -8388608 and 8388607 or an unsigned integer between 0 and 16777215.</entry>
+	    </row>
+	    <row>
+	      <entry>INT, INTEGER, INT4</entry>
+	      <entry>4 byte (long) integer type used to store a signed integer between -2147483648 and 2147483647 or an unsigned integer between 0 and 4294967295.</entry>
+	    </row>
+	    <row>
+	      <entry>BIGINT, INT8</entry>
+	      <entry>8 byte (long long) integer type used to store a signed integer between -9223372036854775808 and 9223372036854775807 or an unsigned integer between 0 and 18446744073709551615.</entry>
+	    </row>
+	    <row>
+	      <entry>DECIMAL, NUMERIC</entry>
+	      <entry>A string type of unlimited length used to store floating-point numbers of arbitrary precision.</entry>
+	    </row>
+	    <row>
+	      <entry>TIMESTAMP, DATETIME</entry>
+	      <entry>A string type of unlimited length used to store date/time combinations. The required format is 'YYYY-MM-DD HH:MM:SS', anything following this pattern is ignored.</entry>
+	    </row>
+	    <row>
+	      <entry>DATE</entry>
+	      <entry>A string type of unlimited length used to store a date. The required format is 'YYYY-MM-DD', anything following this pattern is ignored.</entry>
+	    </row>
+	    <row>
+	      <entry>TIME</entry>
+	      <entry>A string type of unlimited length used to store a time. The required format is 'HH:MM:SS', anything following this pattern is ignored.</entry>
+	    </row>
+	    <row>
+	      <entry>FLOAT, FLOAT4, REAL</entry>
+	      <entry>A 4 byte floating-point number. The range is -3.402823466E+38 to -1.175494351E-38, 0, and 1.175494351E-38 to 3.402823466E+38. Please note that MySQL treats REAL as an 8 byte instead of a 4 byte float like PostgreSQL.</entry>
+	    </row>
+	    <row>
+	      <entry>DOUBLE, DOUBLE PRECISION, FLOAT8</entry>
+	      <entry>An 8 byte floating-point number. The range is -1.7976931348623157E+308 to -2.2250738585072014E-308, 0, and 2.2250738585072014E-308 to 1.7976931348623157E+308.</entry>
+	    </row>
+	  </tbody>
+	</tgroup>
+      </table>
+      <para>Another difference is the lack of access control on the database engine level. Most SQL database servers implement some mechanisms to restrict who is allowed to fiddle with the databases and who is not. As SQLite uses regular files to store its databases, all available access control is on the filesystem level. There is no SQL interface to this kind of access control, but <command>chmod</command> and <command>chown</command> are your friends.</para>
+      <para>SQLite appears to implement row and column counters as C long int values. This limits the maximum number of rows somewhat compared to other SQL database engines.</para>
+      <para>SQLite does not have specific support for binary data. If you want to store binary data (e.g. character sequences containing NULL bytes) in a fashion that is portable across all database servers supported by libdbi, use the libdbi function <function moreinfo="none">_dbd_encode_binary</function>.</para>
+      <para>SQLite currently supports different character encodings only as compile-time options. There is no way to change the encoding at runtime or per database.</para>
+    </sect1>
+    <sect1>
+      <title>sqlite driver misfeatures</title>
+      <para>And now we have to discuss how successful the sqlite driver is in squeezing the SQLite idea of a database engine into the libdbi framework which was shaped after MySQL and PostgreSQL. Keep in mind that the limitations mentioned here are not intrinsic, that is a sufficient amount of coding might fix these problems eventually.</para>
+      <itemizedlist>
+	<listitem>
+	  <para>The sqlite driver has not been tested for memory leaks yet. It may leak memory like hell.</para>
+	</listitem>
+	<listitem>
+	  <para>The typeless nature of SQLite has some nasty consequences. The sqlite driver takes great care to reconstruct the type of a field that you request in a query, but this isn't always successful. Some of the functions that SQLite supports work both on numeric and text data. The sqlite driver currently cannot deduce the field type correctly as it would have to check all arguments of each function. Instead the sqlite driver makes a few assumptions that may be right or wrong in a given case. The affected functions are <function>coalesce(X,Y,...)</function>, <function>max(X)</function>, <function>min(X)</function>, and <function>count(X)</function>.</para>
+	</listitem>
+	<listitem>
+	  <para>The sqlite driver currently assumes that the directory separator of your filesystem is a slash (/). This may be wrong on your particular system. It is not a problem for Windows systems as long as the sqlite driver is built with the Cygwin tools (see <filename>README.win32</filename>).</para>
+	  <note>
+	    <para>Building the sqlite driver on Windows/Cygwin has not been tested yet, but it uses the same procedure as the other libdbi drivers. Chances are that it works.</para>
+	  </note>
+	</listitem>
+	<listitem>
+	  <para>Listing tables with the <function>dbi_conn_get_table_list()</function> libdbi function currently returns only permanent tables. Temporary tables are ignored.</para>
+	</listitem>
+	<listitem>
+	  <para>The sqlite driver assumes that table and field names do not exceed 128 characters in length, including the trailing \0. I don't know whether SQLite internally has such a limit or not (both MySQL and PostgreSQL have a lower limit). The limit can be increased by changing a single #define in the <filename moreinfo="none">dbd_sqlite.h</filename> header file.</para>
+	</listitem>
+	<listitem>
+	  <para>In a few cases, the sqlite driver expects you to type SQL keywords in all lowercase or all uppercase, but not mixed. This holds true for the 'from' in a SELECT statement. Type it either as 'from' or as 'FROM', but refrain from using 'fRoM' or other funny mixtures of uppercase and lowercase. Most other database engines treat the keywords as case-insensitive and would accept all variants.</para>
+	</listitem>
+      </itemizedlist>
+    </sect1>
+  </chapter>
+  &freedoc-license;
+</book>

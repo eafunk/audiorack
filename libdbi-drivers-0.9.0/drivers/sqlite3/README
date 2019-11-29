@@ -1,0 +1,61 @@
+
+libdbi-drivers - drivers for libdbi, the Database
+Independent Abstraction Layer for C
+
+Copyright (C) 2001-2002, Markus Hoenicka <markus at mhoenicka.de>
+http://libdbi-drivers.sourceforge.net
+
+
+SQLITE3 DRIVER:
+--------------
+
+A driver implementing an embedded SQL engine using libsqlite3
+(http://www.sqlite.org)
+   
+
+
+NOTES:
+------
+
+The sqlite3 driver ignores the host, port, username, and
+password options completely as the sqlite3 access control works
+entirely over the filesystem. If you're allowed to run an application
+linked against libdbi and if the sqlite3 driver can be loaded from your
+account, you have access to the "database server". If the file
+containing the sqlite3 database is read/writable from your account, you
+have read/write access to that database.
+
+The sqlite3 driver uses two driver-specific options:
+
+- In order to make the operation as a libdbi driver feasible, you have
+  to assign one directory of your filesystem as the sqlite3 data
+  directory by setting the "sqlite3_dbdir" option appropriately. The
+  driver will look for existing databases in this directory and it will
+  create new databases in the very same directory.
+
+- SQLite3 can be operated in UTF-8 or UTF-16 mode. This distinction is
+  a little confusing as it doesn't mean that your data have to be either
+  UTF-8 or UTF-16. Rather think of UTF-8 as "everything but
+  UTF-16". UTF-16 means that you have to provide the filename of the
+  database as an UTF-16 string, and that the data have to be supplied
+  and will be stored as UTF-16 if you use this option when first opening
+  a database. If you use UTF-8 instead (the default), you can use just
+  about any character encoding that you like, including e.g. ISO-8859-1
+  and of course UTF-8, as long as it is *NOT* UTF-16. In UTF-8 mode,
+  collation will be as if the data were UTF-8, and libdbi currently
+  does not allow to specify custom collations. To select either
+  encoding, set "sqlite3_encoding" to "UTF-8" or "UTF-16". If all this
+  sounds too confusing to you, don't use this option and provide your
+  data as UTF-8. It is going to work.
+
+
+
+CONTACT INFO:
+-------------
+
+libdbi-drivers-devel@lists.sourceforge.net
+http://libdbi-drivers.sourceforge.net
+Markus Hoenicka <mhoenicka@users.sourceforge.net>
+
+$Id: README,v 1.2 2005/05/22 20:08:40 mhoenicka Exp $
+

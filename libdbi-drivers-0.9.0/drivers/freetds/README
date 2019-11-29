@@ -1,0 +1,31 @@
+FreeTDS DRIVER:
+---------------
+
+This driver allows libdbi-enabled applications to use MS SQL Server or
+Sybase as a database backend.
+
+Some hints how to use this driver:
+
+In /etc/locales.conf should be set date format to  %Y-%m-%d %H:%M:%S
+It's need for date format converting.
+
+As "hostname" we can use
+  1) "IP";
+  2) "domaine name" or 
+  3) "name of database section in /etc/freetds.conf"
+
+
+See the included driver documentation for installation instructions, usage,
+and information about driver-specific peculiarities - once that
+documentation has been written, that is.
+
+
+CONTACT INFO:
+-------------
+
+libdbi-drivers-devel@lists.sourceforge.net
+http://libdbi-drivers.sourceforge.net
+Vadym Kononenko <vkononenko@atlantic-link.com.ua>
+
+
+

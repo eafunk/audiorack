@@ -1,0 +1,295 @@
+2013-03-12 01:26  mhoenicka
+
+	* NEWS (1.8): updated for 0.9.0
+
+2013-03-12 00:49  mhoenicka
+
+	* README (1.12), README.win32 (1.7), configure.in (1.54): final
+	  polish for 0.9.0
+
+2013-02-28 00:16  mhoenicka
+
+	* drivers/mysql/dbd_mysql.c (1.109): removed now irrelevant comment
+
+2013-02-24 16:06  mhoenicka
+
+	* tests/test_dbi.c (1.72): drop firebird tables using isql-fb
+	  instead of SQL commands
+
+2013-02-24 00:27  mhoenicka
+
+	* tests/test_dbi.c (1.71): added support for pgsql hex escaped
+	  strings; removed leftover crutch testing for Debian, this is now
+	  configured properly
+
+2013-02-08 02:01  mhoenicka
+
+	* drivers/pgsql/dbd_pgsql.c (1.69): boatload of fixes for dealing
+	  with binary data: added _unescape_hex_binary() and
+	  _digit_to_number() functions;dbd_quote_binary(): use
+	  PQescapeByteaConn() instead of PQescapeBytea(); _get_row_data():
+	  properly decode hex-encoded binary data
+
+2013-02-08 01:56  mhoenicka
+
+	* drivers/pgsql/dbd_pgsql.c (1.68): rewrote
+	  dbd_get_engine_version() using PQserverVersion()
+
+2013-02-08 01:54  mhoenicka
+
+	* drivers/pgsql/dbd_pgsql.c (1.67): fixed SET vs. BEGIN typo in
+	  dbd_transaction_begin()
+
+2013-01-27 02:28  mhoenicka
+
+	* drivers/mysql/dbd_mysql.sgml (1.7): added comment about
+	  transactions and savepoints
+
+2013-01-27 02:09  mhoenicka
+
+	* tests/test_dbi.c (1.70): run test_dbi_conn_transaction_commit()
+	  and test_dbi_conn_transaction_rollback() only if the driver
+	  supports transactions; implemented
+	  test_dbi_conn_rollback_to_savepoint() and
+	  test_dbi_conn_release_savepoint()
+
+2013-01-25 01:54  mhoenicka
+
+	* tests/test_dbi.c (1.69): first shot at transaction tests. NB
+	  currently fails with MySQL
+
+2013-01-09 22:30  mhoenicka
+
+	* drivers/: db2/dbd_db2.c (1.3), firebird/dbd_firebird.c (1.32),
+	  freetds/dbd_freetds.c (1.9), ingres/dbd_ingres.c (1.28),
+	  msql/dbd_msql.c (1.23), oracle/dbd_oracle.c (1.29),
+	  sqlite/dbd_sqlite.c (1.55): adapted dbd_goto_row() to new
+	  prototype in libdbi
+
+2013-01-09 00:55  mhoenicka
+
+	* drivers/: mysql/dbd_mysql.c (1.108), pgsql/dbd_pgsql.c (1.66),
+	  sqlite3/dbd_sqlite3.c (1.49): updated dbd_goto_row() to include
+	  new currowidx parameter
+
+2012-12-03 01:16  mhoenicka
+
+	* drivers/: db2/dbd_db2.c (1.2), firebird/dbd_firebird.c (1.31),
+	  freetds/dbd_freetds.c (1.8), ingres/dbd_ingres.c (1.27),
+	  msql/dbd_msql.c (1.22), mysql/dbd_mysql.c (1.107),
+	  oracle/dbd_oracle.c (1.28), pgsql/dbd_pgsql.c (1.65),
+	  sqlite/dbd_sqlite.c (1.54), sqlite3/dbd_sqlite3.c (1.48): added
+	  transaction and savepoint functions
+
+2012-07-03 18:31  ecourreges
+
+	* acinclude.m4 (1.29.2.1), configure.in (1.53.2.1),
+	  drivers/Makefile.am (1.9.6.1), tests/test_cassandra.sh (1.1.2.1),
+	  tests/test_dbi.c (1.68.2.1): Initial commit for Cassandra with
+	  CQL via Thrift Unit tests OK
+
+2011-11-15 17:51  mhoenicka
+
+	* tests/test_dbi.c (1.68): defined FIREBIRD_ISQL even if no
+	  firebird is installed; fixed linuxism related to FreeBSD malloc
+	  options
+
+2011-09-22 00:28  mhoenicka
+
+	* drivers/sqlite3/dbd_sqlite3.c (1.47): find_result_field_types():
+	  fixed two memory leaks; added freeTables()
+
+2011-09-21 22:31  mhoenicka
+
+	* drivers/mysql/dbd_mysql.c (1.106): dbd_connect(): plugged memory
+	  leak
+
+2011-05-01 12:55  mhoenicka
+
+	* AUTHORS (1.14): added Jason Beck
+
+2011-05-01 12:46  mhoenicka
+
+	* Makefile.am (1.11), configure.in (1.53), libdbi-drivers.spec.in
+	  (1.1), libdbi.spec.in (1.4): replaced libdbi.spec.in by
+	  libdbi-drivers.spec.in, using Jason's new version
+
+2011-03-02 22:14  mhoenicka
+
+	* drivers/: mysql/dbd_mysql.c (1.105), pgsql/dbd_pgsql.c (1.64):
+	  fill in default db engine ports if an app doesn't specify one
+
+2011-02-20 14:51  mhoenicka
+
+	* drivers/sqlite3/dbd_sqlite3.c (1.46): Vikram's patch for the SQL
+	  statement parser
+
+2011-02-20 13:50  mhoenicka
+
+	* drivers/sqlite3/dbd_sqlite3.c (1.45): freyther's patch making
+	  local functions static
+
+2011-02-20 12:15  mhoenicka
+
+	* configure.in (1.52), tests/Makefile.am (1.11),
+	  tests/plugin_settings.sh.in (1.1), tests/test_dbi_dlopen.c (1.1),
+	  tests/test_dbi_plugin.c (1.1), tests/test_libdbi.sh (1.1):
+	  Clint's patch for testing drivers loaded from dlopened modules
+
+2011-02-20 00:57  mhoenicka
+
+	* configure.in (1.51): removed platform-specific optimizations
+
+2011-02-20 00:32  mhoenicka
+
+	* acinclude.m4 (1.29), tests/Makefile.am (1.10), tests/test_dbi.c
+	  (1.67): find name of Firebird client via configure
+
+2011-02-19 22:40  mhoenicka
+
+	* tests/test_dbi.c (1.66): create_database(): provide collation and
+	  locale for pgsql, fixes bug #3042565
+
+2011-02-19 21:11  mhoenicka
+
+	* configure.in (1.50): quote AC_CHECK_HEADERS argument to make
+	  Solaris happy, fixes bug #3161890
+
+2011-02-19 20:57  mhoenicka
+
+	* drivers/mysql/dbd_mysql.c (1.104): include mysql.h rather than
+	  mysql/mysql.h, fixes bug #3161885
+
+2011-02-19 13:59  mhoenicka
+
+	* drivers/mysql/dbd_mysql.c (1.103): dbd_connect(): now uses string
+	  option of port in preference to the numeric option; removed
+	  commented-out debug calls
+
+2010-12-08 23:57  mhoenicka
+
+	* drivers/: sqlite/dbd_sqlite.c (1.53), sqlite3/dbd_sqlite3.c
+	  (1.44): fixed memory leak in list_tables(), see Bugs item
+	  #3131747
+
+2010-09-29 23:22  mhoenicka
+
+	* tests/cgreen/Makefile.am (1.3): added cgreen subdirs and support
+	  files to EXTRA_DIST
+
+2010-09-26 21:55  mhoenicka
+
+	* INSTALL (1.2): added hints on how to install drivers and docs
+	  separately
+
+2010-09-26 21:55  mhoenicka
+
+	* drivers/: firebird/Makefile.am (1.10), sqlite/Makefile.am (1.19),
+	  sqlite3/Makefile.am (1.12): treat data directory as exec rather
+	  than data to allow installing docs by make install-data
+
+2010-09-26 00:21  mhoenicka
+
+	* drivers/: db2/Makefile.am (1.3), firebird/Makefile.am (1.9),
+	  freetds/Makefile.am (1.7), ingres/Makefile.am (1.4),
+	  msql/Makefile.am (1.15), mysql/Makefile.am (1.18),
+	  oracle/Makefile.am (1.9), pgsql/Makefile.am (1.18),
+	  sqlite/Makefile.am (1.18), sqlite3/Makefile.am (1.11): fixed html
+	  doc install location
+
+2010-09-21 23:12  mhoenicka
+
+	* acinclude.m4 (1.28): Jans patch for linking the mysql driver
+	  properly to libmysqlclient
+
+2010-09-21 22:56  mhoenicka
+
+	* drivers/: sqlite/dbd_sqlite.c (1.52), sqlite3/dbd_sqlite3.c
+	  (1.43): Jans patch for fixing _i vs. _r typos
+
+2010-09-20 10:23  mhoenicka
+
+	* acinclude.m4 (1.27): Jans patch for fixing mysql vs. pgsql typos
+
+2010-09-10 21:12  mhoenicka
+
+	* tests/test_dbi.c (1.65): reverted name change of libdbi functions
+
+2010-09-04 16:23  mhoenicka
+
+	* acinclude.m4 (1.26), tests/Makefile.am (1.9): use build scripts
+	  to run automated tests
+
+2010-09-04 16:22  mhoenicka
+
+	* AUTHORS (1.13): added Thomas and Clint
+
+2010-09-04 16:22  mhoenicka
+
+	* tests/: test_mysql.sh (1.3), test_pgsql.sh (1.3): fixes for
+	  integrating the scripts into make check
+
+2010-09-04 16:21  mhoenicka
+
+	* tests/: test_db2.sh (1.1), test_firebird.sh (1.1),
+	  test_freetds.sh (1.1), test_ingres.sh (1.1), test_msql.sh (1.1),
+	  test_oracle.sh (1.1), test_sqlite.sh (1.1), test_sqlite3.sh
+	  (1.1): added test scripts
+
+2010-09-04 15:49  mhoenicka
+
+	* tests/test_dbi.c (1.64): usage(): fixed typo
+
+2010-09-04 13:45  mhoenicka
+
+	* tests/test_mysql.sh (1.2): portability-related fixes
+
+2010-09-04 01:28  mhoenicka
+
+	* tests/test_pgsql.sh (1.2): fixes for FreeBSD and for PostgreSQL
+	  older than 8.4
+
+2010-09-03 23:22  mhoenicka
+
+	* tests/: test_mysql.sh (1.1), test_pgsql.sh (1.1): added test
+	  scripts as provided by Thomas Goirand
+
+2010-09-03 23:05  mhoenicka
+
+	* tests/test_dbi.c (1.63): removed obsolete prototype
+
+2010-09-03 21:04  mhoenicka
+
+	* tests/test_dbi.c (1.62): fixed create database calls for
+	  PostgreSQL 8.4 and later
+
+2010-09-03 00:00  mhoenicka
+
+	* debian/: changelog (1.2), control (1.3), copyright (1.2), files
+	  (1.2), libdbd-mysql.dirs (1.2), libdbd-mysql.doc-base (1.2),
+	  libdbd-mysql.docs (1.2), libdbd-mysql.files (1.2),
+	  libdbd-mysql.postinst.debhelper (1.2),
+	  libdbd-mysql.prerm.debhelper (1.2), libdbd-mysql.substvars (1.2),
+	  libdbd-pgsql.dirs (1.2), libdbd-pgsql.doc-base (1.2),
+	  libdbd-pgsql.docs (1.2), libdbd-pgsql.files (1.2),
+	  libdbd-pgsql.postinst.debhelper (1.2),
+	  libdbd-pgsql.prerm.debhelper (1.2), libdbd-pgsql.substvars (1.2),
+	  libdbd-sqlite.dirs (1.2), libdbd-sqlite.doc-base (1.2),
+	  libdbd-sqlite.docs (1.2), libdbd-sqlite.files (1.2),
+	  libdbd-sqlite.postinst.debhelper (1.2),
+	  libdbd-sqlite.prerm.debhelper (1.2), libdbd-sqlite.substvars
+	  (1.2), rules (1.2): removed obsolete /debian directory and files
+	  therein
+
+2010-09-02 23:46  mhoenicka
+
+	* drivers/sqlite/dbd_sqlite.c (1.51), drivers/sqlite3/dbd_sqlite3.c
+	  (1.42), tests/test_dbi.c (1.61): changed instance-based function
+	  calls from _r to _i according to the new naming scheme in libdbi
+	  0.9.0-pre2
+
+2010-09-02 00:18  mhoenicka
+
+	* acinclude.m4 (1.25): added enable-mysql-threadsafe option to link
+	  against libmysqlclient_r
+

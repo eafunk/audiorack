@@ -1,0 +1,11 @@
+$Id: TODO,v 1.3 2003/04/12 17:10:09 mhoenicka Exp $
+
+- add and test support for more platforms
+
+- add drivers for all free database engines which are currently not
+  yet supported
+
+
+
+
+

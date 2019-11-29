@@ -1,0 +1,141 @@
+libdbi-drivers NEWS file
+========================
+
+______________________________________
+0.9.0 (the "Lightning Blue Eyes" release)
+
+- some of the drivers now export client library functions to the
+  programmer via the dbi_driver_specific_function() interface
+
+- if necessary, the drivers now support libdbi instances
+
+- a segfault in the oracle driver caused by INSERT statements was
+  fixed
+
+- the pgsql driver now supports features specific to PostgreSQL 9 and later
+
+- drivers now support transactions and savepoints if the underlying
+  database engines do
+
+- additional libdbi hint about position in a result set allows tremendous
+  speedup of sequential reads from MySQL result sets
+
+- various memory leaks were plugged
+
+- database specific test scripts allow tests without affecting existing
+  database clusters
+
+- completely rewritten test kit increases coverage and improves error
+  reporting
+
+
+__________________________________________
+0.8.3 (the "Shores of California" release)
+
+- major overhaul of the firebird driver. The driver is now linked to
+  libfbembed.so instead of libfbclient.so. You can request a local
+  connection (bypassing the server altogether) by using an empty
+  hostname, or a local connection through the server by using
+  "localhost" or the actual computer name as the hostname.
+
+- changed all driver code to LGPL, and all doc code to GFDL with no
+  invariant sections as requested by several packagers
+
+- made linking drivers against libdbi the default. This behaviour can be
+  switched off by --disable-libdbi, a reversal of the previous default
+
+- improved support for MySQL and PostgreSQL connection options
+
+- assorted fixes for MinGW compatibility
+
+- all drivers now implement the "safe_dlclose" driver capability to
+  signal libdbi whether or not the driver can safely be unloaded from
+  memory.
+
+
+_____________________________________
+0.8.2 (the "Payday in a Pub" release)
+
+- to avoid possible conflicts with database client libraries (think
+  package names!) all driver libraries were renamed from libname.suffix
+  to libdbdlibname.suffix. E.g. the MySQL shared library was renamed from
+  mysql.so to libdbdmysql.so. Unless your package manager does this
+  automatically, it is recommended to clean out old driver libraries
+  from /usr/local/lib/dbd (or wherever they ended up).
+  Remember that this change affects only the library names. The driver
+  names (the ones your program uses to load particular drivers) did
+  *not* change 
+
+- assorted fixes in the oracle driver
+
+- the mysql driver now supports the BIT and NEWDECIMAL types
+  introduced in MySQL 5.0.3
+
+- added a new (experimental) Ingres 2006 driver
+
+- the "--disable-docs" configure switch now allows to build
+  libdbi-drivers without having the sgml toolchain installed
+
+- plugged a few memory holes
+
+- fixed a segfault in the error message handling code of sqlite/sqlite3
+
+- improved compatibility with older PostgreSQL versions
+
+- sqlite and sqlite3 now grok semicolons in query strings
+
+- you can now optionally link the drivers against libdbi by using the
+  "--enable-libdbi" configure switch. This sounds weird at first, but it
+  allows to load libdbi into a dlopen'ed module, like this:
+
+  Parent => dl_open(module) => dl_open(libdbi) => dl_open(driver)
+
+  Drivers compiled with this option should work ok in the regular
+  context (your app linked against libdbi) as well.
+
+
+__________________________
+0.8.1 (the "Lost" release)
+
+Due to a lack of attention there was no release information added at
+the time of the 0.8.1 release. It is therefore entirely obscure what
+made us feel like wrapping up a new release, but rest assured that
+this code was better than before (if you really need to know, use the
+CVS logs or the CVS web interface).
+
+_____________________________________
+0.8.0 (the "Whatsername" release)
+
+- and then there were 7: sqlite3, firebird, and oracle were
+  added. However, msql, oracle, and firebird are still experimental in
+  this release and are likely to be broke. We'll do our best to ship
+  working drivers with 0.8.1
+
+- tons of internal fixes to work with libdbi 0.8.0
+
+- the version numbering has changed. Starting with this release, the
+  major and minor numbers ("0.8" in this release) denote the internal
+  API version. Any 0.8.x libdbi-drivers release is guaranteed to work
+  with any 0.8.x libdbi release. The patch level ("0" in the current
+  release) denotes patches and minor changes that do not affect the
+  internal API.
+
+
+_____________________________________
+0.7.0 (the "Pineapple Skunk" release)
+
+- the libdbi-drivers project now hosts 4 drivers: mysql and pgsql
+  (formerly part of libdbi), as well as msql and sqlite.
+
+- fixed dynamic loading stuff to work properly on OSX
+
+- added/updated driver documentation
+
+- improved test program
+
+- assorted fixes in the drivers
+
+- sqlite driver now attempts to support all MySQL and PosgreSQL data
+  types
+
+$Id: NEWS,v 1.8 2013/03/12 00:26:05 mhoenicka Exp $

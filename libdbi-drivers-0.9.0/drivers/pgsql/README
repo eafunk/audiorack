@@ -1,0 +1,29 @@
+
+libdbi-drivers - drivers for libdbi, the Database
+Independent Abstraction Layer for C
+
+Copyright (C) 2001-2002, Markus Hoenicka <markus at mhoenicka.de>
+http://libdbi-drivers.sourceforge.net
+
+
+POSTGRESQL DRIVER:
+------------------
+
+This driver allows libdbi-enabled applications to use PostgreSQL as a database
+backend. Internally, it provides a libdbi driver around the libpq client
+library.
+
+See the included driver documentation for installation instructions, usage,
+and information about driver-specific peculiarities.
+
+
+CONTACT INFO:
+-------------
+
+libdbi-drivers-devel@lists.sourceforge.net
+http://libdbi-drivers.sourceforge.net
+David Parker <david at neongoat.com>
+
+
+$Id: README,v 1.1 2003/06/17 04:57:25 dap24 Exp $
+

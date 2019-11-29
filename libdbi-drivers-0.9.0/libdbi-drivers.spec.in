@@ -1,0 +1,315 @@
+%define name libdbi-drivers
+%define version	@VERSION@
+%define release 1
+%define dist
+
+%define with_mysql %{?_without_mysql: 0} %{?!_without_mysql: 1}
+%define with_pgsql %{?_without_pgsql: 0} %{?!_without_pgsql: 1}
+%define with_oracle %{?_without_oracle: 0} %{?!_without_oracle: 1}
+%define with_freetds %{?_without_freetds: 0} %{?!_without_freetds: 1}
+%define with_sqlite %{?_without_sqlite: 0} %{?!_without_sqlite: 1}
+%define with_sqlite3 %{?_without_sqlite3: 0} %{?!_without_sqlite3: 1}
+%define with_ingres %{?_without_ingres: 0} %{?!_without_ingres: 1}
+%define with_firebird %{?_without_firebird: 0} %{?!_without_firebird: 1}
+%define with_msql %{?_without_msql: 0} %{?!_without_msql: 1}
+
+Summary:	Database drivers for libdbi
+Name:		%{name}
+Version:	%{version}
+Release:	%{release}%{?dist}
+Group:		Development/Libraries
+License:	LGPL
+URL:		http://libdbi-drivers.sourceforge.net/
+Vendor:		Neon Goat Productions
+Packager:	David A. Parker <david@neongoat.com>
+Source:		%{name}-%{version}.tar.gz
+BuildRoot:	%{_tmppath}/%{name}-root
+BuildRequires: libdbi-devel >= %{version}, openjade
+Requires:   libdbi >= %{version}
+
+%description
+libdbi implements a database-independent abstraction layer in C, similar to the
+DBI/DBD layer in Perl. Drivers are distributed seperately from the library
+itself.
+
+%package devel
+Summary: Static library and header files for the %{name} library
+Group: Development/C
+
+%description devel
+libdbi implements a database-independent abstraction layer in C, similar to the
+DBI/DBD layer in Perl. Drivers are distributed seperately from the library
+itself.
+
+This package contains the static libraries and header files.
+
+%package docs
+Summary: Documentation about libdbi-drivers
+Group: Development/Libraries
+
+%description docs
+libdbi implements a database-independent abstraction layer in C, similar to the
+DBI/DBD layer in Perl. Drivers are distributed seperately from the library
+itself.
+
+This package contains the documentation.
+
+%if %{with_oracle}
+%package dbd-oracle
+Summary: Oracle driver for libdbi   
+Group: Development/Libraries
+BuildRequires: oracle-instantclient-devel
+
+%description dbd-oracle
+This driver provides connectivity to Oracle database servers through the
+libdbi database independent abstraction layer. Switching a program's driver
+does not require recompilation or rewriting source code.
+%endif
+
+%if %{with_firebird}
+%package dbd-firebird
+Summary: Firebird driver for libdbi
+Group: Development/Libraries
+BuildRequires: firebird-devel
+
+%description dbd-firebird
+This driver provides connectivity to Firebird database servers through the
+libdbi database independent abstraction layer. Switching a program's driver
+does not require recompilation or rewriting source code.
+%endif
+
+%if %{with_ingres}
+%package dbd-ingres
+Summary: Ingres driver for libdbi
+Group: Development/Libraries
+BuildRequires: ingres-devel
+
+%description dbd-ingres
+This driver provides connectivity to Ingres database servers through the
+libdbi database independent abstraction layer. Switching a program's driver
+does not require recompilation or rewriting source code.
+%endif
+
+%if %{with_msql}
+%package dbd-msql
+Summary: MSQL driver for libdbi
+Group: Development/Libraries
+Requires: msql
+BuildRequires: msql-devel
+
+%description dbd-msql
+This driver provides connectivity to MSQL database servers through the
+libdbi database independent abstraction layer. Switching a program's driver
+does not require recompilation or rewriting source code.
+%endif
+
+%if %{with_mysql}
+%package dbd-mysql
+Summary: MySQL driver for libdbi
+Group: Development/Libraries
+Requires: mysql-shared
+BuildRequires: mysql-devel
+
+%description dbd-mysql
+This driver provides connectivity to MySQL database servers through the
+libdbi database independent abstraction layer. Switching a program's driver
+does not require recompilation or rewriting source code.
+%endif
+
+%if %{with_pgsql}
+%package dbd-pgsql
+Summary: PostgreSQL driver for libdbi
+Group: Development/Libraries
+Requires: postgresql >= 7.0.3
+BuildRequires: postgresql-devel
+
+%description dbd-pgsql
+This driver provides connectivity to PostgreSQL database servers through the
+libdbi database independent abstraction layer. Switching a program's driver
+does not require recompilation or rewriting source code.
+%endif
+
+%if %{with_sqlite}
+%package dbd-sqlite
+Summary: SQLite driver for libdbi
+Group: Development/Libraries
+Requires: sqlite < 3.0
+BuildRequires: sqlite-devel < 3.0
+
+%description dbd-sqlite
+This driver provides connectivity to SQLite database servers through the
+libdbi database independent abstraction layer. Switching a program's driver
+does not require recompilation or rewriting source code.
+%endif
+
+%if %{with_sqlite3}
+%package dbd-sqlite3
+Summary: SQLite3 driver for libdbi
+Group: Development/Libraries
+Requires: sqlite >= 3.0
+BuildRequires: sqlite-devel >= 3.0
+
+%description dbd-sqlite3
+This driver provides connectivity to SQLite database servers through the
+libdbi database independent abstraction layer. Switching a program's driver
+does not require recompilation or rewriting source code.
+%endif
+
+%if %{with_freetds}
+%package dbd-freetds
+Summary: MSSQL (FreeTDS) driver for libdbi
+Group: Development/Libraries
+Requires: freetds >= 0.62.4
+BuildRequires: freetds-devel >= 0.62.4
+
+%description dbd-freetds
+This driver provides connectivity to MSSQL database servers through the
+libdbi database independent abstraction layer. Switching a program's driver
+does not require recompilation or rewriting source code.
+%endif
+
+%prep
+%setup -q -n %{name}-%{version}
+
+%build
+CFLAGS="$RPM_OPT_FLAGS" ./configure \
+%if %{with_mysql}
+ --with-mysql --with-mysql-incdir=%{_includedir}/mysql --with-mysql-libdir=%{_libdir} \
+%endif
+%if %{with_oracle}
+ --with-oracle --with-oracle-incdir=%{_includedir}/oracle/client --with-oracle-libdir=%{_libdir}/oracle/client/lib \
+%endif
+%if %{with_sqlite}
+ --with-sqlite --with-sqlite-incdir=%{_includedir} --with-sqlite-libdir=%{_libdir} \
+%endif
+%if %{with_sqlite3}
+ --with-sqlite3 --with-sqlite3-incdir=%{_includedir} --with-sqlite3-libdir=%{_libdir} \
+%endif
+%if %{with_pgsql}
+ --with-pgsql --with-pgsql-incdir=%{_includedir} --with-pgsql-libdir=%{_libdir} \
+%endif
+%if %{with_freetds}
+ --with-freetds --with-freetds-incdir=%{_includedir} --with-freetds-libdir=%{_libdir} \
+%endif
+%if %{with_ingres}
+ --with-ingres --with-ingres-incdir=%{_includedir} --with-ingres-libdir=%{_libdir} \
+%endif
+%if %{with_firebird}
+ --with-firebird --with-firebird-incdir=%{_includedir} --with-firebird-libdir=%{_libdir} \
+%endif
+%if %{with_msql}
+ --with-msql --with-msql-incdir=%{_includedir} --with-msql-libdir=%{_libdir} \
+%endif
+ --prefix=%{_prefix}
+
+make
+
+%install
+[ "$RPM_BUILD_ROOT" != "/" ] && rm -rf $RPM_BUILD_ROOT
+make DESTDIR=$RPM_BUILD_ROOT install
+
+# Headers
+install -d %{buildroot}%{_includedir}/dbi
+for file in $(find drivers/ -type f -name \*.h)
+do
+    install -m0644 ${file} %{buildroot}%{_includedir}/dbi/
+done
+
+# Docs
+install -d %{buildroot}%{_docdir}/%{name}-%{version}
+for file in drivers/*/{TODO,AUTHORS,README}
+do 
+    driver=$(echo $file|awk -F/ '{print $2}') 
+    newfile=$(basename $file)
+    install -m0644 $file %{buildroot}%{_docdir}/%{name}-%{version}/$newfile.$driver
+done
+for pdf in drivers/*/dbd_*.pdf
+do
+    install -m0644 $pdf %{buildroot}%{_docdir}/%{name}-%{version}/
+done
+for dir in $(find drivers/ -type d -name dbd_\*)
+do
+    cp -pr $dir %{buildroot}%{_docdir}/%{name}-%{version}/
+done
+
+%files docs
+%defattr(-,root,root)
+%{_docdir}/%{name}-%{version}/*
+
+%if %{with_mysql}
+%files dbd-mysql
+%defattr(-,root,root)
+/usr/lib/dbd/libdbdmysql.so
+%endif
+
+%if %{with_pgsql}
+%files dbd-pgsql
+%defattr(-,root,root)
+/usr/lib/dbd/libdbdpgsql.so
+%endif
+
+%if %{with_sqlite}
+%files dbd-sqlite
+%defattr(-,root,root)
+/usr/lib/dbd/libdbdsqlite.so
+%endif
+
+%if %{with_sqlite3}
+%files dbd-sqlite3
+%defattr(-,root,root)
+/usr/lib/dbd/libdbdsqlite3.so
+%endif
+
+%if %{with_freetds}
+%files dbd-freetds
+%defattr(-,root,root)
+/usr/lib/dbd/libdbdfreetds.so
+%endif
+
+%if %{with_oracle}
+%files dbd-oracle
+%defattr(-,root,root)
+/usr/lib/dbd/libdbdoracle.so
+%endif
+
+%if %{with_ingres}
+%files dbd-ingres
+%defattr(-,root,root)
+/usr/lib/dbd/libdbdingres.so
+%endif
+
+%if %{with_firebird}
+%files dbd-firebird
+%defattr(-,root,root)
+/usr/lib/dbd/libdbdfirebird.so
+%endif
+
+%if %{with_msql}
+%files dbd-msql
+%defattr(-,root,root)
+/usr/lib/dbd/libdbdmsql.so
+%endif
+
+%files devel
+%defattr(-,root,root)
+%doc AUTHORS ChangeLog INSTALL README TODO
+/usr/lib/dbd/*.a
+/usr/lib/dbd/*.la
+%{_includedir}/dbi/*.h
+
+%clean 
+[ "$RPM_BUILD_ROOT" != "/" ] && rm -rf $RPM_BUILD_ROOT
+
+%post
+/sbin/ldconfig
+
+%postun
+/sbin/ldconfig
+
+%changelog
+* Fri Apr 29 2011 Jason Beck <jason.s.beck@gmail.com>
+- Incorporated support for all available drivers in specfile
+* Fri Mar 28 2003 David Parker <david@neongoat.com>
+- updated for libdbi-drivers split
+* Sat Aug 4 2001 David Parker <david@neongoat.com>
+- initial spec file created

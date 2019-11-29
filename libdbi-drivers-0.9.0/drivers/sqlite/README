@@ -1,0 +1,45 @@
+
+libdbi-drivers - drivers for libdbi, the Database
+Independent Abstraction Layer for C
+
+Copyright (C) 2001-2002, Markus Hoenicka <markus at mhoenicka.de>
+http://libdbi-drivers.sourceforge.net
+
+
+SQLITE DRIVER:
+--------------
+
+A driver implementing an embedded SQL engine using libsqlite
+(http://www.sqlite.org)
+   
+
+
+NOTES:
+------
+
+The sqlite driver ignores the host, port, username, and
+password options completely as the sqlite access control works
+entirely over the filesystem. If you're allowed to run an application
+linked against libdbi and if the sqlite driver can be loaded from your
+account, you have access to the "database server". If the file
+containing the sqlite database is read/writable from your account, you
+have read/write access to that database.
+
+The sqlite driver uses one driver-specific option. In order to make
+the operation as a libdbi driver feasible, you have to assign one
+directory of your filesystem as the sqlite data directory by setting
+the "sqlite_dbdir" option appropriately. The driver will look for
+existing databases in this directory and it will create new databases
+in the very same directory.
+
+
+
+CONTACT INFO:
+-------------
+
+libdbi-drivers-devel@lists.sourceforge.net
+http://libdbi-drivers.sourceforge.net
+Markus Hoenicka <mhoenicka@users.sourceforge.net>
+
+$Id: README,v 1.1 2003/04/12 17:06:10 mhoenicka Exp $
+

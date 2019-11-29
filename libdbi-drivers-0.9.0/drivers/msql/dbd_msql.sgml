@@ -1,0 +1,104 @@
+<!DOCTYPE Book PUBLIC "-//OASIS//DTD DocBook V4.1//EN">
+<!-- $Id -->
+<book>
+  <bookinfo>
+    <title>Mini SQL driver manual</title>
+    <subtitle>A libdbi driver for the Mini SQL (mSQL) database </subtitle>
+  <author>
+      <firstname>Christian</firstname>
+      <surname>Stamgren</surname>
+      <affiliation>
+	<address><email>christian@centiongroup.com</email></address>
+      </affiliation>
+    </author>
+    <revhistory>
+      <revision>
+	<revnumber>0.1</revnumber>
+	<date>2003-04-14</date>
+      </revision>
+    </revhistory>
+  </bookinfo>
+  <preface>
+    <title>Preface</title>
+    <para><ulink url="http://libdbi.sourceforge.net">libdbi</ulink> is a database abstraction layer written in C. It implements a framework that can utilize separate driver libraries for specific database servers. The <ulink url="http://libdbi-drivers.sourceforge.net">libdbi-drivers</ulink> project provides the drivers necessary to talk to the supported database servers.</para>
+    <para>This manual provides information about the Mini SQL driver. The manual is intended for programmers who write applications linked against libdbi and who want their applications to work with the Mini SQL driver.</para>
+    <para>Questions and comments about the Mini SQL driver should be sent to the <ulink url="mailto:libdbi-drivers-devel@lists.sourceforge.net">libdbi-drivers-devel</ulink> mailing list. Visit the <ulink url="http://lists.sourceforge.net/lists/listinfo/libdbi-drivers-devel">libdbi-drivers-devel list page</ulink> to subscribe and for further information. Questions and comments about the libdbi library should be sent to the appropriate libdbi mailing list.</para>
+    <para>The Mini SQL driver is maintained by <ulink url="mailto:christian@centiongroup.com">Christian Stamgren</ulink>.</para>
+  </preface>
+  <chapter>
+    <title>Introduction</title>
+    <para><ulink url="http://www.hughes.com.au/products/msql/"> Mini SQL</ulink> is a light-weight SQL Database engine. It
+has a very small footprint and is well suited for embedded projects when you need the facility of a full blown database
+engine but have to be really carefull spending resources.</para>
+    </chapter>
+  <chapter>
+    <title>Installation</title>
+    <para>This chapter describes the prerequisites and the procedures to build and install the Mini SQL driver from the sources.</para>
+    <sect1>
+      <title>Prerequisites</title>
+      <para>The following packages have to be installed on your system:</para>
+      <variablelist>
+	<varlistentry>
+	  <term>libdbi</term>
+	  <listitem>
+	    <para>This library provides the framework of the database abstraction layer which can utilize the sqlite driver to perform database operations. The download page as well as the mailing lists with bug reports and patches are accessible at <ulink url="http://sourceforge.net/projects/libdbi">sourceforge.net/projects/libdbi</ulink>. The current version of the sqlite driver requires at least libdbi version 0.6.7.</para>
+	  </listitem>
+	</varlistentry>
+	<varlistentry>
+	  <term>Mini SQL</term>
+	  <listitem>
+	    <para>Yes, you'll need the acctual database installed. Funny isn't it?
+            <ulink url="http://www.hugnes.com.au/producs/msql/"> http://www.hugnes.com.au/producs/msql/</ulink></para>
+	  </listitem>
+	</varlistentry>
+      </variablelist>
+    </sect1>
+    <sect1>
+      <title>Build and install the Mini SQL driver</title>
+      <para>First you have to unpack the libdbi-drivers archive in a suitable directory. Unpacking will create a new subdirectory <filename class="directory">libdbi-drivers-X.Y</filename> where "X.Y" denotes the version:</para>
+      <screen><prompt>$ </prompt><userinput>tar -xzf libdbi-drivers-x.y.tar.gz</userinput></screen>
+      <para>The libdbi-drivers project consists of several drivers that use a common build system. Therefore you <emphasis>must</emphasis> tell configure explicitly that you want to build the Mini SQL driver (you can list as many drivers as you want to build):</para>
+      <screen><prompt>$ </prompt><userinput>cd libdbi-drivers</userinput></screen>
+      <screen><prompt>$ </prompt><userinput>./configure --with-msql</userinput></screen>
+      <para>Run <command>./configure --help</command> to find out about additional options.</para>
+      <para>Then build the driver with the command:</para>
+      <screen><prompt>$ </prompt><userinput>make</userinput></screen>
+      <note>
+	<para>Please note that you may have to invoke <command>gmake</command>, the GNU version of make, on some systems.</para>
+      </note>
+      <para>Then install the driver with the command (you'll need root permissions to do this):</para>
+      <screen><prompt>$ </prompt><userinput>make install</userinput></screen>
+      <para>To test the operation of the newly installed driver, use the command:</para>
+      <screen><prompt>$ </prompt><userinput>make check</userinput></screen>
+
+      <para>This command creates and runs a test program that performs a few basic input and output tests. The program will
+ask for a database name and a host name. If you havn't configured Mini SQL to use TCP just press enter at the hostname
+selection to pass NULL to Mini SQL's <function>connect() </function> function indicating that you want to use a local
+socket.</para>
+    </sect1>
+  </chapter>
+  <chapter>
+    <title>Driver options</title>
+    <para>Your application has to initialize libdbi drivers by setting some driver options with the <function>dbi_conn_set_option()</function> and the <function>dbi_conn_set_option_numeric()</function> library functions. Mini SQL uses the following options::</para>
+    <variablelist>
+      <varlistentry>
+	<term>dbname</term>
+	<listitem>
+	  <para>The name of the database you want to connect to. <varname>dbname</varname> can be any existing database in
+the Mini SQL installation created with <function> msqladmin create dbname</function>. </para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term>host</term>
+	<listitem>
+	  <para>This is the name or ip-address of the host where the Mini SQL database is located.</para>
+	  <note>
+	    <para>If you want to connect to a database on localhost don't use this option. Specifying localhost will force
+	    TCP usage instedd of UNIX Domain socket usage (if the server is configured for TCP) Mini SQL is much faster
+            using a UNIX domain socket.</para>
+	  </note>
+	</listitem>
+      </varlistentry>
+    </variablelist>
+  </chapter>
+</book>

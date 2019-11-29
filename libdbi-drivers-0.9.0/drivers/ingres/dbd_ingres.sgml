@@ -1,0 +1,380 @@
+<!DOCTYPE Book PUBLIC "-//OASIS//DTD DocBook V4.1//EN" [
+
+<!ENTITY freedoc-license SYSTEM "../../doc/include/copying-fdl.sgml">
+<!ENTITY www 'http://libdbi-drivers.sourceforge.net'>
+<!ENTITY www-libdbi 'http://libdbi.sourceforge.net'>
+
+<!-- customize these and the bookinfo section -->
+<!ENTITY author-email 'qu1j0t3@sourceforge.net'>
+<!ENTITY author-name 'Toby Thain'>
+<!ENTITY dbd-name 'ingres'>
+<!ENTITY proper-name 'Ingres'>
+<!ENTITY www-upstream 'http://www.ingres.com/'>
+
+]>
+
+<!-- $Id: dbd_ingres.sgml,v 1.16 2008/03/24 01:47:24 qu1j0t3 Exp $ -->
+
+<book id="dbd-&dbd-name;">
+
+<bookinfo>
+	<title>&proper-name; Driver Notes</title>
+	<subtitle>Details about the libdbi driver providing support for &proper-name; backends</subtitle>
+	<author>
+		<firstname>Toby</firstname>
+		<surname>Thain</surname>
+		<affiliation>
+			<address><email>qu1j0t3@sourceforge.net</email></address>
+		</affiliation>
+	</author>
+	<edition>Document revision: $Id: dbd_ingres.sgml,v 1.16 2008/03/24 01:47:24 qu1j0t3 Exp $</edition>
+	<pubdate>$Date: 2008/03/24 01:47:24 $</pubdate>
+	<revhistory>
+      <revision>
+	<revnumber>0.3</revnumber>
+	<date>2006-06-08</date>
+      </revision>
+	</revhistory>
+	<copyright>
+		<year>2006</year>
+		<holder>Toby Thain</holder>
+	</copyright>
+	<legalnotice>
+		<para>
+			Permission is granted to copy, distribute and/or modify this
+			document under the terms of the <link linkend="copying-FDL">
+			<citetitle>GNU Free Documentation License</citetitle></link>,
+			Version 1.1 or any later version published by the Free Software
+			Foundation; with no Invariant Sections, with no	Front-Cover Texts,
+			and with no Back-Cover Texts.  A copy of the license is included in
+			<xref linkend="copying-FDL">.
+		</para>
+	</legalnotice>
+</bookinfo>
+
+<preface><title>Preface</title>
+	<para>
+		<ulink url="&www-libdbi;">libdbi</ulink> is a database abstraction
+		layer written in C. It implements a framework that can utilize
+		separate driver libraries for specific database servers. The <ulink
+		url="&www;">libdbi-drivers</ulink> project provides the drivers
+		necessary to talk to the supported database servers.
+	</para>
+	<para>
+		This manual provides information about the &dbd-name; driver, which
+		provides support for &proper-name; databases. The manual is
+		intended for programmers who write applications linked against libdbi
+		and who want their applications to use this database backend.
+	</para>
+	<para>
+		Questions and comments about this driver should be sent to the
+		libdbi-drivers-devel mailing list (see the <ulink
+		url="&www;">website</ulink>). Questions and comments about the libdbi
+		library should be sent to the appropriate libdbi mailing list.
+	</para>
+	<para>
+		This driver is maintained by <ulink url="mailto:&author-email;">&author-name;</ulink>.
+	</para>
+</preface>
+
+<chapter id="intro"><title>Introduction</title>
+	<para>
+		<ulink url="http://ingres.com/products/Prod_Ingres_2006.html">Ingres(R)</ulink>
+		is an advanced relational database management system
+		from Ingres Corporation. Notable features include C2 security certification,
+		clustering, partitioning, transaction journaling, query optimisation, 
+		diverse programming bindings and flexible licensing from GPL community 
+		through to 24/7 enterprise level support.
+	</para>
+	<para>
+	More information can be found from the <ulink url="&www-upstream;">&proper-name; website</ulink>.
+    </para>
+</chapter>
+
+<chapter id="install"><title>Installation</title>
+	<para>
+		This chapter describes the prerequisites and the procedures to build
+		and install this driver from source code.
+	</para>
+	<section id="install-prereq"><title>Prerequisites</title>
+		<para>
+			The following packages must be installed on your system:
+		</para>
+		<variablelist>
+			<varlistentry>
+				<term>libdbi</term>
+				<listitem>
+					<para>
+						This library implements the core database abstraction
+						layer, which provides your application with database
+						backend functionality when paired with this driver.
+						More information about libdbi, including mailing
+						lists, documentation, bug reports, and downloads, is
+						available from the <ulink url="&www-libdbi;">libdbi
+						website</ulink>.
+					</para>
+				</listitem>
+			</varlistentry>
+			<varlistentry>
+				<term>libpq</term>
+				<listitem>
+					<para>
+						This is the C shared library to enable user programs
+						to communicate with the Ingres(R) Community Edition
+						RDBMS.
+					</para>
+					<para>
+						The current version of the dbd_ingres driver was
+						written and tested with the 32-bit NPTL version II 9.0.4
+						and 9.2 for Linux/x86, running on Gentoo 
+						(see <ulink url="http://slashdot.org/~toby/journal/136300">my installation notes</ulink>).
+					</para>
+				</listitem>
+			</varlistentry>
+		</variablelist>
+	</section>
+	<section id="install-build"><title>Build and install the driver</title>
+		<para>
+			First you have to unpack the libdbi-drivers archive in a suitable
+			directory. Unpacking will create a new subdirectory with the
+			version number, such as <filename
+			class="directory">libdbi-drivers-0.8.0</filename>
+		</para>
+		<screen><prompt>$ </prompt><userinput>tar xfvz libdbi-drivers-0.8.0.tar.gz</userinput></screen>
+		<para>
+			The libdbi-drivers project consists of several drivers that use a
+			common build system. Therefore you <emphasis>must</emphasis> explicitly tell
+			the configuration script that you want to build the &dbd-name; driver (you
+			can list as many drivers as you want to build):
+		</para>
+		<screen><prompt>$ </prompt><userinput>cd libdbi-drivers-0.8.0</userinput></screen>
+		<screen><prompt>$ </prompt><userinput>./configure --with-&dbd-name;</userinput></screen>
+		<para>
+			Run <command>./configure --help</command> to find out about
+			additional options and other available drivers.
+		</para>
+		<para>
+			Then build the driver with the command:
+		</para>
+		<screen><prompt>$ </prompt><userinput>make</userinput></screen>
+		<note>
+			<para>
+				Please note that you may have to invoke
+				<command>gmake</command>, the GNU version of make, on some
+				systems.
+			</para>
+		</note>
+		<para>
+			Then install the driver with the command (you'll need root
+			permissions to do this):
+		</para>
+		<screen><prompt>$ </prompt><userinput>make install</userinput></screen>
+		<para>
+			To test the operation of the newly installed driver, use the
+			command:
+		</para>
+		<screen><prompt>$ </prompt><userinput>make check</userinput></screen>
+		<para>
+			This command creates and runs a test program that performs a few
+			basic input and output tests.
+		</para>
+		<note>
+			<para>
+				If for some reason you need to re-create the
+				autoconf/automake-related files, try running <command
+				moreinfo="none">./autogen.sh</command>. In some situations,
+				the current stable autoconf/automake/libtool versions (as
+				found in FreeBSD 4.7 and Debian 3.0) do not cooperate well, so
+				it may be necessary to run the older autoconf 2.13. If
+				necessary, edit <filename
+				moreinfo="none">autogen.sh</filename> so that it will catch
+				the older autoconf version on your system.
+			</para>
+		</note>
+	</section>
+</chapter>
+
+<chapter id="options"><title>Driver options</title>
+	<para>
+		Before you can initiate a connection, you must usually specify options
+		that tell the database driver what to connect to. This driver supports
+		the standard options of
+		<varname>username</varname>, <varname>password</varname> and
+		<varname>dbname</varname>. The latter parameter is in Ingres syntax,
+		<literal>[node_id::]dbname[/svr_class]</literal> - 
+		see Ingres documentation for details.
+		(When running as the Ingres admin user on the same host as the DBMS,
+		only the <literal>dbname</literal> is normally required.)
+		Sensible defaults will be used for all unspecified options.
+	</para>
+	<para>
+		This driver also offers the following non-standard options, and/or
+		redefines the meaning of the following standard options:
+	</para>
+	<variablelist>
+		<varlistentry>
+			<term>ingres_autocommit</term>
+			<listitem>
+				<para>
+					Set this option to <emphasis>string value</emphasis> "0" 
+					to disable Ingres autocommit mode
+					for the connection (it is enabled by default).
+				</para>
+			</listitem>
+		</varlistentry>
+	</variablelist>
+</chapter>
+
+<chapter id="specific"><title>&proper-name;-specific Peculiarities</title>
+	<para>
+			This chapter lists known peculiarities of the &dbd-name; driver.
+			Wherever possible, nonstandard driver behavior is hidden by libdbi's
+			abstractions, but occasionally special considerations must be taken or
+			extra functionality may be utilized for particular drivers.
+		</para>
+<variablelist>
+	<varlistentry>
+		<term>Ingres environment variables must be set</term>
+		<listitem>
+			<para>The driver will not be loaded at all by <function>dbi_initialize()</function>
+			if the Ingres environment variables are not set (e.g. by <literal>~/.ingIIbash</literal>).
+			If the current user or specified user does not have appropriate Ingres privileges,
+			the connection will fail ("User authorization check failed" or similar).</para>
+			
+			<para>When connecting, the driver uses the values of the
+			<literal>dbname</literal>, <literal>username</literal> 
+			and <literal>password</literal> options, if set.</para>
+		</listitem>
+	</varlistentry>
+	<varlistentry>
+		<term>Autocommit</term>
+		<listitem>
+			<para>'Autocommit' mode is enabled by default for the DBMS connection.
+			In this mode, every query is committed as an individual transaction.</para>
+			
+			<para>With autocommit disabled (see <literal>ingres_autocommit</literal> connection option),
+			a transaction is begun by the first query statement after connection, commit
+			or rollback. The transaction remains open until the next explicit commit,
+			rollback or disconnection (which implies commit). Commit and rollback
+			cannot be done using an OpenAPI query, but must use separate API functions.
+			To work around this, the Ingres driver makes a specific check
+			for COMMIT and ROLLBACK queries and calls the appropriate API function
+			instead of issuing the query.</para>
+			
+			<para>See Ingres OpenAPI and SQL documentation for more information.</para>
+		</listitem>
+	</varlistentry>
+	<varlistentry>
+		<term>Handling of result sets</term>
+		<listitem>
+			<para>In the Ingres OpenAPI, result sets must be accessed sequentially.
+			Furthermore, Ingres does not provide the row count; this must be determined
+			by fetching rows until no more is available. For this reason, the driver
+			must fetch all result data into memory immediately after a query. Then
+			libdbi functions can be used to get random access to rows as usual.</para>
+			
+			<para>A workaround, for example if your result sets
+			are very large, would be to use SELECT for random access; for example,
+			query once to get a set of key values, then issue SELECTs on individual rows
+			or smaller subsets of rows.</para>
+			
+			<para>If your result set or BLOB data is likely to exhaust memory,
+			and workarounds such as the above are not appropriate, then you will
+			need to use OpenAPI directly to access them sequentially or by segments,
+			instead of using libdbi and this driver.</para>
+		</listitem>
+	</varlistentry>
+	<varlistentry>
+		<term>SEQUENCE functions and autocommit</term>
+		<listitem>
+			<para><function>dbi_conn_sequence_last()</function> is not usable in Ingres' autocommit mode
+			(the default). To use sequences to identify INSERTed rows, first 
+			obtain the NEXT VALUE using <function>dbi_conn_sequence_next()</function> then use that 
+			sequence value directly in a separate INSERT transaction.</para>
+		</listitem>
+	</varlistentry>
+	<varlistentry>
+		<term>DATE parsing</term>
+		<listitem>
+			<para>Parsing DATE columns into timestamp values will only work correctly when
+			returned values are in the default (US) date format; i.e.
+			<literal>dd-mmm-yyyy [hh:mm:ss]</literal> where <literal>mmm</literal>
+			is a partial month name. The parsing routine will accept
+			any separators and either a numeric or named month, but the D-M-Y
+			ordering is required. If needed, a workaround for date format
+			incompatibility is to format into a string using a SQL function
+			such as <function>date_gmt(date)</function>.</para>
+		</listitem>
+	</varlistentry>
+	<varlistentry>
+		<term>Version string format</term>
+		<listitem>
+			<para><function>dbi_conn_get_engine_version_string()</function> returns a
+			string like <literal>II 9.0.4 (int.lnx/104)NPTL</literal>
+			(internally this is implemented as <literal>SELECT dbmsinfo('_version')</literal>.</para>
+		</listitem>
+	</varlistentry>
+	<varlistentry>
+		<term>Getting database and table lists</term>
+		<listitem>
+			<para><function>dbi_conn_get_table_list()</function> returns matching objects 
+			of all types - tables, views, indexes and partitions -
+			in the <literal>iitables</literal> catalog for the named database
+			(except those beginning with <literal>ii</literal>, which are reserved for Ingres).
+			These names are space padded fixed width fields.</para>
+		</listitem>
+	</varlistentry>
+	<varlistentry>
+		<term>Logging verbosity</term>
+		<listitem>
+			<para>The driver respects <function>dbd_set_verbosity()</function> level in reporting messages.
+			At verbosity 1, only errors and abnormalities are reported;
+			at 2, more information is shown; at 3, detailed debugging information is shown.</para>
+		</listitem>
+	</varlistentry>
+	<varlistentry>
+		<term>Blank handling</term>
+		<listitem>
+			<para>Blanks are preserved in column values (except that DECIMAL and MONEY columns
+			are converted to strings, and then stripped of trailing blanks).
+			Note that names returned by <function>dbi_conn_get_table_list()</function>
+			and <function>dbi_conn_get_db_list()</function> are padded with blanks
+			to a fixed width.</para>
+		</listitem>
+	</varlistentry>
+	<varlistentry>
+		<term>Error messages</term>
+		<listitem>
+			<para>The Ingres OpenAPI may return multiple error messages for a given query/operation.
+			The <function>dbi_conn_error()</function> returns the error code only for the
+			last error message, but the message text will include all relevant messages. At verbosity level 2,
+			errors directly relating to libdbi function calls are logged. At verbosity 3,
+			all errors are logged including those caused by API calls made internally by the driver.</para>
+			
+			<para>Environment variables <literal>II_API_TRACE</literal> and
+			<literal>II_API_LOG</literal> control logging by the API itself. 
+			See Chapter 6 of the Ingres OpenAPI User Guide for details.</para>
+		</listitem>
+	</varlistentry>
+	<varlistentry>
+		<term>Connection options</term>
+		<listitem>
+			<para>All Ingres option values are specified as <emphasis>strings</emphasis> 
+			(using <function>dbi_conn_set_option()</function>).</para>
+		</listitem>
+	</varlistentry>
+	<varlistentry>
+		<term><literal>ingres_blobsegment</literal> option</term>
+		<listitem>
+			<para>This option specifies the size of individual segments
+			returned for BLOB columns (by default this is approx 2000 bytes).
+			If your BLOBs are large, increasing this value reduces the number
+			of API calls required by the Ingres driver.</para>
+		</listitem>
+	</varlistentry>
+</variablelist>
+</chapter>
+
+&freedoc-license;
+
+</book>

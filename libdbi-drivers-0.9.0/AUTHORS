@@ -1,0 +1,57 @@
+
+The following people have been involved in libdbi-drivers development:
+
+Project admin:
+* Markus Hoenicka <markus at mhoenicka.de>
+
+
+Driver developers/maintainers:
+
+* Firebird/Interbase
+  developed by Christian M. Stamgren <christian at centiongroup.com>
+
+* FreeTDS
+  developed by Vadym Kononenko <vkononenko at atlantic-link.com.ua>
+
+* mSQL
+  developed by Christian M. Stamgren <christian at centiongroup.com>
+
+* MySQL
+  developed by Mark Tobenkin <mark at brentwoodradio.com>/
+  maintained by Markus Hoenicka <markus at mhoenicka.de>
+
+* Oracle
+  developed by Christian M. Stamgren <christian at centiongroup.com>
+  maintained by Ashish Ranjan <ashishwave at yahoo.com>
+
+* PostgreSQL
+  developed by David A. Parker <david at neongoat.com>
+  maintained by Markus Hoenicka <markus at mhoenicka.de>
+
+* SQLite
+  developed by Markus Hoenicka <markus at mhoenicka.de>
+
+* SQLite3
+  developed by Markus Hoenicka <markus at mhoenicka.de>
+  
+* Ingres 2006
+  developed by Toby Thain <qu1j0t3 at sourceforge.net>
+
+
+Those who helped one way or another:
+* Peter O'Gorman <pogma at opendarwin.org>
+  - configure/Makefile/libtool fixes, OSX guru
+
+* Emmanuel Courreges <ecourreges@echo.fr>
+  - improved error code handling of the pgsql driver
+
+* Clint Byrum <clint@ubuntu.com>
+  - test scripts
+
+* Thomas Goirand <zigo@debian.org>
+  - test scripts
+
+* Jason S. Beck <jason.s.beck@gmail.com>
+  - improved spec file
+
+$Id: AUTHORS,v 1.14 2011/05/01 10:55:51 mhoenicka Exp $

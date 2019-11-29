@@ -1,0 +1,224 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<HTML
+><HEAD
+><TITLE
+>Driver options</TITLE
+><META
+NAME="GENERATOR"
+CONTENT="Modular DocBook HTML Stylesheet Version 1.79"><LINK
+REL="HOME"
+TITLE="sqlite driver manual"
+HREF="index.html"><LINK
+REL="PREVIOUS"
+TITLE="Build and install the sqlite driver"
+HREF="x62.html"><LINK
+REL="NEXT"
+TITLE="Peculiarities you should know about"
+HREF="c136.html"></HEAD
+><BODY
+CLASS="CHAPTER"
+BGCOLOR="#FFFFFF"
+TEXT="#000000"
+LINK="#0000FF"
+VLINK="#840084"
+ALINK="#0000FF"
+><DIV
+CLASS="NAVHEADER"
+><TABLE
+SUMMARY="Header navigation table"
+WIDTH="100%"
+BORDER="0"
+CELLPADDING="0"
+CELLSPACING="0"
+><TR
+><TH
+COLSPAN="3"
+ALIGN="center"
+>sqlite driver manual: A libdbi driver using the SQLite embedded database engine</TH
+></TR
+><TR
+><TD
+WIDTH="10%"
+ALIGN="left"
+VALIGN="bottom"
+><A
+HREF="x62.html"
+ACCESSKEY="P"
+>Prev</A
+></TD
+><TD
+WIDTH="80%"
+ALIGN="center"
+VALIGN="bottom"
+></TD
+><TD
+WIDTH="10%"
+ALIGN="right"
+VALIGN="bottom"
+><A
+HREF="c136.html"
+ACCESSKEY="N"
+>Next</A
+></TD
+></TR
+></TABLE
+><HR
+ALIGN="LEFT"
+WIDTH="100%"></DIV
+><DIV
+CLASS="CHAPTER"
+><H1
+><A
+NAME="AEN100"
+></A
+>Chapter 3. Driver options</H1
+><P
+>Your application has to initialize libdbi drivers by setting some driver options with the <CODE
+CLASS="FUNCTION"
+>dbi_conn_set_option()</CODE
+> and the <CODE
+CLASS="FUNCTION"
+>dbi_conn_set_option_numeric()</CODE
+> library functions. The sqlite driver supports the following options:</P
+><P
+></P
+><DIV
+CLASS="VARIABLELIST"
+><DL
+><DT
+>dbname</DT
+><DD
+><P
+>The name of the database you want to work with. As a SQLite database corresponds to one file in your filesystem, <CODE
+CLASS="VARNAME"
+>dbname</CODE
+> can be any legal filename. If the database/file doesn't exist when you first try to access it, SQLite will create it on the fly.</P
+><P
+>It is important to understand that the full path of the database is composed of <CODE
+CLASS="VARNAME"
+>sqlite_dbdir</CODE
+> and <CODE
+CLASS="VARNAME"
+>dbname</CODE
+>. Therefore <CODE
+CLASS="VARNAME"
+>dbname</CODE
+> should not contain the full path of a file, but just the name.</P
+></DD
+><DT
+>sqlite_dbdir</DT
+><DD
+><P
+>This is the directory that contains all sqlite databases. Use the full path please. If this option is not specified, a compile-time default directory will be used. By default, this directory (usually <TT
+CLASS="FILENAME"
+>/usr/local/var/lib/libdbi/sqlite</TT
+>) has read and write permissions for everyone with the sticky bit set. If this is not suitable for your application, use a custom directory with your preferred permissions instead.</P
+><DIV
+CLASS="NOTE"
+><BLOCKQUOTE
+CLASS="NOTE"
+><P
+><B
+>Note: </B
+>It is necessary to keep all sqlite databases in one directory to make it possible to list all existing databases through the libdbi API. However, you are free to open more than one connection simultaneously, each one using a different setting of <CODE
+CLASS="PARAMETER"
+>sqlite_dbdir</CODE
+>.</P
+></BLOCKQUOTE
+></DIV
+></DD
+><DT
+>timeout (numeric)</DT
+><DD
+><P
+>The connection timeout in seconds.</P
+></DD
+><DT
+>sqlite_timeout (numeric)</DT
+><DD
+><P
+>The design of SQLite does not allow concurrent access by two clients. However, if the timeout is larger than zero, the second client will wait for the given amount of time for the first client to release its lock. If the timeout is set to zero, the second client will return immediately, indicating a busy status. The numerical value of this option specifies the timeout in milliseconds.</P
+><DIV
+CLASS="NOTE"
+><BLOCKQUOTE
+CLASS="NOTE"
+><P
+><B
+>Note: </B
+>This option is deprecated. Use the generic option <CODE
+CLASS="OPTION"
+>timeout</CODE
+> instead. In the current implementation, <CODE
+CLASS="OPTION"
+>sqlite_timeout</CODE
+> overrides <CODE
+CLASS="OPTION"
+>timeout</CODE
+> if both are set. Please be aware that these options use different time scales.</P
+></BLOCKQUOTE
+></DIV
+></DD
+></DL
+></DIV
+></DIV
+><DIV
+CLASS="NAVFOOTER"
+><HR
+ALIGN="LEFT"
+WIDTH="100%"><TABLE
+SUMMARY="Footer navigation table"
+WIDTH="100%"
+BORDER="0"
+CELLPADDING="0"
+CELLSPACING="0"
+><TR
+><TD
+WIDTH="33%"
+ALIGN="left"
+VALIGN="top"
+><A
+HREF="x62.html"
+ACCESSKEY="P"
+>Prev</A
+></TD
+><TD
+WIDTH="34%"
+ALIGN="center"
+VALIGN="top"
+><A
+HREF="index.html"
+ACCESSKEY="H"
+>Home</A
+></TD
+><TD
+WIDTH="33%"
+ALIGN="right"
+VALIGN="top"
+><A
+HREF="c136.html"
+ACCESSKEY="N"
+>Next</A
+></TD
+></TR
+><TR
+><TD
+WIDTH="33%"
+ALIGN="left"
+VALIGN="top"
+>Build and install the sqlite driver</TD
+><TD
+WIDTH="34%"
+ALIGN="center"
+VALIGN="top"
+>&nbsp;</TD
+><TD
+WIDTH="33%"
+ALIGN="right"
+VALIGN="top"
+>Peculiarities you should know about</TD
+></TR
+></TABLE
+></DIV
+></BODY
+></HTML
+>

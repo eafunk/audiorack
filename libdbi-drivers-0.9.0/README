@@ -1,0 +1,101 @@
+
+libdbi-drivers - drivers for libdbi, a database abstraction
+layer implemented in C
+Copyright (C) 2001-2013, Markus Hoenicka
+http://libdbi-drivers.sourceforge.net
+
+
+INTRODUCTION:
+-------------
+
+libdbi (http://libdbi.sourceforge.net) implements a
+database-independent abstraction layer in C, similar to the DBI/DBD
+layer in Perl. Writing one generic set of code, programmers can
+leverage the power of multiple databases and multiple simultaneous
+database connections by using this framework.
+
+libdbi-drivers (http://libdbi-drivers.sourceforge.net) supplies the
+drivers that the libdbi framework utilizes to talk to the supported
+database servers.
+
+
+INSTALLATION:
+-------------
+
+Make sure you have both the libdbi framework installed and the
+development libraries and headers of the database engine(s) that you
+want to build the driver(s) for. Perform the regular ./configure,
+make, make install. See INSTALL for the generic details of each
+step. It is important to understand that you have to request the
+driver(s) that you want to build on the configure command
+line. E.g. to build both the SQLite and the PostgreSQL drivers, use
+"./configure --with-sqlite --with-pgsql". See ./configure --help for
+more libdbi-drivers configuration options.
+
+If you are building the Win32 port, see README.win32.
+If you are building the OSX port, see README.osx.
+
+
+AVAILABLE DRIVERS:
+------------------
+
+* DB2 (experimental)
+* Firebird/Interbase (experimental)
+* FreeTDS (experimental)
+* Ingres (experimental)
+* mSQL (experimental)
+* MySQL
+* Oracle (experimental)
+* PostgreSQL
+* SQLite
+* SQLite3
+
+
+SUPPORTED PLATFORMS:
+--------------------
+
+libdbi-drivers has been written with cross-platform availability in
+mind. To date, chances are it is going to run with:
+
+Linux: Debian, RedHat, Slackware, Gentoo
+Windows: all versions supported by Cygwin
+FreeBSD: 4.3 through 9.1
+SunOS: 2.8
+Solaris: 7
+AIX: 4.2, 4.3 and 5.1
+OSX: 10.2-10.4
+
+If you are using libdbi on a platform not listed here, please notify the
+mailing list! (see below)
+
+
+MODIFICATIONS AND REDISTRIBUTION (LGPL):
+----------------------------------------
+
+See the GNU Lesser General Public License, available in the
+distribution file COPYING or visit http://www.gnu.org for more
+details.
+
+
+DOCUMENTATION:
+--------------
+
+All driver subdirectories contain README, AUTHORS, and CHANGELOG files
+with information about the particular driver. In addition, each driver
+provides a short manual formatted as PDF and HTML.
+
+
+MAILING LISTS:
+--------------
+
+ * libdbi-drivers users/developers: libdbi-drivers-devel@lists.sourceforge.net
+
+
+CONTACT INFO:
+-------------
+
+http://libdbi-drivers.sourceforge.net
+Markus Hoenicka <mhoenicka@users.sourceforge.net>
+David Parker <david@neongoat.com>
+$Id: README,v 1.12 2013/03/11 23:49:41 mhoenicka Exp $
+

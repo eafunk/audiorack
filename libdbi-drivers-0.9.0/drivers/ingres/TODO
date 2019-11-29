@@ -1,0 +1,13 @@
+8-Jun-2006
+
+TODO:
+* (DONE) result set handling
+* (DONE) resolve date retrieval issue
+* (DONE) long clob/blob column types (LONG VARCHAR, LONG NVARCHAR, LONG BYTE)
+* (DONE) fix multi-statement transactions
+* documentation
+* (DONE) error string retrieval
+* encodings
+* support for UTF-16 column types
+* (DONE) quieten the debug logging
+* whatever else is missing

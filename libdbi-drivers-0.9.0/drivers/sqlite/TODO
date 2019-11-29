@@ -1,0 +1,10 @@
+$Id: TODO,v 1.1 2003/04/12 17:06:10 mhoenicka Exp $
+
+- improve the data type guessing code to support all SQL functions
+
+- define driver capabilities
+
+
+
+
+

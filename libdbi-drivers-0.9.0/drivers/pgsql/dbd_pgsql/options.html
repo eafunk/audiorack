@@ -1,0 +1,243 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<HTML
+><HEAD
+><TITLE
+>Driver options</TITLE
+><META
+NAME="GENERATOR"
+CONTENT="Modular DocBook HTML Stylesheet Version 1.79"><LINK
+REL="HOME"
+TITLE="PostgreSQL Driver Notes"
+HREF="index.html"><LINK
+REL="PREVIOUS"
+TITLE="Build and install the driver"
+HREF="install-build.html"><LINK
+REL="NEXT"
+TITLE="PostgreSQL-specific Peculiarities"
+HREF="specific.html"></HEAD
+><BODY
+CLASS="CHAPTER"
+BGCOLOR="#FFFFFF"
+TEXT="#000000"
+LINK="#0000FF"
+VLINK="#840084"
+ALINK="#0000FF"
+><DIV
+CLASS="NAVHEADER"
+><TABLE
+SUMMARY="Header navigation table"
+WIDTH="100%"
+BORDER="0"
+CELLPADDING="0"
+CELLSPACING="0"
+><TR
+><TH
+COLSPAN="3"
+ALIGN="center"
+>PostgreSQL Driver Notes: Details about the libdbi driver providing support for PostgreSQL backends</TH
+></TR
+><TR
+><TD
+WIDTH="10%"
+ALIGN="left"
+VALIGN="bottom"
+><A
+HREF="install-build.html"
+ACCESSKEY="P"
+>Prev</A
+></TD
+><TD
+WIDTH="80%"
+ALIGN="center"
+VALIGN="bottom"
+></TD
+><TD
+WIDTH="10%"
+ALIGN="right"
+VALIGN="bottom"
+><A
+HREF="specific.html"
+ACCESSKEY="N"
+>Next</A
+></TD
+></TR
+></TABLE
+><HR
+ALIGN="LEFT"
+WIDTH="100%"></DIV
+><DIV
+CLASS="CHAPTER"
+><H1
+><A
+NAME="OPTIONS"
+></A
+>Chapter 3. Driver options</H1
+><P
+>      Before you can initiate a connection, you must usually specify
+      options that tell the database driver what to connect to. This
+      driver supports the standard options of <CODE
+CLASS="VARNAME"
+>host</CODE
+>,
+      <CODE
+CLASS="VARNAME"
+>username</CODE
+>, <CODE
+CLASS="VARNAME"
+>password</CODE
+>,
+      <CODE
+CLASS="VARNAME"
+>dbname</CODE
+>, <CODE
+CLASS="VARNAME"
+>timeout</CODE
+>, and
+      <CODE
+CLASS="VARNAME"
+>port</CODE
+>, as well as PostgreSQL-specific
+      options. You only need to set options that are specific to your
+      application -- sensible defaults will be used for all
+      unspecified options.
+    </P
+><P
+></P
+><DIV
+CLASS="VARIABLELIST"
+><DL
+><DT
+>host</DT
+><DD
+><P
+>	    If this begins with a slash, it specifies Unix-domain
+	    communication rather than TCP/IP communication; the value
+	    is the name of the directory in which the socket file is
+	    stored.  The default behavior when <CODE
+CLASS="VARNAME"
+>host</CODE
+>
+	    is not specified is to connect to a Unix-domain socket in
+	    /tmp (or whatever socket directory was specified when
+	    PostgreSQL was built).
+	  </P
+></DD
+><DT
+>port</DT
+><DD
+><P
+>	    Port number to connect to at the server host, or socket
+	    file name extension for Unix-domain connections.
+	  </P
+></DD
+><DT
+>username</DT
+><DD
+><P
+>The name of the user accessing the database.</P
+></DD
+><DT
+>password</DT
+><DD
+><P
+>The password of the user accessing the database.</P
+></DD
+><DT
+>dbname</DT
+><DD
+><P
+>The name of the database used for the initial connection. If your program must be able to connect to a fresh PostgreSQL installation, use the system database <TT
+CLASS="FILENAME"
+>template1</TT
+>.</P
+></DD
+><DT
+>timeout (numeric)</DT
+><DD
+><P
+>The connection timeout in seconds. If the option is not specified, or if it is 0 (zero), stale connections never time out.</P
+></DD
+><DT
+>encoding</DT
+><DD
+><P
+>The IANA name of a character encoding which is to be used as the connection encoding. Input and output data will be silently converted from and to this character encoding, respectively. The list of available character encodings depends on your local PostgreSQL installation. If you set this option to "auto", the connection encoding will be the same as the database encoding.</P
+></DD
+><DT
+>pgsql_foo</DT
+><DD
+><P
+>Pass option <CODE
+CLASS="VARNAME"
+>foo</CODE
+> directly to libpq.  For valid options, refer to the <A
+HREF="http://www.postgresql.org/docs/current/static/libpq-connect.html"
+TARGET="_top"
+>libpq documentation</A
+>.
+	  </P
+></DD
+></DL
+></DIV
+></DIV
+><DIV
+CLASS="NAVFOOTER"
+><HR
+ALIGN="LEFT"
+WIDTH="100%"><TABLE
+SUMMARY="Footer navigation table"
+WIDTH="100%"
+BORDER="0"
+CELLPADDING="0"
+CELLSPACING="0"
+><TR
+><TD
+WIDTH="33%"
+ALIGN="left"
+VALIGN="top"
+><A
+HREF="install-build.html"
+ACCESSKEY="P"
+>Prev</A
+></TD
+><TD
+WIDTH="34%"
+ALIGN="center"
+VALIGN="top"
+><A
+HREF="index.html"
+ACCESSKEY="H"
+>Home</A
+></TD
+><TD
+WIDTH="33%"
+ALIGN="right"
+VALIGN="top"
+><A
+HREF="specific.html"
+ACCESSKEY="N"
+>Next</A
+></TD
+></TR
+><TR
+><TD
+WIDTH="33%"
+ALIGN="left"
+VALIGN="top"
+>Build and install the driver</TD
+><TD
+WIDTH="34%"
+ALIGN="center"
+VALIGN="top"
+>&nbsp;</TD
+><TD
+WIDTH="33%"
+ALIGN="right"
+VALIGN="top"
+>PostgreSQL-specific Peculiarities</TD
+></TR
+></TABLE
+></DIV
+></BODY
+></HTML
+>

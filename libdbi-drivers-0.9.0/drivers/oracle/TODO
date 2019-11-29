@@ -1,0 +1,28 @@
+#	$Id: TODO,v 1.5 2005/08/22 19:47:05 mhoenicka Exp $	
+
+- write documentation.
+
+- Update the test program to work with oracle
+
+- Mingw+MSys portability
+
+- Oracle 8i portability
+
+- Investigate further about Integers/Float types.
+  
+  Oracle stores all numeric types as SQLT_NUM (number) internaly.
+  The only diffence with numeric columns is the set of contraints that 
+  teels if there need to be a float or an interger or whatever.
+
+  This makes it very hard to map numbers against libdbi's type system becouse everything 
+  that you get from Oracle is an SQLT_NUM type internaly. SQLT_NUM has to be atleast an
+  unsigned char[21] as external datatype.
+  We need to fetch OCI_ATTR_SCALE using OCIAttrGet() to find out if 
+  the column is a float column.
+
+- Continue the work with Charsets mappings (Oracle to IANA).
+  
+- Implement other oracle types (Dates,refs ..).
+
+- define driver capabilities.
+

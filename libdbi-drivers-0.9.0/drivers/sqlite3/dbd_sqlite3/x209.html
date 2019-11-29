@@ -1,0 +1,233 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<HTML
+><HEAD
+><TITLE
+>sqlite driver misfeatures</TITLE
+><META
+NAME="GENERATOR"
+CONTENT="Modular DocBook HTML Stylesheet Version 1.79"><LINK
+REL="HOME"
+TITLE="sqlite3 driver manual"
+HREF="index.html"><LINK
+REL="UP"
+TITLE="Peculiarities you should know about"
+HREF="c134.html"><LINK
+REL="PREVIOUS"
+TITLE="SQLite3 (mis)features"
+HREF="x137.html"><LINK
+REL="NEXT"
+TITLE="GNU Free Documentation License"
+HREF="copying-fdl.html"></HEAD
+><BODY
+CLASS="SECT1"
+BGCOLOR="#FFFFFF"
+TEXT="#000000"
+LINK="#0000FF"
+VLINK="#840084"
+ALINK="#0000FF"
+><DIV
+CLASS="NAVHEADER"
+><TABLE
+SUMMARY="Header navigation table"
+WIDTH="100%"
+BORDER="0"
+CELLPADDING="0"
+CELLSPACING="0"
+><TR
+><TH
+COLSPAN="3"
+ALIGN="center"
+>sqlite3 driver manual: A libdbi driver using the SQLite3 embedded database engine</TH
+></TR
+><TR
+><TD
+WIDTH="10%"
+ALIGN="left"
+VALIGN="bottom"
+><A
+HREF="x137.html"
+ACCESSKEY="P"
+>Prev</A
+></TD
+><TD
+WIDTH="80%"
+ALIGN="center"
+VALIGN="bottom"
+>Chapter 4. Peculiarities you should know about</TD
+><TD
+WIDTH="10%"
+ALIGN="right"
+VALIGN="bottom"
+><A
+HREF="copying-fdl.html"
+ACCESSKEY="N"
+>Next</A
+></TD
+></TR
+></TABLE
+><HR
+ALIGN="LEFT"
+WIDTH="100%"></DIV
+><DIV
+CLASS="SECT1"
+><H1
+CLASS="SECT1"
+><A
+NAME="AEN209"
+>4.2. sqlite driver misfeatures</A
+></H1
+><P
+>And now we have to discuss how successful the sqlite driver is in squeezing the SQLite idea of a database engine into the libdbi framework which was shaped after MySQL and PostgreSQL. Keep in mind that the limitations mentioned here are not intrinsic (except maybe the first one which is beyond our control), that is a sufficient amount of coding might fix these problems eventually.</P
+><P
+></P
+><UL
+><LI
+><P
+>SQLite3 handles auto-increment columns in a fairly non-intuitive way. Only the type INTEGER PRIMARY KEY auto-increments. As a user of other database engine you might expect the row IDs to be 4-byte integers (they were in 2.x), but nope: they are in fact 8-byte integers, and therefore equivalent to INT8 or BIGINT of other engines. This leaves us with the odd "feature" of the sqlite3 driver that INTEGER is a 4-byte integer, whereas INTEGER PRIMARY KEY is a 8-bit integer type. If this were not the case, auto-incrementing columns would be artificially limited to the range of 4-byte integers. On the other hand this means that you cannot declare a real 4-byte integer auto-incrementing column.</P
+><DIV
+CLASS="WARNING"
+><P
+></P
+><TABLE
+CLASS="WARNING"
+BORDER="1"
+WIDTH="90%"
+><TR
+><TD
+ALIGN="CENTER"
+><B
+>Warning</B
+></TD
+></TR
+><TR
+><TD
+ALIGN="LEFT"
+><P
+>Do not forget to use <CODE
+CLASS="FUNCTION"
+>dbi_result_get_longlong()</CODE
+> or <CODE
+CLASS="FUNCTION"
+>dbi_result_get_ulonglong</CODE
+> to retrieve values from columns declared as INTEGER PRIMARY KEY.</P
+></TD
+></TR
+></TABLE
+></DIV
+></LI
+><LI
+><P
+>The (essentially) typeless nature of SQLite has some nasty consequences. The sqlite driver takes great care to reconstruct the type of a field that you request in a query, but this isn't always successful. To help the driver get things right, please stick to the following rules:</P
+><P
+></P
+><UL
+><LI
+><P
+>When using a function as a result column [e.g. count(*)], the opening bracket <EM
+>must</EM
+> hug the function name as shown. The function call <EM
+>must</EM
+> also be aliased.</P
+></LI
+><LI
+><P
+>When using an expression as a result column [e.g. (count(*) + 6)], the entire expression <EM
+>must</EM
+> be enclosed in brackets as shown and <EM
+>must</EM
+> also be aliased.</P
+></LI
+></UL
+></LI
+><LI
+><P
+>The sqlite driver currently assumes that the directory separator of your filesystem is a slash (/). This may be wrong on your particular system. It is not a problem for Windows systems as long as the sqlite driver is built with the Cygwin tools (see <TT
+CLASS="FILENAME"
+>README.win32</TT
+>).</P
+></LI
+><LI
+><P
+>Listing tables with the <CODE
+CLASS="FUNCTION"
+>dbi_conn_get_table_list()</CODE
+> libdbi function currently returns only permanent tables. Temporary tables are ignored.</P
+></LI
+><LI
+><P
+>The sqlite driver assumes that table and field names do not exceed 128 characters in length, including the trailing \0. I don't know whether SQLite internally has such a limit or not (both MySQL and PostgreSQL have a lower limit). The limit can be increased by changing a single #define in the <TT
+CLASS="FILENAME"
+>dbd_sqlite.h</TT
+> header file.</P
+></LI
+><LI
+><P
+>In a few cases, the sqlite driver expects you to type SQL keywords in all lowercase or all uppercase, but not mixed. This holds true for the 'from' in a SELECT statement. Type it either as 'from' or as 'FROM', but refrain from using 'fRoM' or other funny mixtures of uppercase and lowercase. Most other database engines treat the keywords as case-insensitive and would accept all variants.</P
+></LI
+></UL
+></DIV
+><DIV
+CLASS="NAVFOOTER"
+><HR
+ALIGN="LEFT"
+WIDTH="100%"><TABLE
+SUMMARY="Footer navigation table"
+WIDTH="100%"
+BORDER="0"
+CELLPADDING="0"
+CELLSPACING="0"
+><TR
+><TD
+WIDTH="33%"
+ALIGN="left"
+VALIGN="top"
+><A
+HREF="x137.html"
+ACCESSKEY="P"
+>Prev</A
+></TD
+><TD
+WIDTH="34%"
+ALIGN="center"
+VALIGN="top"
+><A
+HREF="index.html"
+ACCESSKEY="H"
+>Home</A
+></TD
+><TD
+WIDTH="33%"
+ALIGN="right"
+VALIGN="top"
+><A
+HREF="copying-fdl.html"
+ACCESSKEY="N"
+>Next</A
+></TD
+></TR
+><TR
+><TD
+WIDTH="33%"
+ALIGN="left"
+VALIGN="top"
+>SQLite3 (mis)features</TD
+><TD
+WIDTH="34%"
+ALIGN="center"
+VALIGN="top"
+><A
+HREF="c134.html"
+ACCESSKEY="U"
+>Up</A
+></TD
+><TD
+WIDTH="33%"
+ALIGN="right"
+VALIGN="top"
+>GNU Free Documentation License</TD
+></TR
+></TABLE
+></DIV
+></BODY
+></HTML
+>

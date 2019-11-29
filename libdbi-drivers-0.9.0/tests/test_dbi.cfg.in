@@ -1,0 +1,24 @@
+# You can change type, tag and dbengine
+hostname dbi0
+os_name Linux
+os_platform x86_64
+os_release 2.6.28-15-server
+os_version Ubuntu 9.04 server
+
+tag joaohf
+type Nightly
+
+# for each dbengine setup this values
+# driver user password hostname
+mysql r:n:/usr/local/lib/dbd:mysql:root:root:localhost:libdbitest
+pgsql r:n:/usr/local/lib/dbd:pgsql:joaohf:joaohf:localhost:libdbitest
+sqlite3 r:n:/usr/local/lib/dbd:sqlite3::libdbitest
+sqlite r:n:/usr/local/lib/dbd:sqlite::libdbitest
+#firebird sysdba masterkey localhost
+
+# Don't change bellow
+buildname @PACKAGE@-@VERSION@
+sitename @host@
+
+
+

@@ -1,0 +1,20 @@
+ORACLE DRIVER:
+------------------
+
+This driver allows libdbi-enabled applications to use Oracle as a database
+backend. The driver is build using the Oracle Call Interface.
+
+See the included driver documentation for installation instructions, usage,
+and information about driver-specific peculiarities.
+
+
+CONTACT INFO:
+-------------
+
+libdbi-drivers-devel@lists.sourceforge.net
+http://libdbi-drivers.sourceforge.net
+Ashish Ranjan <ashishwave@yahoo.com>
+
+
+#	$Id: README,v 1.2 2005/08/22 19:47:05 mhoenicka Exp $	
+

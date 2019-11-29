@@ -1,0 +1,365 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<HTML
+><HEAD
+><TITLE
+>Ingres-specific Peculiarities</TITLE
+><META
+NAME="GENERATOR"
+CONTENT="Modular DocBook HTML Stylesheet Version 1.79"><LINK
+REL="HOME"
+TITLE="Ingres Driver Notes"
+HREF="index.html"><LINK
+REL="PREVIOUS"
+TITLE="Driver options"
+HREF="options.html"><LINK
+REL="NEXT"
+TITLE="GNU Free Documentation License"
+HREF="copying-fdl.html"></HEAD
+><BODY
+CLASS="CHAPTER"
+BGCOLOR="#FFFFFF"
+TEXT="#000000"
+LINK="#0000FF"
+VLINK="#840084"
+ALINK="#0000FF"
+><DIV
+CLASS="NAVHEADER"
+><TABLE
+SUMMARY="Header navigation table"
+WIDTH="100%"
+BORDER="0"
+CELLPADDING="0"
+CELLSPACING="0"
+><TR
+><TH
+COLSPAN="3"
+ALIGN="center"
+>Ingres Driver Notes: Details about the libdbi driver providing support for Ingres backends</TH
+></TR
+><TR
+><TD
+WIDTH="10%"
+ALIGN="left"
+VALIGN="bottom"
+><A
+HREF="options.html"
+ACCESSKEY="P"
+>Prev</A
+></TD
+><TD
+WIDTH="80%"
+ALIGN="center"
+VALIGN="bottom"
+></TD
+><TD
+WIDTH="10%"
+ALIGN="right"
+VALIGN="bottom"
+><A
+HREF="copying-fdl.html"
+ACCESSKEY="N"
+>Next</A
+></TD
+></TR
+></TABLE
+><HR
+ALIGN="LEFT"
+WIDTH="100%"></DIV
+><DIV
+CLASS="CHAPTER"
+><H1
+><A
+NAME="SPECIFIC"
+></A
+>Chapter 4. Ingres-specific Peculiarities</H1
+><P
+>			This chapter lists known peculiarities of the ingres driver.
+			Wherever possible, nonstandard driver behavior is hidden by libdbi's
+			abstractions, but occasionally special considerations must be taken or
+			extra functionality may be utilized for particular drivers.
+		</P
+><P
+></P
+><DIV
+CLASS="VARIABLELIST"
+><DL
+><DT
+>Ingres environment variables must be set</DT
+><DD
+><P
+>The driver will not be loaded at all by <CODE
+CLASS="FUNCTION"
+>dbi_initialize()</CODE
+>
+			if the Ingres environment variables are not set (e.g. by <TT
+CLASS="LITERAL"
+>~/.ingIIbash</TT
+>).
+			If the current user or specified user does not have appropriate Ingres privileges,
+			the connection will fail ("User authorization check failed" or similar).</P
+><P
+>When connecting, the driver uses the values of the
+			<TT
+CLASS="LITERAL"
+>dbname</TT
+>, <TT
+CLASS="LITERAL"
+>username</TT
+> 
+			and <TT
+CLASS="LITERAL"
+>password</TT
+> options, if set.</P
+></DD
+><DT
+>Autocommit</DT
+><DD
+><P
+>'Autocommit' mode is enabled by default for the DBMS connection.
+			In this mode, every query is committed as an individual transaction.</P
+><P
+>With autocommit disabled (see <TT
+CLASS="LITERAL"
+>ingres_autocommit</TT
+> connection option),
+			a transaction is begun by the first query statement after connection, commit
+			or rollback. The transaction remains open until the next explicit commit,
+			rollback or disconnection (which implies commit). Commit and rollback
+			cannot be done using an OpenAPI query, but must use separate API functions.
+			To work around this, the Ingres driver makes a specific check
+			for COMMIT and ROLLBACK queries and calls the appropriate API function
+			instead of issuing the query.</P
+><P
+>See Ingres OpenAPI and SQL documentation for more information.</P
+></DD
+><DT
+>Handling of result sets</DT
+><DD
+><P
+>In the Ingres OpenAPI, result sets must be accessed sequentially.
+			Furthermore, Ingres does not provide the row count; this must be determined
+			by fetching rows until no more is available. For this reason, the driver
+			must fetch all result data into memory immediately after a query. Then
+			libdbi functions can be used to get random access to rows as usual.</P
+><P
+>A workaround, for example if your result sets
+			are very large, would be to use SELECT for random access; for example,
+			query once to get a set of key values, then issue SELECTs on individual rows
+			or smaller subsets of rows.</P
+><P
+>If your result set or BLOB data is likely to exhaust memory,
+			and workarounds such as the above are not appropriate, then you will
+			need to use OpenAPI directly to access them sequentially or by segments,
+			instead of using libdbi and this driver.</P
+></DD
+><DT
+>SEQUENCE functions and autocommit</DT
+><DD
+><P
+><CODE
+CLASS="FUNCTION"
+>dbi_conn_sequence_last()</CODE
+> is not usable in Ingres' autocommit mode
+			(the default). To use sequences to identify INSERTed rows, first 
+			obtain the NEXT VALUE using <CODE
+CLASS="FUNCTION"
+>dbi_conn_sequence_next()</CODE
+> then use that 
+			sequence value directly in a separate INSERT transaction.</P
+></DD
+><DT
+>DATE parsing</DT
+><DD
+><P
+>Parsing DATE columns into timestamp values will only work correctly when
+			returned values are in the default (US) date format; i.e.
+			<TT
+CLASS="LITERAL"
+>dd-mmm-yyyy [hh:mm:ss]</TT
+> where <TT
+CLASS="LITERAL"
+>mmm</TT
+>
+			is a partial month name. The parsing routine will accept
+			any separators and either a numeric or named month, but the D-M-Y
+			ordering is required. If needed, a workaround for date format
+			incompatibility is to format into a string using a SQL function
+			such as <CODE
+CLASS="FUNCTION"
+>date_gmt(date)</CODE
+>.</P
+></DD
+><DT
+>Version string format</DT
+><DD
+><P
+><CODE
+CLASS="FUNCTION"
+>dbi_conn_get_engine_version_string()</CODE
+> returns a
+			string like <TT
+CLASS="LITERAL"
+>II 9.0.4 (int.lnx/104)NPTL</TT
+>
+			(internally this is implemented as <TT
+CLASS="LITERAL"
+>SELECT dbmsinfo('_version')</TT
+>.</P
+></DD
+><DT
+>Getting database and table lists</DT
+><DD
+><P
+><CODE
+CLASS="FUNCTION"
+>dbi_conn_get_table_list()</CODE
+> returns matching objects 
+			of all types - tables, views, indexes and partitions -
+			in the <TT
+CLASS="LITERAL"
+>iitables</TT
+> catalog for the named database
+			(except those beginning with <TT
+CLASS="LITERAL"
+>ii</TT
+>, which are reserved for Ingres).
+			These names are space padded fixed width fields.</P
+></DD
+><DT
+>Logging verbosity</DT
+><DD
+><P
+>The driver respects <CODE
+CLASS="FUNCTION"
+>dbd_set_verbosity()</CODE
+> level in reporting messages.
+			At verbosity 1, only errors and abnormalities are reported;
+			at 2, more information is shown; at 3, detailed debugging information is shown.</P
+></DD
+><DT
+>Blank handling</DT
+><DD
+><P
+>Blanks are preserved in column values (except that DECIMAL and MONEY columns
+			are converted to strings, and then stripped of trailing blanks).
+			Note that names returned by <CODE
+CLASS="FUNCTION"
+>dbi_conn_get_table_list()</CODE
+>
+			and <CODE
+CLASS="FUNCTION"
+>dbi_conn_get_db_list()</CODE
+> are padded with blanks
+			to a fixed width.</P
+></DD
+><DT
+>Error messages</DT
+><DD
+><P
+>The Ingres OpenAPI may return multiple error messages for a given query/operation.
+			The <CODE
+CLASS="FUNCTION"
+>dbi_conn_error()</CODE
+> returns the error code only for the
+			last error message, but the message text will include all relevant messages. At verbosity level 2,
+			errors directly relating to libdbi function calls are logged. At verbosity 3,
+			all errors are logged including those caused by API calls made internally by the driver.</P
+><P
+>Environment variables <TT
+CLASS="LITERAL"
+>II_API_TRACE</TT
+> and
+			<TT
+CLASS="LITERAL"
+>II_API_LOG</TT
+> control logging by the API itself. 
+			See Chapter 6 of the Ingres OpenAPI User Guide for details.</P
+></DD
+><DT
+>Connection options</DT
+><DD
+><P
+>All Ingres option values are specified as <EM
+>strings</EM
+> 
+			(using <CODE
+CLASS="FUNCTION"
+>dbi_conn_set_option()</CODE
+>).</P
+></DD
+><DT
+><TT
+CLASS="LITERAL"
+>ingres_blobsegment</TT
+> option</DT
+><DD
+><P
+>This option specifies the size of individual segments
+			returned for BLOB columns (by default this is approx 2000 bytes).
+			If your BLOBs are large, increasing this value reduces the number
+			of API calls required by the Ingres driver.</P
+></DD
+></DL
+></DIV
+></DIV
+><DIV
+CLASS="NAVFOOTER"
+><HR
+ALIGN="LEFT"
+WIDTH="100%"><TABLE
+SUMMARY="Footer navigation table"
+WIDTH="100%"
+BORDER="0"
+CELLPADDING="0"
+CELLSPACING="0"
+><TR
+><TD
+WIDTH="33%"
+ALIGN="left"
+VALIGN="top"
+><A
+HREF="options.html"
+ACCESSKEY="P"
+>Prev</A
+></TD
+><TD
+WIDTH="34%"
+ALIGN="center"
+VALIGN="top"
+><A
+HREF="index.html"
+ACCESSKEY="H"
+>Home</A
+></TD
+><TD
+WIDTH="33%"
+ALIGN="right"
+VALIGN="top"
+><A
+HREF="copying-fdl.html"
+ACCESSKEY="N"
+>Next</A
+></TD
+></TR
+><TR
+><TD
+WIDTH="33%"
+ALIGN="left"
+VALIGN="top"
+>Driver options</TD
+><TD
+WIDTH="34%"
+ALIGN="center"
+VALIGN="top"
+>&nbsp;</TD
+><TD
+WIDTH="33%"
+ALIGN="right"
+VALIGN="top"
+>GNU Free Documentation License</TD
+></TR
+></TABLE
+></DIV
+></BODY
+></HTML
+>

@@ -1,0 +1,17 @@
+$Id: TODO,v 1.1 2005/07/17 00:32:12 mhoenicka Exp $
+
+- DB2 custom functions
+- dbd_finalize
+- dbd_connect, need a better way to get environment variables
+- dbd_get_enconding
+- dbd_encoding_to_iana
+- dbd_list_dbs
+- dbd_list_tables: only tables
+- dbd_quote* functions
+- dbd_query_null
+- dbd_select_db
+- rework in sequence functions and documentatios the behavior
+- documentation and know issues
+  
+
+

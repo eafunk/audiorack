@@ -1,0 +1,53 @@
+<!DOCTYPE Book PUBLIC "-//OASIS//DTD DocBook V4.1//EN">
+<!-- $Id: dbd_oracle.sgml,v 1.1 2005/08/22 19:46:29 mhoenicka Exp $ -->
+<book>
+  <bookinfo>
+    <title>Oracle driver manual</title>
+    <subtitle>A libdbi driver using the Oracle</subtitle>
+  <author>
+      <firstname>Ashish</firstname>
+      <surname>Ranjan</surname>
+      <affiliation>
+	<address><email>ashishwave@yahoo.com</email></address>
+      </affiliation>
+    </author>
+    <revhistory>
+      <revision>
+	<revnumber>0.0.1</revnumber>
+	<date>2005-08-21</date>
+      </revision>
+    </revhistory>
+  </bookinfo>
+  <preface>
+    <title>Preface</title>
+    <para><ulink url="http://libdbi.sourceforge.net">libdbi</ulink> is a database abstraction layer written in C. It implements a framework that can utilize separate driver libraries for specific database servers. The <ulink url="http://libdbi-drivers.sourceforge.net">libdbi-drivers</ulink> project provides the drivers necessary to talk to the supported database servers.</para>
+    <para>This manual provides information about the oracle driver. The manual is intended for programmers who write applications linked against libdbi and who want their applications to work with the oracle driver.</para>
+
+    <para>Questions and comments about the Oracle driver should be sent to the <ulink url="mailto:libdbi-drivers-devel@lists.sourceforge.net">libdbi-drivers-devel</ulink> mailing list. Visit the <ulink url="http://lists.sourceforge.net/lists/listinfo/libdbi-drivers-devel">libdbi-drivers-devel list page</ulink> to subscribe and for further information. Questions and comments about the libdbi library should be sent to the appropriate libdbi mailing list.</para>
+    <para>The Oracle driver is maintained by <ulink url="mailto:ashishwave@users.sourceforge.net">Ashish Ranjan</ulink>.</para>
+  </preface>
+  <chapter>
+    <title>Introduction</title>
+    <para>TODO</para>
+  </chapter>
+  <chapter>
+    <title>Installation</title>
+    <para>TODO</para>
+    <sect1>
+      <title>Prerequisites</title>
+      <para>The following packages have to be installed on your system:</para>
+    </sect1>
+    <sect1>
+	 <title>Build and install the oracle driver</title>
+      <para>TODO</para>
+    </sect1>
+  </chapter>
+  <chapter>
+    <title>Driver options</title>
+    <para>TODO</para>
+  </chapter>
+  <chapter>
+    <title>Peculiarities you should know about</title>
+    <para>TODO</para>
+  </chapter>
+</book>

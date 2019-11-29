@@ -1,0 +1,69 @@
+
+libdbi-drivers - drivers for libdbi, the Database
+Independent Abstraction Layer for C
+
+Copyright (C) 2001-2013, Markus Hoenicka
+http://libdbi-drivers.sourceforge.net
+
+
+WINDOWS-SPECIFIC INSTALLATION INSTRUCTIONS:
+-------------------------------------------
+
+libdbi-drivers can be compiled into DLL files on Win32 with the Cygwin
+package, available at http://www.cygwin.com/. libdbi must be properly
+installed before attempting to build libdbi-drivers, and you need the
+appropriate client libraries of the database engines. The only
+database engine packaged with Cygwin is PostgreSQL. However, at least
+SQLite, SQLite3 and MySQL build out of the box.
+
+To build a particular driver, run these commands, where:
+
+- XYZ is one of msql, mysql, pgsql, or sqlite for MiniSQL, MySQL, 
+  PostgreSQL, and SQLite, respectively
+
+- /path/to/lib is (usually) /usr/local/lib/mysql for MySQL and
+  /usr/local/msql3/lib for MiniSQL. The LDFLAGS magic is not required
+  for building the PostgreSQL and SQLite drivers.
+
+./configure --with-driverXYZ
+make
+make install
+make libXYZ-dll -f Makefile.w32 LDFLAGS="-L/path/to/lib"
+make install-libXYZ -f Makefile.w32
+
+If you want to build and install all drivers, use the following commands:
+./configure --with-mysql --with-pgsql --with-msql --with-sqlite
+make
+make install
+make -f Makefile.w32 LDFLAGS="-L/usr/local/lib/mysql -L/usr/local/msql3/lib"
+make install -f Makefile.w32
+
+The good news is that this works at all. The bad news is that the DLL magic 
+could be integrated into the standard Makefiles with some extra effort
+and a better understanding of the autotools.
+
+CYGWIN DETAILS:
+---------------
+
+There are unfortunately no "Cygwin" releases in a sense as there are Debian 2.2
+or FreeBSD 4.5. However, libdbi-drivers should work with any Cygwin release
+since around Jan 2003.
+
+
+USAGE:
+------
+
+Once libdbi is compiled for Win32 and you have a DLL, you can use that DLL like
+any other. The only requirement is that the cygwin runtime DLL is available on
+the target machine also, since non-Windows API functions are implemented by
+cygwin.
+
+
+MODIFICATIONS AND REDISTRIBUTION (GPL):
+----------------------------------------
+
+See the file COPYING or http://www.gnu.org for more details.
+
+
+$Id: README.win32,v 1.7 2013/03/11 23:49:41 mhoenicka Exp $
+

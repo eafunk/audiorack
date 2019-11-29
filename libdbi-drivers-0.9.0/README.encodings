@@ -1,0 +1,71 @@
+Translation table for character encodings
+The first column is what dbi_get_conn_encoding() returns. This is the preferred MIME 
+name, if available, otherwise another official name
+Source for preferred MIME names and other official names:
+http://www.iana.org/assignments/character-sets
+
+$Id: README.encodings,v 1.2 2004/01/10 19:52:45 bhazer Exp $
+
+MIME		pgsql		mysql		sqlite		oracle			msql
+US-ASCII	SQL_ASCII	ascii				US7ASCII
+EUC-JP		EUC_JP		ujis				JA16EUC,JA16EUCYEN
+		EUC_CN
+EUC-KR		EUC_KR		euc_kr
+EUC-KR				euckr
+		EUC_TW
+UTF-8		UNICODE		utf8		UTF-8		UTF8
+UTF-16
+		MULE_INTERNAL
+ISO-8859-1	LATIN1		latin1		iso8859
+ISO-8859-2	LATIN2		latin2				WE8ISO8859P9
+ISO-8859-3	LATIN3
+ISO-8859-4	LATIN4
+ISO-8859-9	LATIN5		latin5
+ISO-8859-10	LATIN6
+ISO-8859-13	LATIN7		latin7
+ISO-8859-14	LATIN8
+ISO-8859-15	LATIN9
+ISO-8859-16	LATIN10
+ISO-8859-5	ISO-8859-5
+ISO-8859-6	ISO-8859-6					AR8ISO8859P6
+ISO-8859-7	ISO-8859-7	greek
+ISO-8859-8	ISO-8859-8	hebrew				IW8ISO8859P8
+KOI8-R		KOI8		koi8_ru
+KOI8-R				koi8r
+KOI8-U				koi8_ukr
+KOI8-U				koi8u
+windows-1251	WIN		cp1251
+IBM866		ALT
+windows-1250			win1250
+windows-1250			cp1250
+windows-1256			cp1256
+windows-1257			win1257
+windows-1257			cp1257
+IBM850				cp850
+IBM852				cp852
+IBM857								TR8PC857
+IBM865				dos
+IBM866				cp866
+Big5				big5
+GB2312				gb2312
+Shift_JIS			sjis
+ISO646-NO			danish
+ISO646-HU			hungarian
+GBK				gbk
+ISO-10646-UCS-2			ucs2
+DEC-MCS				dec8
+TIS-620				tis620
+hp-roman8			hp8
+				czech
+				german1
+				swe7
+				usa7
+				estonia
+				win1251ukr
+				croat
+				armscii8
+				keybcs2
+				macce
+				macroman
+				binary
+				geostd8

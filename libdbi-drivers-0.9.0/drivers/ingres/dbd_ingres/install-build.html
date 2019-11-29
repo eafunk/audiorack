@@ -1,0 +1,347 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<HTML
+><HEAD
+><TITLE
+>Build and install the driver</TITLE
+><META
+NAME="GENERATOR"
+CONTENT="Modular DocBook HTML Stylesheet Version 1.79"><LINK
+REL="HOME"
+TITLE="Ingres Driver Notes"
+HREF="index.html"><LINK
+REL="UP"
+TITLE="Installation"
+HREF="install.html"><LINK
+REL="PREVIOUS"
+TITLE="Prerequisites"
+HREF="install-prereq.html"><LINK
+REL="NEXT"
+TITLE="Driver options"
+HREF="options.html"></HEAD
+><BODY
+CLASS="SECTION"
+BGCOLOR="#FFFFFF"
+TEXT="#000000"
+LINK="#0000FF"
+VLINK="#840084"
+ALINK="#0000FF"
+><DIV
+CLASS="NAVHEADER"
+><TABLE
+SUMMARY="Header navigation table"
+WIDTH="100%"
+BORDER="0"
+CELLPADDING="0"
+CELLSPACING="0"
+><TR
+><TH
+COLSPAN="3"
+ALIGN="center"
+>Ingres Driver Notes: Details about the libdbi driver providing support for Ingres backends</TH
+></TR
+><TR
+><TD
+WIDTH="10%"
+ALIGN="left"
+VALIGN="bottom"
+><A
+HREF="install-prereq.html"
+ACCESSKEY="P"
+>Prev</A
+></TD
+><TD
+WIDTH="80%"
+ALIGN="center"
+VALIGN="bottom"
+>Chapter 2. Installation</TD
+><TD
+WIDTH="10%"
+ALIGN="right"
+VALIGN="bottom"
+><A
+HREF="options.html"
+ACCESSKEY="N"
+>Next</A
+></TD
+></TR
+></TABLE
+><HR
+ALIGN="LEFT"
+WIDTH="100%"></DIV
+><DIV
+CLASS="SECTION"
+><H1
+CLASS="SECTION"
+><A
+NAME="INSTALL-BUILD"
+>2.2. Build and install the driver</A
+></H1
+><P
+>			First you have to unpack the libdbi-drivers archive in a suitable
+			directory. Unpacking will create a new subdirectory with the
+			version number, such as <TT
+CLASS="FILENAME"
+>libdbi-drivers-0.8.0</TT
+>
+		</P
+><TABLE
+BORDER="0"
+BGCOLOR="#000000"
+WIDTH="100%"
+><TR
+><TD
+><FONT
+COLOR="#32CD32"
+><PRE
+CLASS="SCREEN"
+><SAMP
+CLASS="PROMPT"
+>$ </SAMP
+><KBD
+CLASS="USERINPUT"
+>tar xfvz libdbi-drivers-0.8.0.tar.gz</KBD
+></PRE
+></FONT
+></TD
+></TR
+></TABLE
+><P
+>			The libdbi-drivers project consists of several drivers that use a
+			common build system. Therefore you <EM
+>must</EM
+> explicitly tell
+			the configuration script that you want to build the ingres driver (you
+			can list as many drivers as you want to build):
+		</P
+><TABLE
+BORDER="0"
+BGCOLOR="#000000"
+WIDTH="100%"
+><TR
+><TD
+><FONT
+COLOR="#32CD32"
+><PRE
+CLASS="SCREEN"
+><SAMP
+CLASS="PROMPT"
+>$ </SAMP
+><KBD
+CLASS="USERINPUT"
+>cd libdbi-drivers-0.8.0</KBD
+></PRE
+></FONT
+></TD
+></TR
+></TABLE
+><TABLE
+BORDER="0"
+BGCOLOR="#000000"
+WIDTH="100%"
+><TR
+><TD
+><FONT
+COLOR="#32CD32"
+><PRE
+CLASS="SCREEN"
+><SAMP
+CLASS="PROMPT"
+>$ </SAMP
+><KBD
+CLASS="USERINPUT"
+>./configure --with-ingres</KBD
+></PRE
+></FONT
+></TD
+></TR
+></TABLE
+><P
+>			Run <B
+CLASS="COMMAND"
+>./configure --help</B
+> to find out about
+			additional options and other available drivers.
+		</P
+><P
+>			Then build the driver with the command:
+		</P
+><TABLE
+BORDER="0"
+BGCOLOR="#000000"
+WIDTH="100%"
+><TR
+><TD
+><FONT
+COLOR="#32CD32"
+><PRE
+CLASS="SCREEN"
+><SAMP
+CLASS="PROMPT"
+>$ </SAMP
+><KBD
+CLASS="USERINPUT"
+>make</KBD
+></PRE
+></FONT
+></TD
+></TR
+></TABLE
+><DIV
+CLASS="NOTE"
+><BLOCKQUOTE
+CLASS="NOTE"
+><P
+><B
+>Note: </B
+>				Please note that you may have to invoke
+				<B
+CLASS="COMMAND"
+>gmake</B
+>, the GNU version of make, on some
+				systems.
+			</P
+></BLOCKQUOTE
+></DIV
+><P
+>			Then install the driver with the command (you'll need root
+			permissions to do this):
+		</P
+><TABLE
+BORDER="0"
+BGCOLOR="#000000"
+WIDTH="100%"
+><TR
+><TD
+><FONT
+COLOR="#32CD32"
+><PRE
+CLASS="SCREEN"
+><SAMP
+CLASS="PROMPT"
+>$ </SAMP
+><KBD
+CLASS="USERINPUT"
+>make install</KBD
+></PRE
+></FONT
+></TD
+></TR
+></TABLE
+><P
+>			To test the operation of the newly installed driver, use the
+			command:
+		</P
+><TABLE
+BORDER="0"
+BGCOLOR="#000000"
+WIDTH="100%"
+><TR
+><TD
+><FONT
+COLOR="#32CD32"
+><PRE
+CLASS="SCREEN"
+><SAMP
+CLASS="PROMPT"
+>$ </SAMP
+><KBD
+CLASS="USERINPUT"
+>make check</KBD
+></PRE
+></FONT
+></TD
+></TR
+></TABLE
+><P
+>			This command creates and runs a test program that performs a few
+			basic input and output tests.
+		</P
+><DIV
+CLASS="NOTE"
+><BLOCKQUOTE
+CLASS="NOTE"
+><P
+><B
+>Note: </B
+>				If for some reason you need to re-create the
+				autoconf/automake-related files, try running <B
+CLASS="COMMAND"
+>./autogen.sh</B
+>. In some situations,
+				the current stable autoconf/automake/libtool versions (as
+				found in FreeBSD 4.7 and Debian 3.0) do not cooperate well, so
+				it may be necessary to run the older autoconf 2.13. If
+				necessary, edit <TT
+CLASS="FILENAME"
+>autogen.sh</TT
+> so that it will catch
+				the older autoconf version on your system.
+			</P
+></BLOCKQUOTE
+></DIV
+></DIV
+><DIV
+CLASS="NAVFOOTER"
+><HR
+ALIGN="LEFT"
+WIDTH="100%"><TABLE
+SUMMARY="Footer navigation table"
+WIDTH="100%"
+BORDER="0"
+CELLPADDING="0"
+CELLSPACING="0"
+><TR
+><TD
+WIDTH="33%"
+ALIGN="left"
+VALIGN="top"
+><A
+HREF="install-prereq.html"
+ACCESSKEY="P"
+>Prev</A
+></TD
+><TD
+WIDTH="34%"
+ALIGN="center"
+VALIGN="top"
+><A
+HREF="index.html"
+ACCESSKEY="H"
+>Home</A
+></TD
+><TD
+WIDTH="33%"
+ALIGN="right"
+VALIGN="top"
+><A
+HREF="options.html"
+ACCESSKEY="N"
+>Next</A
+></TD
+></TR
+><TR
+><TD
+WIDTH="33%"
+ALIGN="left"
+VALIGN="top"
+>Prerequisites</TD
+><TD
+WIDTH="34%"
+ALIGN="center"
+VALIGN="top"
+><A
+HREF="install.html"
+ACCESSKEY="U"
+>Up</A
+></TD
+><TD
+WIDTH="33%"
+ALIGN="right"
+VALIGN="top"
+>Driver options</TD
+></TR
+></TABLE
+></DIV
+></BODY
+></HTML
+>

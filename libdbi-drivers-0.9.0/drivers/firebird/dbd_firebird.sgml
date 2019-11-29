@@ -1,0 +1,163 @@
+<!DOCTYPE Book PUBLIC "-//OASIS//DTD DocBook V4.1//EN" [
+<!ENTITY freedoc-license SYSTEM "../../doc/include/copying-fdl.sgml">
+]>
+<!-- $Id: dbd_firebird.sgml,v 1.2 2008/03/04 07:57:55 mhoenicka Exp $ -->
+<book>
+  <bookinfo>
+    <title>firebird driver manual</title>
+    <subtitle>A libdbi driver providing connectivity to Firebird and Interbase databases.</subtitle>
+    <authorgroup>
+      <author>
+	<firstname>Christian</firstname>
+	<surname>Stamgren</surname>
+	<affiliation>
+	  <address><email>christian@stamgren.com</email></address>
+	</affiliation>
+      </author>
+      <author>
+	<firstname>Markus</firstname>
+	<surname>Hoenicka</surname>
+	<affiliation>
+	  <address><email>mhoenicka@users.sourceforge.net</email></address>
+	</affiliation>
+      </author>
+    </authorgroup>
+    <legalnotice>
+      <para>
+	Permission is granted to copy, distribute and/or modify this
+	document under the terms of the <link linkend="copying-FDL">
+	  <citetitle>GNU Free Documentation License</citetitle></link>,
+	Version 1.1 or any later version published by the Free Software
+	Foundation; with no Invariant Sections, with no	Front-Cover Texts,
+	and with no Back-Cover Texts.  A copy of the license is included in
+	<xref linkend="copying-FDL">.
+      </para>
+    </legalnotice>
+    <revhistory>
+      <revision>
+	<revnumber>0.1</revnumber>
+	<date>2008-01-02</date>
+      </revision>
+    </revhistory>
+  </bookinfo>
+  <preface>
+    <title>Preface</title>
+    <para><ulink url="http://libdbi.sourceforge.net">libdbi</ulink> is a database abstraction layer written in C. It implements a framework that can utilize separate driver libraries for specific database servers. The <ulink url="http://libdbi-drivers.sourceforge.net">libdbi-drivers</ulink> project provides the drivers necessary to talk to the supported database servers.</para>
+    <para>This manual provides information about the Firebird/Interbase driver. The manual is intended for programmers who write applications linked against libdbi and who want their applications to work with Firebird or Interbase database engines.</para>
+    <para>Questions and comments about the Firebird/Interbase driver should be sent to the <ulink url="mailto:libdbi-drivers-devel@lists.sourceforge.net">libdbi-drivers-devel</ulink> mailing list. Visit the <ulink url="http://lists.sourceforge.net/lists/listinfo/libdbi-drivers-devel">libdbi-drivers-devel list page</ulink> to subscribe and for further information. Questions and comments about the libdbi library should be sent to the appropriate libdbi mailing list.</para>
+    <para>The Firebird/Interbase driver was developed by <ulink url="mailto:christian@stamgren.com">Christian Stamgren</ulink>.</para>
+  </preface>
+  <chapter>
+    <title>Introduction</title>
+    <para><ulink url="http://www.firebirdsql.org">Firebird</ulink> is the free cousin of the <ulink url="http://www.interbase.com">InterBase</ulink> SQL database engine, which has a long and winding history related to the repeated reinventions of the Borland, then Inprise, then Borland/Inprise, then again Borland company. Although the internal name of the driver is "firebird", it is supposed to work with the InterBase products as well.</para>
+  </chapter>
+  <chapter>
+    <title>Installation</title>
+    <para>This chapter describes the prerequisites and the procedures to build and install the firebird driver from the sources.</para>
+    <sect1>
+      <title>Prerequisites</title>
+      <para>The following packages have to be installed on your system:</para>
+      <variablelist>
+	<varlistentry>
+	  <term>libdbi</term>
+	  <listitem>
+	    <para>This library provides the framework of the database abstraction layer which can utilize the firebird driver to perform database operations. The download page as well as the mailing lists with bug reports and patches are accessible at <ulink url="http://sourceforge.net/projects/libdbi">sourceforge.net/projects/libdbi</ulink>. The current version of the firebird driver requires libdbi version 0.8.x.</para>
+	  </listitem>
+	</varlistentry>
+	<varlistentry>
+	  <term>libfbembed</term>
+	  <listitem>
+	    <para>This library implements the client API for Firebird/InterBase databases which provides access both locally and through the network. Find the most recent release at <ulink url="http://www.firebirdsql.org">www.firebirdsql.org</ulink>. The current version of the firebird driver was tested with Firebird versions 1.5.3 and 2.0.3 and should work with all recent releases.</para>
+	  </listitem>
+	</varlistentry>
+      </variablelist>
+    </sect1>
+    <sect1>
+      <title>Build and install the firebird driver</title>
+      <para>First you have to unpack the libdbi-drivers archive in a suitable directory. Unpacking will create a new subdirectory <filename class="directory">libdbi-drivers-X.Y</filename> where "X.Y" denotes the version:</para>
+      <screen><prompt>$ </prompt><userinput>tar -xzf libdbi-drivers-X.Y.tar.gz</userinput></screen>
+      <para>The libdbi-drivers project consists of several drivers that use a common build system. Therefore you <emphasis>must</emphasis> tell configure explicitly that you want to build the firebird driver (you can list as many drivers as you want to build):</para>
+      <screen><prompt>$ </prompt><userinput>cd libdbi-drivers</userinput></screen>
+      <screen><prompt>$ </prompt><userinput>./configure --with-firebird</userinput></screen>
+      <para>Run <command>./configure --help</command> to find out about additional options.</para>
+      <para>Then build the driver with the command:</para>
+      <screen><prompt>$ </prompt><userinput>make</userinput></screen>
+      <note>
+	<para>If the command results in error messages about the <emphasis>Makefile syntax</emphasis>, you may have to explicitly invoke <command>gmake</command>, the GNU version of make, on your system.</para>
+      </note>
+      <para>Then install the driver with the command (you'll need root permissions to do this):</para>
+      <screen><prompt>$ </prompt><userinput>make install</userinput></screen>
+      <para>To test the operation of the newly installed driver, use the command:</para>
+      <screen><prompt>$ </prompt><userinput>make check</userinput></screen>
+      <para>This command creates and runs a test program that performs a few basic input and output tests. The program will ask for an administrator username and password. Default Firebird installations usually call the database superuser "sysdba" so this user is always a good start. Be sure to provide the name of a database which does not already exist (avoid 'test' which is used on many systems). To keep file permission problems out of this test (more on this below), you may prefer to keep the hostname empty and to specify a directory with write access.</para>
+      <note>
+	<para>If for some reason you need to re-create the autoconf/automake-related files, try running <command moreinfo="none">./autogen.sh</command>.</para>
+      </note>
+    </sect1>
+  </chapter>
+  <chapter>
+    <title>Driver options</title>
+    <para>Your application has to initialize libdbi drivers by setting some driver options with the <function>dbi_conn_set_option()</function> and the <function>dbi_conn_set_option_numeric()</function> library functions. The firebird driver supports the following general options:</para>
+    <variablelist>
+      <varlistentry>
+	<term>host</term>
+	<listitem>
+	  <para>The hostname or IP address of the Firebird database server. Use "localhost" or the real hostname of your local computer to connect to a Firebird server running on the local machine <emphasis>through the network</emphasis> (this is the only way to connect to a local super-server). Do not set the host option if you want to work with a local database, without going through a server.</para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term>username</term>
+	<listitem>
+	  <para>The name of the user accessing the database.</para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term>password</term>
+	<listitem>
+	  <para>The password of the user accessing the database.</para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term>dbname</term>
+	<listitem>
+	  <para>The name of the database used for the initial connection. If your program must be able to connect to a fresh Firebird installation, use the test database <filename moreinfo="none">libdbitest</filename> created by <command moreinfo="none">make check</command>.</para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
+	<term>encoding</term>
+	<listitem>
+	  <para>The IANA name of a character encoding which is to be used as the connection encoding. Input and output data will be silently converted from and to this character encoding, respectively. If you set this option to "auto", the connection encoding will be the same as the default encoding of the database.</para>
+	</listitem>
+      </varlistentry>
+    </variablelist>
+    <para>In addition, the following firebird-specific options are supported:</para>
+    <variablelist>
+      <varlistentry>
+	<term>firebird_dbdir</term>
+	<listitem>
+	  <para>This is the directory that holds the Firebird database files. Depending on the settings of the <option>host</option> option, this may refer to a directory on a local or on a remote machine. The ownership and the permissions must match the mode of access. If you create or access a file locally (i.e. with <option>host</option> not set), the account you're logged in needs write and execute permissions. If you set the <option>host</option>, the account your server runs in must have write and execute permissions. This is true even if you connect to your own machine via localhost. Default server installations use the "firebird" account. The database directory should then be owned by firebird:firebird with write and execute permissions for both the user and the group. It should then be sufficient to add yourself to the firebird group to gain access to the database directory.</para>
+	  <para>If this option is not specified, a compile-time default directory will be used. Needless to say, this is going to work only if you work on localhost. By default, this directory (usually <filename class="directory" moreinfo="none">/usr/local/var/lib/libdbi/firebird</filename>) has read and write permissions for everyone with the sticky bit set. If this is not suitable for your application, use a custom directory with your preferred permissions instead.</para>
+	</listitem>
+      </varlistentry>
+    </variablelist>
+  </chapter>
+  <chapter>
+    <title>Peculiarities you should know about</title>
+    <para>This chapter lists known peculiarities of the firebird driver. This includes Firebird features that differ from what you know from the other database servers supported by libdbi, and it includes features and misfeatures introduced by the firebird driver. It is the intention of the libdbi developers to reduce the number of misfeatures in future releases if possible.</para>
+    <sect1>
+      <title>Firebird (mis)features</title>
+      <itemizedlist>
+        <listitem>
+	  <para>To determine the number of matches, all results have to be retrieved first. This is very inefficient and may provide a bottleneck for large applications.</para>
+	</listitem>
+	<listitem>
+	  <para>DATETIME and TIME do not appear to support timezones</para>
+	</listitem>
+	<listitem>
+	  <para>char, unsigned char, long long, and unsigned long long types are not supported.</para>
+	</listitem>
+      </itemizedlist>
+    </sect1>
+  </chapter>
+  &freedoc-license;
+</book>
