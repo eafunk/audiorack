@@ -63,11 +63,11 @@ unsigned char putCBQitem(callbackQueue *Q, jack_port_id_t ID){
 
 unsigned char checkPnumber(int pNum)
 {
-    if(pNum < 0)
-        return 0;
-    if(pNum >= mixEngine->inCount)
-        return 0;
-    return 1;
+	if(pNum < 0)
+		return 0;
+	if(pNum >= mixEngine->inCount)
+		return 0;
+	return 1;
 }
 
 /* 3 JACK callback for the condition stated in the function name */
@@ -597,37 +597,37 @@ int process(jack_nframes_t nframes, void *arg){
 		delay = outchrec->delay * mixEngineRef->mixerSampleRate;
 		if((b = outchrec->bus) >= bcount)
 			b = 0;
-    
-	    // set output device volume to lowest active mute group gain * current device volume
-	    least = 0xff;
-	    if(activeBus & (1L << 1)){
-	        // cue mute enabled
-	        least = outchrec->muteLevels & 0xff; // truncate to lower byte
-	    }
-	    if(activeBus & (1L << 24)){
-	        // mute group A enabled
-	        groupGain = (outchrec->muteLevels >> 8); //second byte
-	        groupGain = (groupGain & 0xff); // truncate to lower byte
-	        if(groupGain < least)
-				least = groupGain;
-	    }
-	    if(activeBus & (1L << 25)){
-	        // mute group B enabled
-	        groupGain = (outchrec->muteLevels >> 16); //third byte
-	        groupGain = (groupGain & 0xff); // truncate to lower byte
-	        if(groupGain < least)
-				least = groupGain;
-	    }
-	    if(activeBus & (1L << 26)){
-	        // mute group B enabled
-	        groupGain = (outchrec->muteLevels >> 24); //fourth byte
-	        groupGain = (groupGain & 0xff); // truncate to lower byte
-	        if(groupGain < least)
-				least = groupGain;
-	    }
-	    vol = ((float)least / 255.0); // make a float
-	    vol = powf(vol, 3) * outchrec->vol;
-    
+
+			// set output device volume to lowest active mute group gain * current device volume
+			least = 0xff;
+			if(activeBus & (1L << 1)){
+				// cue mute enabled
+				least = outchrec->muteLevels & 0xff; // truncate to lower byte
+			}
+			if(activeBus & (1L << 24)){
+				// mute group A enabled
+				groupGain = (outchrec->muteLevels >> 8); //second byte
+				groupGain = (groupGain & 0xff); // truncate to lower byte
+				if(groupGain < least)
+					least = groupGain;
+			}
+			if(activeBus & (1L << 25)){
+				// mute group B enabled
+				groupGain = (outchrec->muteLevels >> 16); //third byte
+				groupGain = (groupGain & 0xff); // truncate to lower byte
+				if(groupGain < least)
+					least = groupGain;
+			}
+			if(activeBus & (1L << 26)){
+				// mute group B enabled
+				groupGain = (outchrec->muteLevels >> 24); //fourth byte
+				groupGain = (groupGain & 0xff); // truncate to lower byte
+				if(groupGain < least)
+					least = groupGain;
+			}
+			vol = ((float)least / 255.0); // make a float
+			vol = powf(vol, 3) * outchrec->vol;
+
 		/* note: ccount still set from input processing loop */
 		for(c=0; c<ccount; c++){
 			/* channel c of output number i */
@@ -760,14 +760,13 @@ char *initMixer(mixEngineRecPtr *mixEngineRef, unsigned int width,
 	
 	pthread_mutex_init(&mixRef->ctlOutQueueMutex, NULL);  
 	pthread_mutex_init(&mixRef->changedMutex, NULL);  
-    pthread_cond_init(&mixRef->changedSemaphore, NULL);
+	pthread_cond_init(&mixRef->changedSemaphore, NULL);
 	pthread_rwlock_init(&mixRef->outGrpLock, NULL);
 
 	pthread_mutex_init(&mixRef->cbQueueMutex, NULL);  
-    pthread_cond_init(&mixRef->cbQueueSemaphore, NULL);
-    
+	pthread_cond_init(&mixRef->cbQueueSemaphore, NULL);
 	pthread_mutex_init(&mixRef->ctlInQueueMutex, NULL);  
-    pthread_cond_init(&mixRef->ctlInQueueSemaphore, NULL);
+	pthread_cond_init(&mixRef->ctlInQueueSemaphore, NULL);
 	
 	/* set up connection to jack audio server */
 	if(server)
@@ -972,15 +971,14 @@ void shutdownMixer(mixEngineRecPtr mixEngineRef){
 		jack_ringbuffer_free(mixEngineRef->ctlOutQueue);
 	}	
 	pthread_mutex_destroy(&mixEngineRef->ctlOutQueueMutex);
-    pthread_cond_destroy(&mixEngineRef->ctlInQueueSemaphore);
+	pthread_cond_destroy(&mixEngineRef->ctlInQueueSemaphore);
 	pthread_mutex_destroy(&mixEngineRef->ctlInQueueMutex);  
 	
 	pthread_mutex_destroy(&mixEngineRef->cbQueueMutex);  
-    pthread_cond_destroy(&mixEngineRef->cbQueueSemaphore);
-    
-    pthread_spin_destroy(&mixEngineRef->cbQueue.spinlock);
-    
-    jack_client_close(mixEngineRef->client);
+	pthread_cond_destroy(&mixEngineRef->cbQueueSemaphore);
+
+	pthread_spin_destroy(&mixEngineRef->cbQueue.spinlock);
+	jack_client_close(mixEngineRef->client);
 
 	/* free mixer container structure */
 	munlock(mixEngineRef, sizeof(mixEngineRec));

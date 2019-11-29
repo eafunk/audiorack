@@ -261,8 +261,8 @@ void *jackChangeWatcher(void *refCon){
 		}
 	
 		pthread_mutex_lock(&mixEngine->cbQueueMutex);
-        pthread_cond_wait(&mixEngine->cbQueueSemaphore, &mixEngine->cbQueueMutex);
-        pthread_mutex_unlock(&mixEngine->cbQueueMutex);
+		pthread_cond_wait(&mixEngine->cbQueueSemaphore, &mixEngine->cbQueueMutex);
+		pthread_mutex_unlock(&mixEngine->cbQueueMutex);
 	}
 	return NULL;
 }
@@ -281,8 +281,8 @@ void *playerChangeWatcher(void *refCon){
 
 	triggerFile = NULL;
 	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
-    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
-    lastBusses = 0;
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+	lastBusses = 0;
 	while(dispRun){
 		triggerDir = GetMetaData(0, "file_trigger_dir", 0);
 		if(strlen(triggerDir)){
@@ -296,8 +296,7 @@ void *playerChangeWatcher(void *refCon){
 		instance = mixEngine->ins;
 		for(i=0; i<mixEngine->inCount; i++){
 			/* check change flags */
-			if(changed = instance->changed){	
-	
+			if(changed = instance->changed){
 				if(changed & change_stat){
 					if(instance->status & status_deleteWhenDone){
 						if((instance->status & status_finished) || 
@@ -317,7 +316,7 @@ void *playerChangeWatcher(void *refCon){
 					data.reference = htonl(i);
 					data.value.iVal = htonl(instance->status);
 					notifyMakeEntry(nType_pstat, &data, sizeof(data));
-				}				
+				}
 				if(changed & change_pos){
 					data.senderID = 0;
 					data.reference = htonl(i);
@@ -374,7 +373,6 @@ void *playerChangeWatcher(void *refCon){
 						free(type);
 					}
 				}
-				
 				if(changed & change_play){
 					/* handle start player */
 					if(instance->UID){
@@ -418,13 +416,12 @@ void *playerChangeWatcher(void *refCon){
 						free(type);
 					}
 				}
-				
 				if(changed & change_loaded){
 					/* handle loaded player */
 					if(instance->UID){
 						name = GetMetaData(instance->UID, "Name", 0);
 						type = GetMetaData(instance->UID, "Type", 0);
-						if(strlen(triggerDir) && strlen(name) && !strcmp(type, "input")){			
+						if(strlen(triggerDir) && strlen(name) && !strcmp(type, "input")){
 							str_setstr(&triggerFile, triggerDir);
 							str_appendstr(&triggerFile, name);
 							str_appendstr(&triggerFile, ".load");
@@ -552,7 +549,7 @@ void *playerChangeWatcher(void *refCon){
 					instance->attached = 0;	// to prevent doing this again.
 					if(instance->UID){
 						releaseQueueEntry(instance->UID);
-//!!! mark as missing if db item?						
+//!!! mark as missing if db item?
 					}
 				}
 			}
@@ -703,8 +700,8 @@ void *playerChangeWatcher(void *refCon){
 		
 		free(triggerDir);
 		pthread_mutex_lock(&mixEngine->changedMutex);
-        pthread_cond_wait(&mixEngine->changedSemaphore, &mixEngine->changedMutex);
-        pthread_mutex_unlock(&mixEngine->changedMutex);
+		pthread_cond_wait(&mixEngine->changedSemaphore, &mixEngine->changedMutex);
+		pthread_mutex_unlock(&mixEngine->changedMutex);
 	}
 	return NULL;
 }
@@ -722,14 +719,14 @@ void serverLogCloseFile(void)
 void *serverLogWatcher(void *refCon){
 	ServerLogRecord *instance;
 	int i;
-    char timeStr[32];
+	char timeStr[32];
 	char *fullMSG;
 	char *localName;
-	
+
 	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
-    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
-    fullMSG = NULL;
-    while(dispRun){
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+	fullMSG = NULL;
+	while(dispRun){
 		pthread_mutex_lock(&srvLogQueueLock);
 		while(dispRun && svrLogQueue){
 			instance = (ServerLogRecord *)getNextNode((LinkedListEntry *)&svrLogQueue);
@@ -753,7 +750,7 @@ void *serverLogWatcher(void *refCon){
 			}
 			free(localName);
 			
-			if(svrLogFile){
+			if(svrLogFile && instance->message){
 				// file open... write to it.
 				strftime(timeStr, sizeof(timeStr), "%b %d, %Y %H:%M:%S", &instance->when);
 				str_setstr(&fullMSG, timeStr);
@@ -761,24 +758,24 @@ void *serverLogWatcher(void *refCon){
 				str_appendstr(&fullMSG, mixEngine->ourJackName);
 				str_appendstr(&fullMSG, " | ");
 				str_appendstr(&fullMSG, instance->message);
-				if(instance->message)
-					free(instance->message);
-				free(instance);
 				fprintf(svrLogFile, "%s\n", fullMSG);
 				fflush(svrLogFile);
 			}
+			if(instance->message)
+				free(instance->message);
+			free(instance);
 			pthread_mutex_lock(&srvLogQueueLock);
 		}
 		pthread_mutex_unlock(&srvLogQueueLock);
 		
-    	pthread_mutex_lock(&srvLogMutex);
-        pthread_cond_wait(&srvLogSemaphore, &srvLogMutex);
-        pthread_mutex_unlock(&srvLogMutex);
+		pthread_mutex_lock(&srvLogMutex);
+		pthread_cond_wait(&srvLogSemaphore, &srvLogMutex);
+		pthread_mutex_unlock(&srvLogMutex);
 	}
 	if(fullMSG)
 		free(fullMSG);
 	free(svrLogFileName);
-    return NULL;
+	return NULL;
 }
 
 void serverLogMakeEntry(char *message)
@@ -857,7 +854,7 @@ void *notifyWatcher(void *refCon){
 	unsigned char isVU;
 
 	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
-    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 
 	while(dispRun){
 		pthread_mutex_lock(&notifyQueueLock);
@@ -879,15 +876,15 @@ void *notifyWatcher(void *refCon){
 		}
 		pthread_mutex_unlock(&notifyQueueLock);
 
-    	pthread_mutex_lock(&notifyMutex);
-        pthread_cond_wait(&notifySemaphore, &notifyMutex);
-        pthread_mutex_unlock(&notifyMutex);
+		pthread_mutex_lock(&notifyMutex);
+		pthread_cond_wait(&notifySemaphore, &notifyMutex);
+		pthread_mutex_unlock(&notifyMutex);
 	}
-    return NULL;
+	return NULL;
 }
 
 void* metersUpdateThread(void *refCon){        
-    struct timespec timeout;
+	struct timespec timeout;
 	vuNContainer *record = NULL;
 	vuNInstance *instance;
 	vuNData *values;
@@ -959,7 +956,7 @@ void* metersUpdateThread(void *refCon){
 			total = jack_cpu_load(mixEngine->client);
 			data.value.iVal = 0;
 			data.value.cVal[0] = (unsigned char)roundf(100. * total);
-			notifyMakeEntry(nType_load, &data, sizeof(data));						
+			notifyMakeEntry(nType_load, &data, sizeof(data));
 		}
 		
 		// Wait for a time out to check again
@@ -1013,7 +1010,7 @@ void programLogUIDEntry(uint32_t passUID, unsigned char Added, unsigned char Pla
 	if(instance = calloc(1, sizeof(ProgramLogRecord))){
 		instance->added = Added;
 		instance->played = Played;
-		instance->UID = passUID;	
+		instance->UID = passUID;
 		instance->post = 1;
 		programLogMakeEntry(instance);
 	}
@@ -1053,7 +1050,6 @@ void *programLogWatcher(void* refCon){
 			rec = (ProgramLogRecord *)getNextNode((LinkedListEntry *)&pgmLogQueue);
 			unlinkNode((LinkedListEntry *)rec, (LinkedListEntry *)&pgmLogQueue, 0);
 			pthread_mutex_unlock(&pgmLogQueueLock);
-
 			if(rec->UID){ 
 				// fill in data from UID, if available
 				if(rec->name)
@@ -1143,7 +1139,7 @@ void *programLogWatcher(void* refCon){
 					if(strlen(rec->album))
 						cJSON_AddStringToObject(obj, "Album", rec->album);
 
-					if((rec->ID) && (ar = cJSON_CreateObject())){				
+					if((rec->ID) && (ar = cJSON_CreateObject())){
 						cJSON_AddNumberToObject(ar, "FP", getFingerprint());
 						cJSON_AddNumberToObject(ar, "ID", rec->ID);
 						if(rec->artistID)
@@ -1153,13 +1149,13 @@ void *programLogWatcher(void* refCon){
 						if(rec->ownerID)
 							cJSON_AddNumberToObject(ar, "OwnerID", rec->ownerID);
 						if(rec->location)	
-							cJSON_AddNumberToObject(ar, "db_loc", rec->location);					
+							cJSON_AddNumberToObject(ar, "db_loc", rec->location);
 						if(strlen(rec->source))
 							cJSON_AddStringToObject(ar, "Source", rec->source);
 						if(strlen(rec->comment))
 							cJSON_AddStringToObject(ar, "Comment", rec->comment);
 						if(strlen(rec->owner))
-							cJSON_AddStringToObject(ar, "Owner", rec->owner);				
+							cJSON_AddStringToObject(ar, "Owner", rec->owner);
 						cJSON_AddItemToObject(obj, "AR", ar);
 					}
 
@@ -1169,7 +1165,6 @@ void *programLogWatcher(void* refCon){
 					}	
 					cJSON_Delete(obj);	
 				}
-
 			}
 			// all done with the record and child strings
 			if(rec->name)
@@ -1185,18 +1180,16 @@ void *programLogWatcher(void* refCon){
 			if(rec->owner)
 				free(rec->owner);
 			if(rec->webURL)
-				free(rec->webURL);	
+				free(rec->webURL);
 			free(rec);
-
 			pthread_mutex_lock(&pgmLogQueueLock);
 		}
 		pthread_mutex_unlock(&pgmLogQueueLock);
-
-    	pthread_mutex_lock(&pgmLogMutex);
-        pthread_cond_wait(&pgmLogSemaphore, &pgmLogMutex);
-        pthread_mutex_unlock(&pgmLogMutex);
+		pthread_mutex_lock(&pgmLogMutex);
+		pthread_cond_wait(&pgmLogSemaphore, &pgmLogMutex);
+		pthread_mutex_unlock(&pgmLogMutex);
 	}
-    return NULL;
+	return NULL;
 }
 
 unsigned char queueControlOutPacket(mixEngineRecPtr mixRef, char type, uint32_t peer, size_t size, char *data){	
@@ -1223,125 +1216,132 @@ void *controlQueueInWatcher(void *refCon){
 	mixEngineRec *mixEngine = (mixEngineRec*)refCon;
 	controlPacket header;
 	controlPacket *packet;
+	vuNContainer *vuRecord;
+	size_t vuSize;
 	size_t size;
 	inChannel *inchrec;
 	char *tmp, *sval;
 	time_t now;
 	
 	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
-    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+	vuSize = 0;
+	vuRecord = NULL;
 	while(dispRun){
-		now = time(NULL);
-		size = jack_ringbuffer_peek(mixEngine->ctlInQueue, (char*)&header, 7);
-		if(size == 7){
-			size = 7 + ntohs(header.dataSize);
-			if(jack_ringbuffer_read_space(mixEngine->ctlInQueue) >= size){
-				if(packet = calloc(1, size+1)){ // +1 for null termination addition
-					jack_ringbuffer_read(mixEngine->ctlInQueue, (char*)packet, size);
-					// convert endia-ness from network to host
-					packet->peer = ntohl(packet->peer);
-					packet->dataSize = ntohs(packet->dataSize);
-					packet->data[packet->dataSize] = 0; // null terminate data
-					if(((packet->type & cType_MASK) == cType_tags) && ((packet->type & cPeer_MASK) == cPeer_player)){
-						// live tag data from player to be logged, if LiveTags is enabled
-						if(checkPnumber(packet->peer)){
-							inchrec = &mixEngine->ins[packet->peer];
-							if(inchrec->status && inchrec->UID){
-								if(GetMetaInt(inchrec->UID, "LiveTags", NULL)){
-									ProgramLogRecord *entryRec; 
-									cJSON *tags, *item, *ar;
-									if(tags = cJSON_Parse(packet->data)){
-										entryRec->location = GetMetaInt(0, "db_loc", NULL);
-										entryRec->source = GetMetaData(inchrec->UID, "Source", 0);
-										entryRec->owner = GetMetaData(inchrec->UID, "Name", 0);
-										entryRec->ownerID = GetMetaInt(inchrec->UID, "ID", NULL);
-										if((item = cJSON_GetObjectItem(tags, "Name")) && (item->valuestring))
-											entryRec->name = strdup(item->valuestring);
-										if((item = cJSON_GetObjectItem(tags, "Artist")) && (item->valuestring))
-											entryRec->artist = strdup(item->valuestring);
-										if((item = cJSON_GetObjectItem(tags, "Album")) && (item->valuestring))
-											entryRec->album = strdup(item->valuestring);
-										if(ar = cJSON_GetObjectItem(tags, "AR")){
-											unsigned int fp = 0;
-											if(item = cJSON_GetObjectItem(ar, "FP"))
-												fp = item->valueint;
-											if(fp == GetMetaInt(inchrec->UID, "Fingerprint", NULL)){
-												if((item = cJSON_GetObjectItem(ar, "ID")) && (item->valueint))
-													entryRec->ID = item->valueint;
-												if((item = cJSON_GetObjectItem(ar, "AlbumID")) && (item->valueint))
-													entryRec->albumID = item->valueint;	
-												if((item = cJSON_GetObjectItem(ar, "ArtistID")) && (item->valueint))
-													entryRec->artistID = item->valueint;
-												if((item = cJSON_GetObjectItem(ar, "OwnerID")) && (item->valueint))
-													entryRec->ownerID = item->valueint;												
-												if((item = cJSON_GetObjectItem(ar, "db_loc")) && (item->valueint))
-													entryRec->location = item->valueint;
-											}
-										}	
-																	
-										if(GetMetaInt(inchrec->UID, "NoLog", NULL)){
-											entryRec->added = 2;
-											entryRec->post = 0;
-										}else{
-											entryRec->added = 0;
-											if(GetMetaInt(inchrec->UID, "NoPost", NULL))
+		while(1){	// loop until we break -> nothing else in queue
+			now = time(NULL);
+			size = jack_ringbuffer_peek(mixEngine->ctlInQueue, (char*)&header, 7);
+			if(size == 7){
+				size = 7 + ntohs(header.dataSize);
+				if(jack_ringbuffer_read_space(mixEngine->ctlInQueue) >= size){
+					
+					
+					if(packet = calloc(1, size+1)){ // +1 for added null termination
+						jack_ringbuffer_read(mixEngine->ctlInQueue, (char*)packet, size);
+						// convert endia-ness from network to host
+						packet->peer = ntohl(packet->peer);
+						packet->dataSize = ntohs(packet->dataSize);
+						packet->data[packet->dataSize] = 0; // null terminate data: maybe it's a string.
+						if(((packet->type & cType_MASK) == cType_tags) && ((packet->type & cPeer_MASK) == cPeer_player)){
+							// live tag data from player to be logged, if LiveTags is enabled
+							if(checkPnumber(packet->peer)){
+								inchrec = &mixEngine->ins[packet->peer];
+								if(inchrec->status && inchrec->UID){
+									if(GetMetaInt(inchrec->UID, "LiveTags", NULL)){
+										ProgramLogRecord *entryRec; 
+										cJSON *tags, *item, *ar;
+										if(tags = cJSON_Parse(packet->data)){
+											entryRec->location = GetMetaInt(0, "db_loc", NULL);
+											entryRec->source = GetMetaData(inchrec->UID, "Source", 0);
+											entryRec->owner = GetMetaData(inchrec->UID, "Name", 0);
+											entryRec->ownerID = GetMetaInt(inchrec->UID, "ID", NULL);
+											if((item = cJSON_GetObjectItem(tags, "Name")) && (item->valuestring))
+												entryRec->name = strdup(item->valuestring);
+											if((item = cJSON_GetObjectItem(tags, "Artist")) && (item->valuestring))
+												entryRec->artist = strdup(item->valuestring);
+											if((item = cJSON_GetObjectItem(tags, "Album")) && (item->valuestring))
+												entryRec->album = strdup(item->valuestring);
+											if(ar = cJSON_GetObjectItem(tags, "AR")){
+												unsigned int fp = 0;
+												if(item = cJSON_GetObjectItem(ar, "FP"))
+													fp = item->valueint;
+												if(fp == GetMetaInt(inchrec->UID, "Fingerprint", NULL)){
+													if((item = cJSON_GetObjectItem(ar, "ID")) && (item->valueint))
+														entryRec->ID = item->valueint;
+													if((item = cJSON_GetObjectItem(ar, "AlbumID")) && (item->valueint))
+														entryRec->albumID = item->valueint;	
+													if((item = cJSON_GetObjectItem(ar, "ArtistID")) && (item->valueint))
+														entryRec->artistID = item->valueint;
+													if((item = cJSON_GetObjectItem(ar, "OwnerID")) && (item->valueint))
+														entryRec->ownerID = item->valueint;												
+													if((item = cJSON_GetObjectItem(ar, "db_loc")) && (item->valueint))
+														entryRec->location = item->valueint;
+												}
+											}	
+																		
+											if(GetMetaInt(inchrec->UID, "NoLog", NULL)){
+												entryRec->added = 2;
 												entryRec->post = 0;
-											else
-												entryRec->post = 1;
+											}else{
+												entryRec->added = 0;
+												if(GetMetaInt(inchrec->UID, "NoPost", NULL))
+													entryRec->post = 0;
+												else
+													entryRec->post = 1;
+											}
+											
+											entryRec->played = (inchrec->busses & 0xFF);
+											entryRec->UID = 0;
+											
+											programLogMakeEntry(entryRec);
+											cJSON_Delete(tags);	
 										}
-										
-										entryRec->played = (inchrec->busses & 0xFF);
-										entryRec->UID = 0;
-										
-										programLogMakeEntry(entryRec);
-										cJSON_Delete(tags);	
 									}
+									free(tmp);
 								}
-								free(tmp);
 							}
 						}
-					}
-					if(((packet->type & cType_MASK) == cType_anc) && 
-							(packet->dataSize) && ((packet->type & cPeer_MASK) == cPeer_recorder)){
-						
-						cJSON *parent, *item;
-						unsigned char notify = 0;
-						packet->data[packet->dataSize] = 0; // null terminate data
-						if(parent = cJSON_Parse(packet->data)){
-							if((item = cJSON_GetObjectItem(parent, "Name")) && (item->valuestring)){			
-								tmp = GetMetaData(packet->peer, "Name", 0);
-								sval = GetMetaData(packet->peer, "Type", 0);
-								if((!strlen(tmp) || !strcmp(tmp, item->valuestring))
-																&& !strcmp(sval, "encoder")){
-									/* name is empty or matches, and type match... update this uid item */
-									uint32_t lastRev;
-									lastRev = GetMetaRev(packet->peer);
-									/* itterate through the jSON list, updating metadata */
-									item = parent->child;
-									do{
-										if(item->string && strlen(item->string) && !item->child){
-											if(item->type == cJSON_String){
-												UpdateMetaData(packet->peer, item->string, item->valuestring);
-											}else if(item->type == cJSON_Number){
-												free(tmp);
-												tmp = fstr(item->valuedouble, 2);
-												if(UpdateMetaData(packet->peer, item->string, tmp)){
-													if(!strcmp(item->string, "Status") || !strcmp(item->string, "Volume"))
-														notify = 1;
-												}
-												
-											}else if(item->type == cJSON_True){
-												UpdateMetaData(packet->peer, item->string, "1");
-											}else if(item->type == cJSON_False){
-												UpdateMetaData(packet->peer, item->string, "0");
-											}
-										}
-									}while(item = item->next);
-									if(lastRev !=  GetMetaRev(packet->peer)){
-										// a change was made... update position time stamp.
+						if(((packet->type & cType_MASK) == cType_anc) && 
+								(packet->dataSize) && ((packet->type & cPeer_MASK) == cPeer_recorder)){
+							// recorders send an announcement at lease once every 10 seconds
+							cJSON *parent, *item;
+							packet->data[packet->dataSize] = 0; // null terminate data
+							if(parent = cJSON_Parse(packet->data)){
+								if((item = cJSON_GetObjectItem(parent, "Name")) && (item->valuestring)){
+									tmp = GetMetaData(packet->peer, "Name", 0);
+									sval = GetMetaData(packet->peer, "Type", 0);
+									if((!strlen(tmp) || !strcmp(tmp, item->valuestring))
+																	&& !strcmp(sval, "encoder")){
+										/* name is empty or matches, and type match... update this uid item */
 										free(tmp);
 										tmp = istr(now);
 										SetMetaData(packet->peer, "TimeStamp", tmp);
+										/* itterate through the jSON list, updating metadata */
+										unsigned char notify = 0;
+										item = parent->child;
+										do{
+											if(item->string && strlen(item->string) && !item->child){
+												if(item->type == cJSON_String){
+													if(UpdateMetaData(packet->peer, item->string, item->valuestring))
+														notify = 1;
+												}else if(item->type == cJSON_Number){
+													free(tmp);
+													tmp = fstr(item->valuedouble, 2);
+													if(UpdateMetaData(packet->peer, item->string, tmp)){
+														if(strcmp(item->string, "Position"))
+															// any change except position will trigger a notify packet send
+															notify = 1;
+													}
+												}else if(item->type == cJSON_True){
+													if(UpdateMetaData(packet->peer, item->string, "1"))
+														notify = 1;
+												}else if(item->type == cJSON_False){
+													if(UpdateMetaData(packet->peer, item->string, "0"))
+														notify = 1;
+												}
+											}
+										}while(item = item->next);
+										// a change was made... send out notice.
 										if(notify){
 											notifyData data;
 											data.senderID = 0;
@@ -1349,89 +1349,103 @@ void *controlQueueInWatcher(void *refCon){
 											data.value.iVal = htonl(0);
 											notifyMakeEntry(nType_rstat, &data, sizeof(data));
 										}
-									}
-								}else{
-									/* no match... UID either doesn't exist, or it does, but name mismatch */
-									if((item = cJSON_GetObjectItem(parent, "Name")) && (item->valuestring) && (item = parent->child)){
-										uint32_t newUID, tmpUID;
-										tmpUID = packet->peer; 
-										newUID = createMetaRecord(NULL, &tmpUID);
-										if(newUID != tmpUID){
-											/* persistant recorder's previous UID is not available anymore
-											 * a new metadata record has been created with a different ID.
-											 * We need to send a message to the recorder to change it's peer
-											 * ID to match the new UID number */
-											 tmpUID = htonl(newUID);
-											 queueControlOutPacket(mixEngine, cPeer_recorder | cType_reid, packet->peer, 4, (char *)&tmpUID);
-										}
-										do{
-											if(item->string && strlen(item->string) && !item->child){
-												if(item->type == cJSON_String){
-													SetMetaData(packet->peer, item->string, item->valuestring);
-												}else if(item->type == cJSON_Number){
-													free(tmp);
-													tmp = fstr(item->valuedouble, 2);
-													SetMetaData(packet->peer, item->string, tmp);
-												}else if(item->type == cJSON_True){
-													SetMetaData(packet->peer, item->string, "1");
-												}else if(item->type == cJSON_False){
-													SetMetaData(packet->peer, item->string, "0");
-												}
+									}else{
+										/* no match... UID either doesn't exist, or it does, but name mismatch */
+										if((item = cJSON_GetObjectItem(parent, "Name")) && (item->valuestring) && (item = parent->child)){
+											uint32_t newUID, tmpUID;
+											tmpUID = packet->peer; 
+											newUID = createMetaRecord(NULL, &tmpUID);
+											if(newUID != tmpUID){
+												/* persistant recorder's previous UID is not available anymore
+												 * a new metadata record has been created with a different ID.
+												 * We need to send a message to the recorder to change it's peer
+												 * ID to match the new UID number */
+												 tmpUID = htonl(newUID);
+												 queueControlOutPacket(mixEngine, cPeer_recorder | cType_reid, packet->peer, 4, (char *)&tmpUID);
 											}
-										}while(item = item->next);
-										free(tmp);
-										tmp = istr(now);
-										SetMetaData(newUID, "TimeStamp", tmp);
-										SetMetaData(newUID, "Type", "encoder");
-										
-										notifyData data;
-										data.senderID = 0;
-										data.reference = htonl(0);
-										data.value.iVal = htonl(0);
-										notifyMakeEntry(nType_rstat, &data, sizeof(data));
+											do{
+												if(item->string && strlen(item->string) && !item->child){
+													if(item->type == cJSON_String){
+														SetMetaData(packet->peer, item->string, item->valuestring);
+													}else if(item->type == cJSON_Number){
+														free(tmp);
+														tmp = fstr(item->valuedouble, 2);
+														SetMetaData(packet->peer, item->string, tmp);
+													}else if(item->type == cJSON_True){
+														SetMetaData(packet->peer, item->string, "1");
+													}else if(item->type == cJSON_False){
+														SetMetaData(packet->peer, item->string, "0");
+													}
+												}
+											}while(item = item->next);
+											free(tmp);
+											tmp = istr(now);
+											SetMetaData(newUID, "TimeStamp", tmp);
+											SetMetaData(newUID, "Type", "encoder");
+											
+											notifyData data;
+											data.senderID = 0;
+											data.reference = htonl(0);
+											data.value.iVal = htonl(0);
+											notifyMakeEntry(nType_rstat, &data, sizeof(data));
+										}
 									}
+									free(tmp);
+									free(sval);
+
 								}
-								free(tmp);
-								free(sval);
-
 							}
+
+						}
+						if(((packet->type & cType_MASK) == cType_vu) && ((packet->type & cPeer_MASK) == cPeer_recorder)){
+							vuNInstance *instance;
+							uint8_t chanCnt;
+							size_t bytes, size;
+							/* allocate container for all the vu data */
+							bytes = sizeof(vuNContainer) - 1;
+							bytes = bytes + (sizeof(vuNInstance) - 1);
+							chanCnt = packet->dataSize / sizeof(vuNData);
+							bytes = bytes + (chanCnt * sizeof(vuNData));
+							if(bytes < 0xFFFF){
+								if(vuSize < bytes){
+									// resize the reusable vuRecorder if needed
+									if(vuRecord)
+										free(vuRecord);
+									vuRecord = (vuNContainer *)calloc(1, bytes);
+									vuSize = bytes;
+								}
+								vuRecord->count = 1;
+								instance = (vuNInstance *)vuRecord->data;
+								instance->uid = htonl(packet->peer);
+								instance->count = chanCnt;
+								memcpy(instance->data, packet->data, packet->dataSize);
+								size = packet->dataSize + (sizeof(vuNInstance) + sizeof(vuNContainer) - 2);
+								notifyMakeEntry(nType_vu, vuRecord, size);
+							}
+
+						}
+						if(((packet->type & cType_MASK) == cType_end) && ((packet->type & cPeer_MASK) == cPeer_recorder)){
+	fprintf(stderr, "ctlQueInWatcher: rec end uid=%08x\n", packet->peer);
+							releaseMetaRecord(packet->peer);
 						}
 
+						free(packet);
 					}
-					if(((packet->type & cType_MASK) == cType_vu) && ((packet->type & cPeer_MASK) == cPeer_recorder)){
-						vuNContainer *vuRecord;
-						vuNInstance *instance;
-						uint8_t chanCnt;
-						size_t bytes, size;
-						/* allocate container for all the vu data */
-						bytes = sizeof(vuNContainer) - 1;
-						bytes = bytes + (sizeof(vuNInstance) - 1);
-						chanCnt = packet->dataSize / sizeof(vuNData);
-						bytes = bytes + (chanCnt * sizeof(vuNData));
-						if(bytes < 0xFFFF){
-							vuRecord = (vuNContainer *)calloc(1, bytes);
-							vuRecord->count = 1;
-							instance = (vuNInstance *)vuRecord->data;
-							instance->uid = htonl(packet->peer);
-							instance->count = chanCnt;
-							memcpy(instance->data, packet->data, packet->dataSize);
-							size = packet->dataSize + ((char *)instance->data - (char *)vuRecord);
-							notifyMakeEntry(nType_vu, vuRecord, size);
-						}
-						free(vuRecord);
-
-					}
-					if(((packet->type & cType_MASK) == cType_end) && ((packet->type & cPeer_MASK) == cPeer_recorder)){
-						releaseMetaRecord(packet->peer);
-					}
-
-					free(packet);
+				}else{
+					// nothing else to read
+					break;
 				}
+			}else{
+				// nothing else to read
+				break;
 			}
 		}
 		pthread_mutex_lock(&mixEngine->ctlInQueueMutex);
-        pthread_cond_wait(&mixEngine->ctlInQueueSemaphore, &mixEngine->ctlInQueueMutex);
-        pthread_mutex_unlock(&mixEngine->ctlInQueueMutex);
-    }
+		pthread_cond_wait(&mixEngine->ctlInQueueSemaphore, &mixEngine->ctlInQueueMutex);
+		pthread_mutex_unlock(&mixEngine->ctlInQueueMutex);
+	}
+	if(vuRecord)
+		free(vuRecord);
+
 	return NULL;
 }

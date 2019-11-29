@@ -30,7 +30,7 @@
 #include <sched.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-	
+
 time_t live_event = 0;
 time_t silent_event = 0;
 char silent_tryseg = 0;
@@ -100,7 +100,6 @@ void shutdownAutomator(void){
 
 uint32_t AddItem(int pos, char *URLstr, char *adder, uint32_t adderUID){    
 	// assumes queueLock is NOT locked on entry!
-
 	queueRecord *instance, *prev;
 	uint32_t newID, adderID;
 	char *tmp;
@@ -237,11 +236,11 @@ void AddPlayer(int pos, int pNum){
 }
 
 uint32_t SplitItem(uint32_t parent, char *URLstr, unsigned char last){    
- 	// assumes queueLock is NOT locked!
+	// assumes queueLock is NOT locked!
 
 	queueRecord *instance, *parentNode;
 	LinkedListEntry *prevNode;
-    uint32_t newID;
+	uint32_t newID;
 	char *tmp;
 	float idur, pdur;
 	
@@ -373,7 +372,6 @@ fail:
 
 int LoadItem(int pos, queueRecord *qrec){    
 	// assumes queueLock is alread write locked!
-    
 	uint32_t UID, result;
 	inChannel *instance;
 	int i;
@@ -388,19 +386,18 @@ int LoadItem(int pos, queueRecord *qrec){
 			return -2; // missing delete
 	}
 
-    if(qrec->status & status_running){
-        // it's a task or play list that is running... do nothing and don't delete it
-        return -3;  //don't delete
-    }
-
-    if(qrec->player){
-        // already in a player!
-        return (-4 - (qrec->player-1));  //don't delete
-    }
+	if(qrec->status & status_running){
+		// it's a task or play list that is running... do nothing and don't delete it
+		return -3;  //don't delete
+	}
+	if(qrec->player){
+		// already in a player!
+		return (-4 - (qrec->player-1));  //don't delete
+	}
     
 	if(!qrec->UID)
 		// No meta Data to base load on...
-        return -2;  //delete
+		return -2;  //delete
     
 	tmp = GetMetaData(qrec->UID, "Type", 0);
 	if(!strcmp(tmp, "stop")){
@@ -409,13 +406,13 @@ int LoadItem(int pos, queueRecord *qrec){
 		return -3;  //don't delete
 	}
 	if(!strcmp(tmp, "filepl") || !strcmp(tmp, "playlist")){
-        // it's a playlist
+		// it's a playlist
 		plTaskRunner(qrec->UID);
-        return -3;  //don't delete
+		return -3;  //don't delete
 	}
 	free(tmp);
 
-    // load player
+	// load player
 	tmp = GetMetaData(qrec->UID, "URL", 0);
 	i = -1;  // load from next available player
 	if(result = LoadPlayer(&i, tmp, qrec->UID, 0)){
@@ -462,7 +459,7 @@ int LoadItem(int pos, queueRecord *qrec){
 void UnloadItem(int pos, queueRecord *qrec){    
 	// assumes queueLock is alread write locked!
 
- 	uint32_t c, cmax;
+	uint32_t c, cmax;
 	inChannel *instance;
 	jack_port_t **port;
 	
@@ -504,11 +501,11 @@ void MoveItem(int sourcePos, int destPos, unsigned char clearTimes){
 	uint32_t UID;
 	inChannel *instance;
     
-    if(sourcePos < 0)
-        return;
+	if(sourcePos < 0)
+		return;
      
-    if(sourcePos == destPos)
-        return;
+	if(sourcePos == destPos)
+		return;
         
 	fromRec = getNthNode((LinkedListEntry *)&queueList, sourcePos+1);
 	if(!fromRec)
@@ -554,14 +551,14 @@ void MoveItem(int sourcePos, int destPos, unsigned char clearTimes){
 }
 
 void setSegTimes(inChannel *thisp, inChannel *nextp, int nextNum){
-    double seginT, segoutT, dur, defseg;
+	double seginT, segoutT, dur, defseg;
 	int t_priority, n_priority;
 	char *tmp;
 	   
-    if(thisp == NULL)
-        return;
-    if(nextp == NULL)
-        return;  
+	if(thisp == NULL)
+		return;
+	if(nextp == NULL)
+		return;  
         
 	// NOTE: Negative number forces imediate segue.
 	
@@ -614,160 +611,19 @@ void setSegTimes(inChannel *thisp, inChannel *nextp, int nextNum){
 	thisp->posSeg = (float)segoutT;
 	thisp->fadePos = GetMetaFloat(thisp->UID, "FadeOut", NULL);
 }
-/*
-void DeleteFromLists(ARPlayer *instance)
-{
-    int	pNumber;
-	UInt32 x;
-	list<UInt32> loglist;
-        
-	// assumes list mutex is write locked and task mutex is read locked
-	
-	if(instance == NULL)
-		return;
-	// check play list, delete if found
-	for(x=0; x<PlayList.size(); x++){
-		if(PlayList.at(x) == instance){
-			vector<ARPlayer*>::iterator lp = PlayList.begin();
-			advance(lp, x);
-			PlayList.erase(lp);
-			// delete from logs if logID is set and "Added" is true in the log entry 
-			loglist.push_front(atol(GetMetaData(instance->UID, "logID").c_str()));
-			// clear the LogID property
-			SetMetaData(instance->UID, "logID", "0");
-			// decrement the meta user count, which was incremented when the meta data was added to the play list
-			deleteMetaRecord(instance->UID);
-			plRev++;
-			// send out notifications
-			struct notifyData	data;
-			data.senderID = getSenderID();
-			data.reference = 0;
-			data.value.iVal = 0;
-			Notifier->MakeEntry(nType_status, &data, sizeof(data), -1);
-			break;
-		}
-	}
-	
-	if((instance->status & status_delete) || ((instance->status & status_remove) && instance->Managed)){
-		// check player list, delete if found
-		if((pNumber = instance->pNum) > -1){
-			if(pLocks[pNumber]->writeLock(false, "DeleteFromLists")){
-				gLockedMem->pList[pNumber] = NULL;
-				pLocks[pNumber]->writeUnlock();
-			}else{
-				// can't delete right now... player is locked
-				// we will try again next time, as the delete flags are still set.
-				return;
-			}
-		}
 
-		// check task list, delete if found
-		TaskItem *taskIns;
-		for(x=0; x<TaskList.size(); x++){
-			taskIns = TaskList.at(x);
-			if(taskIns->UID == instance->UID){
-				if(taskIns->pid)
-					kill(taskIns->pid, SIGKILL);
-				taskIns->delUID = 0;
-				taskIns->timeOut = 0;
-				break;
-			}
-		}
-		struct notifyData	data;
-		data.senderID = getSenderID();
-		data.reference = EndianS32_NtoB(instance->UID);
-		data.value.iVal = 0;
-		Notifier->MakeEntry(nType_del, &data, sizeof(data), -1);
-		delete instance;
-	}else{
-		// not fully deleting... just clear the remove flag
-		instance->status = instance->status & ~status_remove;
-		// and reset fade and zero Segout
-		instance->fade = atof(GetMetaData(instance->UID, "FadeOut").c_str());
-	}
-	
-	// remove deleted playlist items (if any) from database log
-	loglist.sort();
-	loglist.unique();
-	// delete the items
-	while(!loglist.empty()){
-		TaskItem *task;
-		task = new TaskItem("Delete Log Entry", DeleteLogEntry, (void*)loglist.front(), 0L, 180L, true); // 3  minute timeout
-		loglist.pop_front();
-	}
-}
-
-void CheckListsForDeletion(void)
-{	
-	ARPlayer *player;
-    int	i;
-    UInt32 x;
-	unsigned char changed;
-    list<ARPlayer*> dlist;
-			
-	// assumes list mutex is write locked and task mutex is read locked
-
-	for(i=0; i<gLockedMem->inBus; i++){
-		if(pLocks[i]->readLock(false)){
-			player = gLockedMem->pList[i];
-			if(player != NULL){
-				if((player->status & status_deleteWhenDone) && (player->status & status_hasPlayed) && !(player->status & status_playing))
-					player->status = player->status | status_delete;
-				if((player->status & status_delete) || (player->status & status_remove)){
-					//add items to list for deletion
-					dlist.push_front(player);
-				}
-			}
-			pLocks[i]->readUnlock();
-		}
-	}
-	// check play list, delete if found
-	for(x=0; x<PlayList.size(); x++){
-		player = PlayList.at(x);
-		if(player != NULL){
-			if((player->status & status_remove) || (player->status & status_delete)){
-				//add items to list for deletion
-				dlist.push_front(player);
-			}
-		}
-	}
-	
-	// remove duplicate items
-	dlist.sort();
-	dlist.unique();
-
-	// delete the items
-	changed = false;	
-	while(!dlist.empty()){
-		player = dlist.front();
-		DeleteFromLists(player);
-		dlist.pop_front();
-		changed = true;
-	}
-
-	if(changed){
-		plRev++;
-		// send out notifications
-		struct notifyData	data;
-		data.senderID = getSenderID();
-		data.reference = 0;
-		data.value.iVal = 0;
-		Notifier->MakeEntry(nType_status, &data, sizeof(data), -1);
-	}
-}
-*/
 void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float *sbtime, float remtime, unsigned char *isPlaying){
 	// assumes queueLock is alread write locked!
-    inChannel *thisIn, *nextIn;
-    queueRecord *instance, *next;
-    int	result, nextp, priority;
-    uint32_t status, busses;
+	inChannel *thisIn, *nextIn;
+	queueRecord *instance, *next;
+	int result, nextp, priority;
+	uint32_t status, busses;
 	double targetTime, dur;
 	unsigned char force;
 	char *tmp, *type;
-    
-    *firstp = -1;
-    force = 0;
+
+	*firstp = -1;
+	force = 0;
 	next = NULL;
 	priority = 0;
 	targetTime = 0.0;
@@ -903,8 +759,8 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 
 	type = GetMetaData(instance->UID, "Type", 0);
 	if(!strcmp(type, "task")){
-	   // If this is a task, skip it... use the the next returned current player as the returned current player 
-	   *firstp = nextp;
+		// If this is a task, skip it... use the the next returned current player as the returned current player 
+		*firstp = nextp;
 	}
 	
 	// set seg times into next item, if next item is loaded
@@ -1126,7 +982,7 @@ void PlayListFiller(uint32_t *lastFillID, int *listPos){
 	if(ID = dbGetFillID(&fillTime)){
 		// update filling string
 		localtime_r(&endTime, &timeRec);
-		if(strftime(buf, sizeof buf, "%H:%M--", & timeRec)){
+		if(strftime(buf, sizeof buf, "%H:%M--", &timeRec)){
 			tmp = dbGetItemName(ID);
 			pthread_rwlock_wrlock(&queueLock);
 			str_setstr(&fillStr, buf);
@@ -1150,7 +1006,7 @@ void PlayListFiller(uint32_t *lastFillID, int *listPos){
 		if(missing || (!strlen(type))){
 			// no type or missing error!
 			localtime_r(&endTime, &timeRec);
-			if(strftime(buf, sizeof buf, "%H:%M--", & timeRec)){
+			if(strftime(buf, sizeof buf, "%H:%M--", &timeRec)){
 				pthread_rwlock_wrlock(&queueLock);
 				str_setstr(&fillStr, buf);
 				str_appendstr(&fillStr, "[error]");
@@ -1178,7 +1034,7 @@ void PlayListFiller(uint32_t *lastFillID, int *listPos){
 			if(err == 0){
 				tmp = istr(*listPos);
 				pthread_rwlock_wrlock(&queueLock);
-				str_appendstr(&fillStr, "(");
+				str_appendstr(&fillStr, " (");
 				str_appendstr(&fillStr, tmp);
 				str_appendstr(&fillStr, ")");
 				pthread_rwlock_unlock(&queueLock);
@@ -1226,6 +1082,8 @@ void PlayListFiller(uint32_t *lastFillID, int *listPos){
 			pthread_rwlock_unlock(&queueLock);
 		}
 	}
+	if(url)
+		free(url);
 }
 
 void AutomatorTask(void){        
@@ -1267,22 +1125,41 @@ void AutomatorTask(void){
 	}
 }
 
+
+void checkRecorders(void){
+	unsigned int i;
+	uint32_t UID;
+	long ts;
+	unsigned char empty;
+
+	i = 0;
+	while(UID = FindUidForKeyAndValue("Type", "encoder", i)){
+		ts = GetMetaInt(UID, "TimeStamp", &empty);
+		if(!empty && ((time(NULL) - ts) > 30)){
+			// We have not heard from this recorder for more than 30 seconds, delete it
+			releaseMetaRecord(UID);
+			continue;
+		}
+		i++;
+	}
+}
+
 void QueManagerTask(unsigned char *stop){    
-    unsigned char isPlaying, lastState;
-    int firstp;
-    float sbtime;
-    char *tmp;
+	unsigned char isPlaying, lastState;
+	int firstp;
+	float sbtime;
+	char *tmp;
 	inChannel *instance;
-    struct timespec abstime;
-    ProgramLogRecord *entryRec;
-    taskRecord *prevt, *trec;
-    
-    lastState = 0;
-    
-    initAutomator();
-    
-    // loop until st
-    while(!(*stop)){
+	struct timespec abstime;
+	ProgramLogRecord *entryRec;
+	taskRecord *prevt, *trec;
+
+	lastState = 0;
+
+	initAutomator();
+
+	// loop until st
+	while(!(*stop)){
 		// check for auto-live mode timeout
 		if(autoLiveTimeout == 0)
 			autoLiveTimeout = 1200;	// default time out is 20 minutes
@@ -1305,9 +1182,9 @@ void QueManagerTask(unsigned char *stop){
 		/* clean up any finish child processes */
 		waitpid(-1, NULL, WNOHANG);
 		
-        isPlaying = 0;
-        firstp = -1;
-        sbtime = 0;
+		isPlaying = 0;
+		firstp = -1;
+		sbtime = 0;
 
 		pthread_rwlock_wrlock(&queueLock);
 		// recursively iterate through each playlist item doing what need to be done with each	
@@ -1316,7 +1193,7 @@ void QueManagerTask(unsigned char *stop){
 
 		// perform automation functions: inserts, fills, re-orders
 		AutomatorTask();
-                
+
 		if(!plRunning){
 			if((autoState == auto_unatt) || ((autoState == auto_live) && 
 					((GetMetaInt(0, "auto_live_flags", NULL) & live_stop) == 0))){
@@ -1410,43 +1287,23 @@ void QueManagerTask(unsigned char *stop){
 			prevt = trec;
 		}
 		pthread_rwlock_unlock(&taskLock);
-		    							
-		// Wait for a signal to check the list again or a time out
-        abstime.tv_nsec = 0;
-        abstime.tv_sec = time(NULL) + 2; // set time-out for 2 seconds from now
 
-        pthread_mutex_lock(&mgrMutex);
-        pthread_cond_timedwait(&mgrSemaphore, &mgrMutex, &abstime);
-        pthread_mutex_unlock(&mgrMutex);
-    }
+		// check for external recorders that are no longer connected (probebly crashed)
+		checkRecorders();
+		
+		// Wait for a signal to check the list again or a time out
+		abstime.tv_nsec = 0;
+		abstime.tv_sec = time(NULL) + 2; // set time-out for 2 seconds from now
+
+		pthread_mutex_lock(&mgrMutex);
+		pthread_cond_timedwait(&mgrSemaphore, &mgrMutex, &abstime);
+		pthread_mutex_unlock(&mgrMutex);
+	}
 	shutdownAutomator();
 }
 
 void wakeQueManager(void){
 	pthread_mutex_lock( &mgrMutex );
-    pthread_cond_signal( &mgrSemaphore );
-    pthread_mutex_unlock( &mgrMutex );
+	pthread_cond_signal( &mgrSemaphore );
+	pthread_mutex_unlock( &mgrMutex );
 }
-
-/*
-void checkRecorders(void)
-{
-	Recorder *rec;
-	
-	// deletes any recorders that have timed out
-	if(rMutex->writeLock(false, "checkRecorders")){
-		// only execute if we got the writelock.
-		for(UInt32 idx=0; idx<RecList.size(); idx++){
-			rec = RecList.at(idx);
-			if(rec->status & rec_done){
-				vector<Recorder*>::iterator lp = RecList.begin();
-				advance(lp, idx);
-				RecList.erase(lp);
-				delete rec;
-				idx--;
-			}
-		}
-		rMutex->writeUnlock();
-	}
-}
-*/

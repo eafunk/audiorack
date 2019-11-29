@@ -114,15 +114,15 @@ char *getFilePrefixPoint(char **file){
 
 char GetFileMD5(const char *file, unsigned char *result){
 	/* note: result must point to a 16 byte array */
-    FILE *fp;
+	FILE *fp;
 	MD5_CTX md5;
-    unsigned char block[8192];
+	unsigned char block[8192];
 	size_t len, b1, b2;
 	int bSize;
-     
+
 	// get md5 hash of the 4K blocks 1/3 and 2/3 into the file     
-    if((fp = fopen(file, "r")) == NULL)
-        return 0;
+	if((fp = fopen(file, "r")) == NULL)
+		return 0;
 	// go to the end of the file
 	fseek(fp, 0, SEEK_END);
 	len = ftell(fp) / 3;
@@ -142,7 +142,7 @@ char GetFileMD5(const char *file, unsigned char *result){
 
 char GetFileCRC(const char *file, unsigned char *result){
 	/* note: result must point to a 16 byte array */
-    FILE *fp;
+	FILE *fp;
 	unsigned char blockA[4096], blockB[4096], blockC[4096];
 	size_t fsize, len, b1, b2, b3;
 	int sizeA, sizeB, sizeC;
@@ -154,8 +154,8 @@ char GetFileCRC(const char *file, unsigned char *result){
 	};
 	
 	// get alternate hash of the 4K blocks 1/4, 1/2 and 3/4 into the file  
-    if((fp = fopen(file, "r")) == NULL)
-        return 0;
+	if((fp = fopen(file, "r")) == NULL)
+		return 0;
 	// go to the end of the file
 	fseek(fp, 0, SEEK_END);
 	fsize = ftell(fp);
@@ -713,12 +713,12 @@ void handle_discovered(GstDiscoverer *discoverer, GstDiscovererInfo *info, uint3
 
 void GetGstDiscoverMetaData(uint32_t UID, const char *url_str){
 	GstDiscovererInfo *info;
-//	GstDiscoverer *discoverer;
+// GstDiscoverer *discoverer;
 		
 	pthread_mutex_lock(&discoverMutex);
 
-//	discoverer = gst_discoverer_new(5 * GST_SECOND, NULL);
-//	g_object_ref(discoverer);
+// discoverer = gst_discoverer_new(5 * GST_SECOND, NULL);
+// g_object_ref(discoverer);
 		
 	if(info = gst_discoverer_discover_uri(discoverer, url_str, NULL)){
 		handle_discovered(discoverer, info, UID);
@@ -738,7 +738,7 @@ void GetInputMetaData(uint32_t UID, const const char *url){
 	inputRecord *rec = NULL;
 	char *name, *tmp;
 	
-    if(tmp = str_NthField(url, ":///", 1)){
+	if(tmp = str_NthField(url, ":///", 1)){
 		name = uriDecode(tmp);
 		free(tmp);
 		pthread_rwlock_rdlock(&inputLock);		
@@ -1339,7 +1339,6 @@ uint32_t LoadPlayer(int *pNum, const char *url_str, uint32_t UID, unsigned char 
 	
 	if((*pNum >= 0) && (!checkPnumber(*pNum)))
         return 0;
-
 	if(type = str_NthField(url_str, ":", 0)){
 		// make lower case
 		for(idx = 0; idx < strlen(type); idx++)
@@ -1460,6 +1459,7 @@ bail:
 	if(p > -1){
 		lastp = p;
 	}
+	
     return result;
 }
 

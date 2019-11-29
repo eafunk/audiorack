@@ -59,10 +59,10 @@ void dbi_instance_free(void *value){
 void make_dbi_keys(){	
 	// only dbi_inst needs a distructor function set since both inst and conn are set up 
 	// together, should be freed together to ensure the proper order for freeing: conn first then inst.
-    (void) pthread_key_create(&gthread_dbi_inst, dbi_instance_free);
-    (void) pthread_key_create(&gthread_dbi_conn, NULL);
-    pthread_setspecific(gthread_dbi_inst, NULL);
-    pthread_setspecific(gthread_dbi_conn, NULL);
+	(void) pthread_key_create(&gthread_dbi_inst, dbi_instance_free);
+	(void) pthread_key_create(&gthread_dbi_conn, NULL);
+	pthread_setspecific(gthread_dbi_inst, NULL);
+	pthread_setspecific(gthread_dbi_conn, NULL);
 }
 
 dbi_inst get_thread_dbi(dbi_conn *conn){
@@ -215,8 +215,8 @@ dbi_conn dbSetupConnection(dbi_inst instance, char dbName){
 
 unsigned char MakeLogEntry(ProgramLogRecord *rec){
 	dbi_inst instance = NULL;
-    dbi_conn conn = NULL;
-    dbi_result result = NULL;
+	dbi_conn conn = NULL;
+	dbi_result result = NULL;
 	char *Name = NULL;
 	char *Artist = NULL;
 	char *Album = NULL;
@@ -327,8 +327,8 @@ cleanup:
 
 unsigned char updateLogMeta(uint32_t uid){
 	dbi_inst instance = NULL;
-    dbi_conn conn = NULL;
-    dbi_result result = NULL;
+	dbi_conn conn = NULL;
+	dbi_result result = NULL;
 	unsigned char ret_val = 0;
 	char *Name = NULL;
 	char *Artist = NULL;
@@ -405,8 +405,8 @@ cleanup:
 void DeleteLogEntry(void *inRef){
 	uint32_t *logID;
 	dbi_inst instance = NULL;
-    dbi_conn conn = NULL;
-    dbi_result result = NULL;
+	dbi_conn conn = NULL;
+	dbi_result result = NULL;
 	char *prefix = NULL;
 	struct dbErr errRec;
 	taskRecord *parent = (taskRecord *)inRef;
@@ -437,8 +437,8 @@ cleanup:
 
 short dbPLGetNextMeta(uint32_t index, uint32_t ID, uint32_t UID){
 	dbi_inst instance = NULL;
-    dbi_conn conn = NULL;
-    dbi_result db_result = NULL;
+	dbi_conn conn = NULL;
+	dbi_result db_result = NULL;
 	short result;
 	const char *valStr;
 	const char *propStr;
@@ -745,8 +745,8 @@ cleanup:
 
 char *dbGetInfo(const char *property){
 	dbi_inst instance = NULL;
-    dbi_conn conn = NULL;
-    dbi_result db_result = NULL;
+	dbi_conn conn = NULL;
+	dbi_result db_result = NULL;
 	const char *Str;
 	char *prefix = NULL;
 	char *result;
@@ -778,7 +778,7 @@ char *dbGetInfo(const char *property){
 		goto cleanup;
 	}
 	if(dbi_result_next_row(db_result)){ 
-        Str = (const char*)dbi_result_get_string(db_result, "Value");
+		Str = (const char*)dbi_result_get_string(db_result, "Value");
 		if(Str)
 			str_setstr(&result, Str);
 	}else{
@@ -814,16 +814,16 @@ unsigned int getFingerprint(void){
 
 unsigned char db_initialize(struct dbErr *inRec){
 	dbi_inst instance = NULL;
-    dbi_conn conn = NULL;
-    dbi_result db_result = NULL;
-    char *dbName;
+	dbi_conn conn = NULL;
+	dbi_result db_result = NULL;
+	char *dbName;
 	char *sqlstr = NULL;
 	char *typeStr = NULL;
 	char *versionStr = NULL;
 	char *ini_file_path = NULL;
 	char *tmp = NULL;
 	FILE *fp;
-    char line[4096];
+	char line[4096];
 	struct dbErr errRec;
 	
 	errRec.message = "dbInitialize ";
@@ -868,7 +868,7 @@ unsigned char db_initialize(struct dbErr *inRec){
 	if(inRec == NULL)
 		inRec = &errRec;
 	
-    if((fp = fopen(ini_file_path, "r")) == NULL){
+	if((fp = fopen(ini_file_path, "r")) == NULL){
 		if(!versionStr || !strlen(versionStr)){
 			str_setstr(&tmp, "[database] dbInitialize: template file '");
 			str_appendstr(&tmp, ini_file_path);
@@ -878,7 +878,7 @@ unsigned char db_initialize(struct dbErr *inRec){
 		}else
 			errRec.flag = 0;
 		goto cleanup;
-    }	
+	}	
 	
 	errRec.flag = 0;
 	dbi_conn_error_handler(conn, HandleDBerror, (void *)(inRec));	
@@ -935,7 +935,7 @@ float GaussianNumber(void){
 		x = drand48();
 		//x = (rnd * 2.0) -1.0
 		y = drand48();
-        //  y = (rnd * 2.0) -1.0
+		//  y = (rnd * 2.0) -1.0
 		r = powf(x, 2) + powf(y, 2);
 	}while((r > 1.0) || (r == 0.0));
 	r = sqrtf(r);
@@ -949,11 +949,11 @@ static inline float RandomNumber(void){
 }
 
 void dbPick(taskRecord *parent){
-    dbi_result result;
+	dbi_result result;
 	dbi_result lastResult;
 	dbi_result prevResult;
 	dbi_inst instance = NULL;
-    dbi_conn conn = NULL;
+	dbi_conn conn = NULL;
 	unsigned int *id_array;
 	unsigned int i;
 	unsigned long field;
@@ -963,7 +963,6 @@ void dbPick(taskRecord *parent){
 	unsigned char last;
 	uint32_t newUID;
 	int size;
-	char *prefix = NULL;
 	char *mode = NULL;
 	char *query;
 	char *qStr;
@@ -994,8 +993,6 @@ void dbPick(taskRecord *parent){
 			return;
 		}
 	}
-	prefix = GetMetaData(0, "db_prefix", 0);
-
 	field = 0;
 	lastResult = NULL;
 
@@ -1025,6 +1022,7 @@ void dbPick(taskRecord *parent){
 		free(single);
 		single = str_NthField(qStr, ";", field);
 	}
+	free(qStr);
 	if(single)
 		free(single);
 		
@@ -1745,8 +1743,8 @@ void folderPick(taskRecord *parent){
 
 uint32_t dbGetFillID(time_t *when){
 	dbi_inst instance = NULL;
-    dbi_conn conn = NULL;
-    dbi_result db_result;
+	dbi_conn conn = NULL;
+	dbi_result db_result;
 	char *sql = NULL;
 	char *prefix = NULL;
 	char *loc = NULL;
@@ -1811,7 +1809,7 @@ uint32_t dbGetFillID(time_t *when){
 	str_ReplaceAll(&sql, "[PFX]", prefix);
 
 	// perform the sql query function
-    db_result = dbi_conn_queryf(conn, sql, loc, loc, tm_rec.tm_mday, tm_rec.tm_wday+1, 
+	db_result = dbi_conn_queryf(conn, sql, loc, loc, tm_rec.tm_mday, tm_rec.tm_wday+1, 
 									tm_rec.tm_mon+1, tm_rec.tm_hour, tm_rec.tm_hour, tm_rec.tm_min);
 		
 	if(db_result == NULL)
@@ -1822,7 +1820,7 @@ uint32_t dbGetFillID(time_t *when){
 		goto cleanup;
 	}
 	if(dbi_result_next_row(db_result)){ 
-        result = dbi_result_get_uint(db_result, "Item");
+		result = dbi_result_get_uint(db_result, "Item");
 		hr = dbi_result_get_int(db_result, "Hour");
 		min = dbi_result_get_int(db_result, "Minute");
 		// update when pointer to the unix time when the fill item was schedule to start
@@ -1847,8 +1845,8 @@ cleanup:
 
 char *dbGetItemName(uint32_t ID){
 	dbi_inst instance = NULL;
-    dbi_conn conn = NULL;
-    dbi_result db_result;
+	dbi_conn conn = NULL;
+	dbi_result db_result;
 	const char *Str;
 	char *prefix = NULL;
 	char *result = NULL;
@@ -1868,7 +1866,7 @@ char *dbGetItemName(uint32_t ID){
 	dbi_conn_error_handler(conn, HandleDBerror, (void *)(&errRec));	
 	
 	// perform the sql query function
-    db_result = dbi_conn_queryf(conn, "SELECT Name FROM %stoc WHERE ID = %lu", prefix, ID);
+	db_result = dbi_conn_queryf(conn, "SELECT Name FROM %stoc WHERE ID = %lu", prefix, ID);
 	if(db_result == NULL)
 		goto cleanup;
 	// get first record (should be the only record)
@@ -1877,7 +1875,7 @@ char *dbGetItemName(uint32_t ID){
 		goto cleanup;
 	}
 	if(dbi_result_next_row(db_result)){ 
-        Str = (const char*)dbi_result_get_string(db_result, "Name");
+		Str = (const char*)dbi_result_get_string(db_result, "Name");
 		if(Str)
 			str_setstr(&result, Str);
 	}
@@ -1909,8 +1907,10 @@ void dbMacroReplace(char **query){
 		str_insertstr(&include, ",", 0);
 		str_insertstr(&include, (tmp = GetMetaData(0, "db_loc", 0)), 0);
 		free(tmp);
-	}else
+	}else{
+		free(include);
 		include  = GetMetaData(0, "db_loc", 0);
+	}
 	
 	str_ReplaceAll(query, "[loc-id]", (tmp = GetMetaData(0, "db_loc", 0)));
 	free(tmp);
@@ -1947,7 +1947,7 @@ uint32_t dbGetNextScheduledItem(dbi_result *db_result, time_t *targetTime, short
 	struct tm from_rec, to_rec;
 	short hr, min;
 	struct dbErr errRec;
-    dbi_conn conn = NULL;
+	dbi_conn conn = NULL;
 	dbi_inst instance;
 	
 	if(difftime(to_t, from_t) > 10800)
@@ -2119,8 +2119,8 @@ cleanup:
 
 void dbSaveFilePos(uint32_t UID, float position){
 	dbi_inst instance = NULL;
-    dbi_conn conn = NULL;
-    dbi_result db_result;
+	dbi_conn conn = NULL;
+	dbi_result db_result;
 	uint32_t ID;
 	char *prefix, *tmp;
 	struct dbErr errRec;
@@ -2151,8 +2151,8 @@ void dbSaveFilePos(uint32_t UID, float position){
 
 char *dbGetReqestComment(time_t theTime){
 	dbi_inst instance = NULL;
-    dbi_conn conn = NULL;
-    dbi_result db_result;
+	dbi_conn conn = NULL;
+	dbi_result db_result;
 	const char *Str;
 	char *prefix = NULL;
 	char *loc = NULL;
@@ -2176,7 +2176,7 @@ char *dbGetReqestComment(time_t theTime){
 	dbi_conn_error_handler(conn, HandleDBerror, (void *)(&errRec));	
 	
 	// perform the sql query function -- first look for comments posted after lastTime
-    db_result = dbi_conn_queryf(conn, "SELECT comment, ID FROM %srequest WHERE Item = 0 AND (Location = %s OR Location = 0) AND Time <= FROM_UNIXTIME(%ld) ORDER BY Time ASC LIMIT 1",
+	db_result = dbi_conn_queryf(conn, "SELECT comment, ID FROM %srequest WHERE Item = 0 AND (Location = %s OR Location = 0) AND Time <= FROM_UNIXTIME(%ld) ORDER BY Time ASC LIMIT 1",
 								prefix, loc, theTime);
 	if(db_result != NULL){
 		// get first record (should be the only record)
@@ -2198,7 +2198,7 @@ char *dbGetReqestComment(time_t theTime){
 		goto cleanup;
 		
 	// no comments... get one of the comments out of our pool
-    db_result = dbi_conn_queryf(conn, "SELECT comment FROM %srequest WHERE Item = 0 AND (Location = %s OR Location = 0) AND Time > FROM_UNIXTIME(%lu)",
+	db_result = dbi_conn_queryf(conn, "SELECT comment FROM %srequest WHERE Item = 0 AND (Location = %s OR Location = 0) AND Time > FROM_UNIXTIME(%lu)",
 								prefix, loc, theTime);
 	if(db_result != NULL){
 		if(count = dbi_result_get_numrows(db_result)){
@@ -2225,8 +2225,8 @@ cleanup:
 
 char *dbGetCurrentMSG(void){
 	dbi_inst instance = NULL;
-    dbi_conn conn = NULL;
-    dbi_result db_result;
+	dbi_conn conn = NULL;
+	dbi_result db_result;
 	const char *Str;
 	char *prefix = NULL;
 	char *loc = NULL;
@@ -2248,7 +2248,7 @@ char *dbGetCurrentMSG(void){
 	dbi_conn_error_handler(conn, HandleDBerror, (void *)(&errRec));	
 	
 	// perform the sql query function -- first look for comments posted after lastTime
-    db_result = dbi_conn_queryf(conn, "SELECT %smeta.Value AS MSG FROM %slogs, %smeta WHERE %slogs.Item = %smeta.ID AND %smeta.Parent = '%stoc' AND %smeta.Property = 'SCURL' AND %slogs.Location = %s AND (%slogs.Added & 1) <> 1 ORDER BY %slogs.Time DESC LIMIT 1",
+	db_result = dbi_conn_queryf(conn, "SELECT %smeta.Value AS MSG FROM %slogs, %smeta WHERE %slogs.Item = %smeta.ID AND %smeta.Parent = '%stoc' AND %smeta.Property = 'SCURL' AND %slogs.Location = %s AND (%slogs.Added & 1) <> 1 ORDER BY %slogs.Time DESC LIMIT 1",
 								prefix, prefix, prefix, prefix, prefix, prefix, prefix, prefix, prefix, loc, prefix, prefix);
 	if(db_result != NULL){
 		// get first record (should be the only record)
@@ -2275,8 +2275,8 @@ cleanup:
 
 uint32_t IDSearchArtistAlbumTitle(const char *Artist, const char *Album, const char *Title){
 	dbi_inst instance = NULL;
-    dbi_conn conn = NULL;
-    dbi_result result;
+	dbi_conn conn = NULL;
+	dbi_result result;
 	uint32_t recID;
 	char *prefix = NULL;
 	char *encArtist = NULL;
@@ -2307,7 +2307,7 @@ uint32_t IDSearchArtistAlbumTitle(const char *Artist, const char *Album, const c
 	dbi_conn_quote_string(conn, &encTitle);
 
 	// perform the sql query function
-    result = dbi_conn_queryf(conn, "SELECT %stoc.ID FROM %stoc, %sfile, %sartist, %salbum WHERE %sArtist.ID = %sfile.artist "
+	result = dbi_conn_queryf(conn, "SELECT %stoc.ID FROM %stoc, %sfile, %sartist, %salbum WHERE %sArtist.ID = %sfile.artist "
 			"AND %salbum.ID = %sfile.album AND %stoc.Name = %s AND %sartist.Name = %s AND %salbum.Name = %s LIMIT 1", 
 			prefix, prefix, prefix, prefix, prefix, prefix, prefix, prefix, prefix, prefix, encTitle, prefix, encArtist, prefix, encAlbum);
 	if(result == NULL)
@@ -2486,7 +2486,7 @@ char *FindFromMeta(uint32_t UID){
 }
 
 void GetdbTaskMetaData(uint32_t UID, uint32_t recID, dbi_conn conn){
-    dbi_result result;
+	dbi_result result;
 	const char *Key, *Val;
 	char *tmp;
 	char *prefix;
@@ -2499,7 +2499,7 @@ void GetdbTaskMetaData(uint32_t UID, uint32_t recID, dbi_conn conn){
 	prefix = GetMetaData(0, "db_prefix", 0);
 			
 	// perform the sql query function
-    result = dbi_conn_queryf(conn, "SELECT * FROM %stask WHERE ID = %lu", prefix, recID);
+	result = dbi_conn_queryf(conn, "SELECT * FROM %stask WHERE ID = %lu", prefix, recID);
 	if(result == NULL){
 		SetMetaData(UID, "Missing", "1");
 		dbi_conn_error_handler(conn, NULL, NULL);
@@ -2530,7 +2530,7 @@ void GetdbTaskMetaData(uint32_t UID, uint32_t recID, dbi_conn conn){
 }
 
 int GetdbFileMetaData(uint32_t UID, uint32_t recID, dbi_conn conn, unsigned char markMissing){
-    dbi_result result;
+	dbi_result result;
 	char *prefix;
 	char *pre;
 	char *rem;
@@ -2562,7 +2562,7 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, dbi_conn conn, unsigned char
 	prefix = GetMetaData(0, "db_prefix", 0);
 	
 	// perform the sql query function
-    result = dbi_conn_queryf(conn, "SELECT * FROM %sfile WHERE ID = %lu", prefix, recID);
+	result = dbi_conn_queryf(conn, "SELECT * FROM %sfile WHERE ID = %lu", prefix, recID);
 	if(result == NULL){
 		goto cleanup;
 	}
@@ -2584,35 +2584,35 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, dbi_conn conn, unsigned char
 		
 		artID = dbi_result_get_uint(result, "Artist");
 		snprintf(buf, sizeof buf, "%u", (unsigned int)artID);
-        SetMetaData(UID, "ArtistID", buf);
+		SetMetaData(UID, "ArtistID", buf);
 		
 		albID = dbi_result_get_uint(result, "Album");
 		snprintf(buf, sizeof buf, "%u", (unsigned int)albID);
-        SetMetaData(UID, "AlbumID", buf);
+		SetMetaData(UID, "AlbumID", buf);
 		
 		Float = dbi_result_get_float(result, "Volume");
 		snprintf(buf, sizeof buf, "%0.2f", Float);
-        SetMetaData(UID, "Volume", buf);
+		SetMetaData(UID, "Volume", buf);
 		
 		Float = dbi_result_get_float(result, "SegIn");
 		snprintf(buf, sizeof buf, "%0.1f", Float);
-        SetMetaData(UID, "SegIn", buf);
+		SetMetaData(UID, "SegIn", buf);
 		
 		Float = dbi_result_get_float(result, "SegOut");
 		snprintf(buf, sizeof buf, "%0.1f", Float);
-        SetMetaData(UID, "SegOut", buf);
+		SetMetaData(UID, "SegOut", buf);
 		
 		Float = dbi_result_get_float(result, "FadeOut");
 		snprintf(buf, sizeof buf, "%0.1f", Float);
-        SetMetaData(UID, "FadeOut", buf);
+		SetMetaData(UID, "FadeOut", buf);
 		
 		Float = dbi_result_get_float(result, "Intro");
 		snprintf(buf, sizeof buf, "%0.1f", Float);
-        SetMetaData(UID, "Intro", buf);
+		SetMetaData(UID, "Intro", buf);
 		
 		Float = dbi_result_get_float(result, "Memory");
 		snprintf(buf, sizeof buf, "%0.1f", Float);
-        SetMetaData(UID, "Memory", buf);
+		SetMetaData(UID, "Memory", buf);
 		
 		ctmp = dbi_result_get_string(result, "OutCue");
 		if(ctmp) 
@@ -2620,12 +2620,12 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, dbi_conn conn, unsigned char
 		
 		uInt = dbi_result_get_uint(result, "Track");
 		snprintf(buf, sizeof buf, "%u", (unsigned int)uInt);
-        SetMetaData(UID, "Track", buf);
+		SetMetaData(UID, "Track", buf);
 
 		missing = dbi_result_get_uchar(result, "Missing");
 		snprintf(buf, sizeof buf, "%d", missing);
-        SetMetaData(UID, "Missing", buf);
-        
+		SetMetaData(UID, "Missing", buf);
+
 		ctmp = dbi_result_get_string(result, "Path");
 		if(ctmp && strlen(ctmp)){
 			SetMetaData(UID, "Path", ctmp);
@@ -2895,8 +2895,8 @@ cleanup:
 
 void GetItemMetaData(uint32_t UID, const char *url){
 	dbi_inst instance = NULL;
-    dbi_conn conn = NULL;
-    dbi_result result;
+	dbi_conn conn = NULL;
+	dbi_result result;
 	const char *Str;
 	char *prefix = NULL;
 	char *path;
@@ -2957,8 +2957,7 @@ void GetItemMetaData(uint32_t UID, const char *url){
 		goto error;
 	}
 	if(dbi_result_next_row(result)){ 
-		
-        Str = dbi_result_get_string(result, "Type");
+		Str = dbi_result_get_string(result, "Type");
 		if(Str == NULL)
 			Str = "";
 		// make lowercase
@@ -2970,13 +2969,13 @@ void GetItemMetaData(uint32_t UID, const char *url){
 		Type[idx] = 0;
 		SetMetaData(UID, "Type", Type);
 
-        Str = dbi_result_get_string(result, "Name");
+		Str = dbi_result_get_string(result, "Name");
 		if(Str == NULL)
 			Str = "[Missing Name]";
-        SetMetaData(UID, "Name", Str);
+		SetMetaData(UID, "Name", Str);
 		
-        Str = dbi_result_get_string(result, "Tag");
-        if(Str)	
+		Str = dbi_result_get_string(result, "Tag");
+		if(Str)	
 			SetMetaData(UID, "Tag", Str);
 		
 		Str = dbi_result_get_string(result, "Script");
@@ -3009,12 +3008,12 @@ void GetItemMetaData(uint32_t UID, const char *url){
 			
 		Float = dbi_result_get_float(result, "Duration");
 		snprintf(buf, sizeof buf, "%.2f", Float);
-        SetMetaData(UID, "Duration", buf);
+		SetMetaData(UID, "Duration", buf);
  
 		verylong = dbi_result_get_longlong(result, "Added");
 		snprintf(buf, sizeof buf, "%ld", verylong);
-        SetMetaData(UID, "Added", buf);
-        
+		SetMetaData(UID, "Added", buf);
+
 	}else{
 		dbi_result_free(result);
 		goto error;
@@ -3029,7 +3028,7 @@ void GetItemMetaData(uint32_t UID, const char *url){
 	}
 	
 	// perform the sql query function for custom properties
-    result = dbi_conn_queryf(conn, "SELECT * FROM %smeta WHERE Parent = '%stoc' AND ID = %lu", prefix, prefix, recID);
+	result = dbi_conn_queryf(conn, "SELECT * FROM %smeta WHERE Parent = '%stoc' AND ID = %lu", prefix, prefix, recID);
 	if(result){
 		while(dbi_result_has_next_row(result)){
 			if(dbi_result_next_row(result)){ 
@@ -3045,14 +3044,14 @@ void GetItemMetaData(uint32_t UID, const char *url){
 	}
 	dbi_conn_error_handler(conn, NULL, NULL);
 
-    if(!strcmp(Type,"file")){
+	if(!strcmp(Type,"file")){
 		// get additional meta data related to file references stored in the db
 		GetdbFileMetaData(UID, recID, conn, GetMetaInt(0, "db_mark_missing", NULL));
 		if(prefix)
 			free(prefix);
 		return;
 	}
-    if(!strcmp(Type,"task")){
+	if(!strcmp(Type,"task")){
 		// get additional meta data related to task references stored in the db
 		GetdbTaskMetaData(UID, recID, conn);
 		if(prefix)
@@ -3077,8 +3076,8 @@ error:
 
 uint32_t IDSearchMarkedFile(const char *path, const char *Hash){
 	dbi_inst instance = NULL;
-    dbi_conn conn = NULL;
-    dbi_result result = NULL;
+	dbi_conn conn = NULL;
+	dbi_result result = NULL;
 	uint32_t recID;
 	char *prefix = NULL;
 	char *encPath = NULL;
@@ -3124,8 +3123,8 @@ cleanup:
 
 void dbFileSync(ctl_session *session, unsigned char silent){
 	dbi_inst instance = NULL;
-    dbi_conn conn = NULL;
-    dbi_result db_result;
+	dbi_conn conn = NULL;
+	dbi_result db_result;
 	char *prefix;
 	const char *URL, *Path;
 	char *MSG, *tmp;
@@ -3134,7 +3133,7 @@ void dbFileSync(ctl_session *session, unsigned char silent){
 	uint32_t recID;
 	uint32_t localUID;
 	char buf[4096]; // send data buffer 
-    int sendCount;
+	int sendCount;
 	int tx_length;
 	int	result;
 	struct dbErr errRec;
@@ -3156,7 +3155,7 @@ void dbFileSync(ctl_session *session, unsigned char silent){
 	dbi_conn_error_handler(conn, HandleDBerror, (void *)(&errRec));	
 	
 	// perform the sql query function
-    db_result = dbi_conn_queryf(conn, "SELECT ID, URL, Path FROM %sfile ORDER BY URL", prefix);
+	db_result = dbi_conn_queryf(conn, "SELECT ID, URL, Path FROM %sfile ORDER BY URL", prefix);
 	if(db_result){
 		sendCount = 1;
 		count = dbi_result_get_numrows(db_result);
@@ -3237,10 +3236,10 @@ int dbHashSearchFileHeiarchy(ctl_session *session, unsigned char silent, const c
 	char *hash;
 	char *newurl = NULL;
 	unsigned int recID;
-    struct timespec timeout;
+	struct timespec timeout;
 	FTS *fts_session;
 	FTSENT *fts_entry;	
-    dbi_result db_result, db_update;
+	dbi_result db_result, db_update;
 	unsigned int localUID;
 	char *newURL = NULL;
 		
@@ -3364,8 +3363,8 @@ int dbHashSearchFileHeiarchy(ctl_session *session, unsigned char silent, const c
 
 void dbFileSearch(ctl_session *session, unsigned char silent, const char *Path, uint32_t pace){
 	dbi_inst instance = NULL;
-    dbi_conn conn = NULL;
-    dbi_result result;
+	dbi_conn conn = NULL;
+	dbi_result result;
 	char *prefix;
 	char *tmp;
 	char *path = NULL;

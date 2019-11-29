@@ -60,9 +60,9 @@ void freeDataLists(void){
 }
 
 void createSettingsRecord(const char *version){
-    uidRecord *rec;
-    
-    pthread_rwlock_wrlock(&dataLock);
+	uidRecord *rec;
+
+	pthread_rwlock_wrlock(&dataLock);
 	rec = newUIDRecord((uidRecord *)&metaList, 0, &releaseAllKV);    
 	rec->rev = 0;	// new record, revision zero
 	setValueForKey((keyValueRecord *)&rec->child, "Version", version);
@@ -71,12 +71,12 @@ void createSettingsRecord(const char *version){
 }  
     
 uint32_t createMetaRecord(const char *url, uint32_t *reqID){
-    uint32_t theID;
+	uint32_t theID;
 	static uint32_t lastID = 0;
-    uidRecord *rec = NULL;
-    
-    pthread_rwlock_wrlock(&dataLock);
-    if(reqID){
+	uidRecord *rec = NULL;
+
+	pthread_rwlock_wrlock(&dataLock);
+	if(reqID){
 		rec = newUIDRecord((uidRecord *)&metaList, *reqID, &releaseAllKV); 
 		theID = *reqID;
 	}
@@ -139,8 +139,8 @@ unsigned char MetaDoesKeyExist(uint32_t uid, const char *key){
 	uidRecord *rec;
 	
 	value = NULL;
-    pthread_rwlock_rdlock(&dataLock);
-    // find UID record
+	pthread_rwlock_rdlock(&dataLock);
+	// find UID record
 	if(rec = (uidRecord *)findNode((LinkedListEntry *)&metaList, uid, NULL, NULL))
 		// now find value for key
 		value = getValueForKey((keyValueRecord *)&rec->child, key);
@@ -158,8 +158,8 @@ char *GetMetaData(uint32_t uid, const char *key, unsigned char allowNull){
 	
 	result = NULL;
 	value = NULL;
-    pthread_rwlock_rdlock(&dataLock);
-    // find UID record
+	pthread_rwlock_rdlock(&dataLock);
+	// find UID record
 	if(rec = (uidRecord *)findNode((LinkedListEntry *)&metaList, uid, NULL, NULL))
 		// now find value for key
 		value = getValueForKey((keyValueRecord *)&rec->child, key);
@@ -178,8 +178,8 @@ long GetMetaInt(uint32_t uid, const char *key, unsigned char *isEmpty){
 	uidRecord *rec;
 	
 	result = 0;
-    pthread_rwlock_rdlock(&dataLock);
-    // find UID record
+	pthread_rwlock_rdlock(&dataLock);
+	// find UID record
 	if(rec = (uidRecord *)findNode((LinkedListEntry *)&metaList, uid, NULL, NULL))
 		// now find value for key
 		value = getValueForKey((keyValueRecord *)&rec->child, key);
@@ -199,8 +199,8 @@ double GetMetaFloat(uint32_t uid, const char *key, unsigned char *isEmpty){
 	uidRecord *rec;
 	
 	result = 0.0;
-    pthread_rwlock_rdlock(&dataLock);
-    // find UID record
+	pthread_rwlock_rdlock(&dataLock);
+	// find UID record
 	if(rec = (uidRecord *)findNode((LinkedListEntry *)&metaList, uid, NULL, NULL))
 		// now find value for key
 		value = getValueForKey((keyValueRecord *)&rec->child, key);
@@ -219,10 +219,10 @@ unsigned char SetMetaData(uint32_t uid, const char *key, const char *value){
 	
 	rec = NULL;
 	pthread_rwlock_wrlock(&dataLock);
-    // find UID record
+	// find UID record
 	if(rec = (uidRecord *)findNode((LinkedListEntry *)&metaList, uid, NULL, NULL)){
 		// now find value for key
-		setValueForKey((keyValueRecord *)&rec->child, key, value);		
+		setValueForKey((keyValueRecord *)&rec->child, key, value);
 		rec->rev++;
 	}
 	pthread_rwlock_unlock(&dataLock);
@@ -276,7 +276,7 @@ unsigned char UpdateMetaData(uint32_t uid, const char *key, const char *value){
 	
 	rec = NULL;
 	pthread_rwlock_wrlock(&dataLock);
-    // find UID record
+	// find UID record
 	if(rec = (uidRecord *)findNode((LinkedListEntry *)&metaList, uid, NULL, NULL)){
 		// now find value for key
 		if(tmp = getValueForKey((keyValueRecord *)&rec->child, key)){
@@ -311,7 +311,7 @@ unsigned char DelMetaData(uint32_t uid, const char *key){
 	 * only if the reference count is zero after the release */
 	rec = NULL;
 	pthread_rwlock_wrlock(&dataLock);
-    // find UID record
+	// find UID record
 	if(rec = (uidRecord *)findNode((LinkedListEntry *)&metaList, uid, NULL, NULL)){
 		// now find kvp record for key
 		if(kvp = getRecordForKey((keyValueRecord *)&rec->child, key)){
@@ -356,8 +356,8 @@ unsigned int GetMetaKeysAndValues(uint32_t uid, char ***keys, char ***values){
 	 * string need to be freed by the caller */
 	count = 0;
 	i = 0;
-    pthread_rwlock_rdlock(&dataLock);
-    // find UID record
+	pthread_rwlock_rdlock(&dataLock);
+	// find UID record
 	if(rec = (uidRecord *)findNode((LinkedListEntry *)&metaList, uid, NULL, NULL)){
 		// count associated kV pairs
 		if(count = countNodesAfter((LinkedListEntry *)&rec->child)){
@@ -383,9 +383,9 @@ uint32_t FindUidForKeyAndValue(const char *key, const char *value, unsigned int 
 	keyValueRecord *pair;
 	
 	result = 0;
-    pthread_rwlock_rdlock(&dataLock);
-    // find UID record
-    rec = (uidRecord *)&metaList;
+	pthread_rwlock_rdlock(&dataLock);
+	// find UID record
+	rec = (uidRecord *)&metaList;
 	while(rec = (uidRecord *)getNextNode((LinkedListEntry *)rec)){
 		if(rec->UID){
 			if(pair = getRecordForKey((keyValueRecord *)&rec->child, key)){
@@ -402,7 +402,6 @@ uint32_t FindUidForKeyAndValue(const char *key, const char *value, unsigned int 
 	pthread_rwlock_unlock(&dataLock);			
 	return result;
 }
-
 
 // Queue functions should never be called while the data lock is held 
 // unless noted otherwise
@@ -486,7 +485,7 @@ unsigned char releaseQueueEntry(uint32_t uid){
 	queueRecord *rec;
 
 	pthread_rwlock_wrlock(&queueLock);
-    // find UID record
+	// find UID record
 	if(rec = (queueRecord *)findNode((LinkedListEntry *)&queueList, uid, NULL, NULL)){
 		if(releaseQueueRecord((queueRecord *)&queueList, rec, 0)){
 			plRev++;
@@ -508,7 +507,7 @@ void retainQueueEntry(uint32_t uid){
 	queueRecord *rec;
 
 	pthread_rwlock_wrlock(&queueLock);
-    // find UID record
+	// find UID record
 	if(rec = (queueRecord *)findNode((LinkedListEntry *)&queueList, uid, NULL, NULL))
 		retainListRecord((LinkedListEntry *)rec);
 	pthread_rwlock_unlock(&queueLock);
@@ -580,7 +579,7 @@ unsigned int queueGetNextSegPos(int *thisP){
 		i--;
 	}
 	pthread_rwlock_unlock(&queueLock);
-    return pos;
+	return pos;
 }
 
 double getTargetError(double start, double target, int priority){
@@ -819,8 +818,10 @@ unsigned char getNextMovableGroup(int PLsize, itemGroupRec *firstGroup, itemGrou
 			
 			if(strlen(itemTog))
 				str_setstr(&itemTog, "");
-			if(item->UID)
+			if(item->UID){
+				free(itemTog);
 				itemTog = GetMetaData(item->UID, "Together", 0);
+			}
 			
 			stat = getQueueRecStatus(item, NULL);
 			if(stat & status_hasPlayed){

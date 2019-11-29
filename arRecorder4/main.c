@@ -1019,9 +1019,9 @@ void* handleCtlQueues(void *refCon){
 			}
 		}
 
-		/* wait for signal or timeout in 20 seconds */
+		/* wait for signal or timeout in 10 seconds */
 		gettimeofday(&tv, NULL);
-		ts.tv_sec = time(NULL) + 20;
+		ts.tv_sec = time(NULL) + 10;
 		ts.tv_nsec = 0;
 		pthread_mutex_lock(&data->ctlMutex);
 		cause = pthread_cond_timedwait(&data->ctlSemaphore, &data->ctlMutex, &ts);

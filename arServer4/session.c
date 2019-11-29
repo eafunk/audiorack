@@ -215,20 +215,20 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 	char buf[256]; /* send data buffer */
 	int tx_length;
 	unsigned char result;
-    char *arg;
-    int i;
+	char *arg;
+	int i;
 
-    //remove LF and CR at end of command
-    strtok_r(command, "\r", &session->save_pointer);
-    strtok_r(command, "\n", &session->save_pointer);
-    arg = strtok_r(command, " ", &session->save_pointer);
+	//remove LF and CR at end of command
+	strtok_r(command, "\r", &session->save_pointer);
+	strtok_r(command, "\n", &session->save_pointer);
+	arg = strtok_r(command, " ", &session->save_pointer);
 	
 	result = rError;
 	session->errMSG = "";
-    if(arg == NULL)
+	if(arg == NULL)
 		goto finish;
 	session->errMSG = "Huh?\n";	
-    // Check the arguments
+	// Check the arguments
 	if(!strcmp(arg, "close")){
 		// first parameter, connection number is in save_pointer
 		i = atoi(session->save_pointer) - 1;
@@ -254,23 +254,22 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 		result = handle_lastuid(session);
 		goto finish;
 	}
-    if(!strcmp(arg, "lastaid")) {
+	if(!strcmp(arg, "lastaid")) {
 		result = handle_lastaid(session);
 		goto finish;
 	}
-    if(!strcmp(arg, "help")) {
+	if(!strcmp(arg, "help")) {
 		result = handle_help(session);
 		goto finish;
 	}
 	if(!strcmp(arg, "exit"))
-        return 1;
-
+		return 1;
 	if(!strcmp(arg, "shutdown")){
-        quit = 1;
+		quit = 1;
 		result = rOK;
 	}
 	if(!strcmp(arg, "restart")){
-        quit = 1;
+		quit = 1;
 		restart = 1;
 		result = rOK;
 	}
@@ -286,89 +285,89 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 		result = handle_config(session);
 		goto finish;
 	}
-    if(!strcmp(arg, "info")){
+	if(!strcmp(arg, "info")){
 		result = handle_info(session);
 		goto finish;
-    }
+	}
 	if(!strcmp(arg, "attach")) {
 		result = handle_attach(session);
 		goto finish;
-    }
+	}
 	if(!strcmp(arg, "external")) {
 		result = handle_external(session);
 		goto finish;
-    }
-    if(!strcmp(arg, "play")) {
+	}
+	if(!strcmp(arg, "play")) {
 		result = handle_play(session);
 		live_event = time(NULL);
 		goto finish;
-    }
-    if(!strcmp(arg, "stop")) {
+	}
+	if(!strcmp(arg, "stop")) {
 		result = handle_stop(session);
 		live_event = time(NULL);
 		goto finish;
-    }
-    if(!strcmp(arg, "pstat")) {
+	}
+	if(!strcmp(arg, "pstat")) {
 		result = handle_pstat(session);
 		goto finish;
-    }      	
-    if(!strcmp(arg, "meters")) {
+	}
+	if(!strcmp(arg, "meters")) {
 		result = handle_meters(session);
 		goto finish;
-    }
-    if(!strcmp(arg, "fade")) {
+	}
+	if(!strcmp(arg, "fade")) {
 		result = handle_fade(session);
 		goto finish;
-    }
-    if(!strcmp(arg, "vol")) {
+	}
+	if(!strcmp(arg, "vol")) {
 		result = handle_vol(session);
 		live_event = time(NULL);
 		goto finish;
-    }
+	}
 	if(!strcmp(arg, "sender")) {
 		result = handle_sender(session);
 		goto finish;
-    }
-    if(!strcmp(arg, "next")) {
+	}
+	if(!strcmp(arg, "next")) {
 		result = handle_next(session);
 		goto finish;
-    }   
-    if(!strcmp(arg, "bus")) {
+	}   
+	if(!strcmp(arg, "bus")) {
 		result = handle_bus(session);
 		live_event = time(NULL);
 		goto finish;
-    }
-    if(!strcmp(arg, "bal")) {
+	}
+	if(!strcmp(arg, "bal")) {
 		result = handle_bal(session);
 		live_event = time(NULL);
 		goto finish;
-    }
-    if(!strcmp(arg, "mutes")){
+	}
+	if(!strcmp(arg, "mutes")){
 		result = handle_mutes(session);
 		goto finish;
 	}
     if(!strcmp(arg, "pos")) {
 		result = handle_pos(session);
 		goto finish;
-    }   
+	}   
 	if (!strcmp(arg, "unload")) {
 		result = handle_unload(session);
 		live_event = time(NULL);
 		goto finish;
-    }
-    if (!strcmp(arg, "load")) {
+	}
+	if (!strcmp(arg, "load")) {
 		result = handle_load(session);
 		live_event = time(NULL);
 		goto finish;
-    } 
-    if (!strcmp(arg, "notify")) {
+	} 
+	if (!strcmp(arg, "notify")) {
 		result = handle_notify(session);
 		goto finish;
-    }
+	}
 	if (!strcmp(arg, "vuon")) {
 		result = handle_vuon(session);
 		goto finish;
-    }
+	}
 	if (!strcmp(arg, "vuoff")) {
 		result = handle_vuoff(session);
 		goto finish;
@@ -384,148 +383,148 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 	if (!strcmp(arg, "set")) {
 		result = handle_set(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "saveset")) {
+	}
+	if (!strcmp(arg, "saveset")) {
 		result = handle_saveset(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "metalist")) {
+	}
+	if (!strcmp(arg, "metalist")) {
 		result = handle_metalist(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "dumpmeta")) {
+	}
+	if (!strcmp(arg, "dumpmeta")) {
 		result = handle_dumpmeta(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "getmeta")) {
+	}
+	if (!strcmp(arg, "getmeta")) {
 		result = handle_getmeta(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "setmeta")) {
+	}
+	if (!strcmp(arg, "setmeta")) {
 		result = handle_setmeta(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "delmeta")) {
+	}
+	if (!strcmp(arg, "delmeta")) {
 		result = handle_delmeta(session);
 		goto finish;
-    } 
-    if (!strcmp(arg, "srcports")) {
+	} 
+	if (!strcmp(arg, "srcports")) {
 		result = handle_srcports(session);
 		goto finish;
-    }    
-    if (!strcmp(arg, "dstports")) {
+	}    
+	if (!strcmp(arg, "dstports")) {
 		result = handle_dstports(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "logrotate")) {
+	}
+	if (!strcmp(arg, "logrotate")) {
 		result = handle_rotatelog(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "savein")) {
+	}
+	if (!strcmp(arg, "savein")) {
 		result = handle_savein(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "dumpin")) {
+	}
+	if (!strcmp(arg, "dumpin")) {
 		result = handle_dumpin(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "getin")) {
+	}
+	if (!strcmp(arg, "getin")) {
 		result = handle_getin(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "setin")) {
+	}
+	if (!strcmp(arg, "setin")) {
 		result = handle_setin(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "delin")) {
+	}
+	if (!strcmp(arg, "delin")) {
 		result = handle_delin(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "setout")) {
+	}
+	if (!strcmp(arg, "setout")) {
 		result = handle_setout(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "saveout")) {
+	}
+	if (!strcmp(arg, "saveout")) {
 		result = handle_saveout(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "dumpout")) {
+	}
+	if (!strcmp(arg, "dumpout")) {
 		result = handle_dumpout(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "outvol")) {
+	}
+	if (!strcmp(arg, "outvol")) {
 		result = handle_outvol(session);
 		goto finish;
-    }
+	}
 	if (!strcmp(arg, "setdly")) {
 		result = handle_setdly(session);
 		goto finish;
-    }
+	}
 	if (!strcmp(arg, "getdly")) {
 		result = handle_getdly(session);
 		goto finish;
-    }	
+	}	
 	if (!strcmp(arg, "dump")) {
 		result = handle_dump();
 		goto finish;
-    }
-    if (!strcmp(arg, "delout")) {
+	}
+	if (!strcmp(arg, "delout")) {
 		result = handle_delout(session);
 		goto finish;
-    }
-  	if (!strcmp(arg, "getout")) {
+	}
+	if (!strcmp(arg, "getout")) {
 		result = handle_getout(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "jconlist")) {
+	}
+	if (!strcmp(arg, "jconlist")) {
 		result = handle_jconlist(session);
 		goto finish;
-    }  
-    if (!strcmp(arg, "jackconn")) {
+	}  
+	if (!strcmp(arg, "jackconn")) {
 		result = handle_jackconn(session);
 		goto finish;
-    }  
-    if (!strcmp(arg, "jackdisc")) {
+	}  
+	if (!strcmp(arg, "jackdisc")) {
 		result = handle_jackdisc(session);
 		goto finish;
-    }
+	}
 	if (!strcmp(arg, "setmm")) {
 		result = handle_setmm(session);
 		goto finish;
-    }
+	}
 	if (!strcmp(arg, "getmm")) {
 		result = handle_getmm(session);
 		goto finish;
-    }  
+	}  
 	if (!strcmp(arg, "execute")) {
 		result = handle_execute(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "deltask")) {
+	}
+	if (!strcmp(arg, "deltask")) {
 		result = handle_deltask(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "task")) {
+	}
+	if (!strcmp(arg, "task")) {
 		result = handle_task(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "tasks")) {
+	}
+	if (!strcmp(arg, "tasks")) {
 		result = handle_tasks(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "urlmeta")){
+	}
+	if (!strcmp(arg, "urlmeta")){
 		result = handle_urlmeta(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "dblist")) {
+	}
+	if (!strcmp(arg, "dblist")) {
 		result = handle_dblist(session);
 		goto finish;
-    }	
+	}	
 	if (!strcmp(arg, "dbsync")) {
 		dbFileSync(session, session->silent);
 		result = rNone;
 		goto finish;
-    }	
+	}	
 	if (!strcmp(arg, "dbinit")) {
 		if(db_initialize(NULL))
 			result = rOK;
@@ -546,22 +545,21 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 		result = rNone;
 		goto finish;
 	}
-    if (!strcmp(arg, "cue")) {
+	if (!strcmp(arg, "cue")) {
 		result = handle_cue(session);
 		live_event = time(NULL);
 		goto finish;
-    }    
-    if (!strcmp(arg, "playnow")) {
+	}    
+	if (!strcmp(arg, "playnow")) {
 		result = handle_playnow(session);
 		live_event = time(NULL);
 		goto finish;
-    }
-
-    if (!strcmp(arg, "logmeta")) {
+	}
+	if (!strcmp(arg, "logmeta")) {
 		result = handle_logmeta(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "logsync")) {
+	}
+	if (!strcmp(arg, "logsync")) {
 		if(time(NULL) > logChangeTime)
 			logChangeTime = time(NULL);
 		else
@@ -574,41 +572,41 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 		notifyMakeEntry(nType_status, &data, sizeof(data));	
 		result = rNone;		
 		goto finish;
-    }
-    if(!strcmp(arg, "stat")) {
+	}
+	if(!strcmp(arg, "stat")) {
 		result = handle_stat(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "list")) {
+	}
+	if (!strcmp(arg, "list")) {
 		result = handle_list(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "delete")) {
+	}
+	if (!strcmp(arg, "delete")) {
 		result = handle_delete(session);
 		live_event = time(NULL);
 		goto finish;
 	}
-    if (!strcmp(arg, "move")) {
+	if (!strcmp(arg, "move")) {
 		result = handle_move(session);
 		live_event = time(NULL);
 		goto finish;
-    }
-    if (!strcmp(arg, "add")) {
+	}
+	if (!strcmp(arg, "add")) {
 		result = handle_add(session);
 		live_event = time(NULL);
 		goto finish;
-    }
-    if (!strcmp(arg, "uadd")) {
+	}
+	if (!strcmp(arg, "uadd")) {
 		result = handle_uadd(session);
 		live_event = time(NULL);
 		goto finish;
-    }
+	}
 	if (!strcmp(arg, "split")) {
 		result = handle_split(session);
 		goto finish;
-    }
+	}
 	if (!strcmp(arg, "autoon")) {   
-        autoState = auto_unatt;
+		autoState = auto_unatt;
 		// send out notifications
 		serverLogMakeEntry("Automation - Switched to auto (user action)");
 
@@ -621,8 +619,8 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 		result = rOK;
 		goto finish;
 	}
-    if (!strcmp(arg, "autooff")) {   
-        autoState = auto_off;
+	if (!strcmp(arg, "autooff")) {   
+		autoState = auto_off;
 		// send out notifications
 		serverLogMakeEntry("Automation - Switched to off (user action)");
 
@@ -635,8 +633,8 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 		result = rOK;
 		goto finish;
 	}
-    if (!strcmp(arg, "autolive")) {   
-        autoState = auto_live;
+	if (!strcmp(arg, "autolive")) {   
+		autoState = auto_live;
 		// send out notifications
 		serverLogMakeEntry("Automation - Switched to live (user action)");
 
@@ -650,8 +648,8 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 		goto finish;
 	}
 	if (!strcmp(arg, "run")) {
-        plRunning = 1;
-        wakeQueManager(); // force the playist manager to process the playlist - get things going
+		plRunning = 1;
+		wakeQueManager(); // force the playist manager to process the playlist - get things going
 		// send out notifications
 		notifyData	data;
 		data.reference = 0;
@@ -661,10 +659,10 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 		result = rOK;
 		live_event = time(NULL);
 		goto finish;
-    }
-    if (!strcmp(arg, "halt")) {   
-        plRunning = 0;
-        wakeQueManager(); // force the playist manager to process the playlist - clean up
+	}
+	if (!strcmp(arg, "halt")) {   
+		plRunning = 0;
+		wakeQueManager(); // force the playist manager to process the playlist - clean up
 		notifyData	data;
 		data.reference = 0;
 		data.senderID = getSenderID();
@@ -677,43 +675,43 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 	if (!strcmp(arg, "inuid")) {
 		result = handle_inuid(session);
 		goto finish;
-    }
+	}
 	if (!strcmp(arg, "getuid")) {
 		result = handle_getuid(session);
 		goto finish;
-    } 
+	} 
 	if (!strcmp(arg, "waitseg")) {
 		result = handle_waitseg(session);
 		goto finish;
-    }	
+	}	
 	if (!strcmp(arg, "segnow")) {
 		result = handle_segnow(session);
 		live_event = time(NULL);
 		goto finish;
-    }
+	}
 	if (!strcmp(arg, "segall")) {
 		result = handle_segall(session);
 		live_event = time(NULL);
 		goto finish;
-    }
+	}
 	if (!strcmp(arg, "fadeprior")) {
 		result = handle_fadeprior(session);
 		live_event = time(NULL);
 		goto finish;
-    }	
-    if (!strcmp(arg, "expand")) {
+	}	
+	if (!strcmp(arg, "expand")) {
 		result = handle_expand(session);
 		live_event = time(NULL);
 		goto finish;
-    }
-    if (!strcmp(arg, "modbuspoll")) {
+	}
+	if (!strcmp(arg, "modbuspoll")) {
 		result = handle_modbuspoll(session);
 		goto finish;
-    }	
+	}	
 	if (!strcmp(arg, "modbusset")) {
 		result = handle_coilset(session, 1);
 		goto finish;
-    }	
+	}	
 	if (!strcmp(arg, "modbusclear")) {
 		result = handle_coilset(session, 0);
 		goto finish;
@@ -726,11 +724,11 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 		result = handle_startrec(session);
 		goto finish;
     }
-    if (!strcmp(arg, "stoprec")) {   
+	if (!strcmp(arg, "stoprec")) {   
 		result = handle_stoprec(session);
 		goto finish;
 	}
-    if (!strcmp(arg, "recgain")) {   
+	if (!strcmp(arg, "recgain")) {   
 		result = handle_recgain(session);
 		goto finish;
 	}
@@ -738,15 +736,15 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 		result = handle_lockrec(session);
 		goto finish;
 	}
-    if (!strcmp(arg, "unlockrec")) {   
+	if (!strcmp(arg, "unlockrec")) {   
 		result = handle_unlockrec(session);
 		goto finish;
 	}
-    if (!strcmp(arg, "closerec")) {   
+	if (!strcmp(arg, "closerec")) {   
 		result = handle_closerec(session);
 		goto finish;
-    }	
-    if (!strcmp(arg, "newrec")) {   
+	}	
+	if (!strcmp(arg, "newrec")) {   
 		result = handle_newrec(session);
 		goto finish;
 	}
@@ -763,55 +761,55 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 	if (!strcmp(arg, "jsonpost")) {
 		result = handle_jsonpost(session);
 		goto finish;
-    }
+	}
 /*
-    if (!strcmp(arg, "mutex")){
+	if (!strcmp(arg, "mutex")){
 		result = handle_mutex(session);
 		goto finish;
 	}
-    if (!strcmp(arg, "getdm")) {
+	if (!strcmp(arg, "getdm")) {
 		result = handle_getdm(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "setdm")) {
+	}
+	if (!strcmp(arg, "setdm")) {
 		result = handle_setdm(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "listdm")) {
+	}
+	if (!strcmp(arg, "listdm")) {
 		result = handle_listdm(session);
 		goto finish;
-    }
+	}
 
 	if (!strcmp(arg, "iaxstream")) {
 		result = handle_iaxstream(session);
 		goto finish;
-    }	
-    if (!strcmp(arg, "back")) {
+	}	
+	if (!strcmp(arg, "back")) {
 		result = handle_back(session);
 		live_event = time(NULL);
 		goto finish;
-    }
-    if (!strcmp(arg, "ahead")) {
+	}
+	if (!strcmp(arg, "ahead")) {
 		result = handle_ahead(session);
 		live_event = time(NULL);
 		goto finish;
-    }
+	}
 
-    if (!strcmp(arg, "setstat")) {
+	if (!strcmp(arg, "setstat")) {
 		result = handle_setstat(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "feed")) {
+	}
+	if (!strcmp(arg, "feed")) {
 		result = handle_feed(session);
 		goto finish;
-    }
+	}
 	
-    if (!strcmp(arg, "fxcue")) {   
+	if (!strcmp(arg, "fxcue")) {   
 		result = handle_fxcue(session);
 		goto finish;
-    }
+	}
 
-    if (!strcmp(arg, "iaxinit")) { 
+	if(!strcmp(arg, "iaxinit")) { 
 		unsigned char err;
 		err = iaxp_initialize(); 
 		if(err){
@@ -823,40 +821,40 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 		}else
 			result = rOK;
 		goto finish;
-    }
-    if (!strcmp(arg, "fxlist")) {
+	}
+	if (!strcmp(arg, "fxlist")) {
 		result = handle_fxlist(session);
 		goto finish;
 	}
-    if (!strcmp(arg, "fxslots")) {
+	if (!strcmp(arg, "fxslots")) {
 		result = handle_fxslots(session);
 		goto finish;
 	}
-    if (!strcmp(arg, "fxinsert")) {
+	if (!strcmp(arg, "fxinsert")) {
 		result = handle_fxinsert(session);
 		goto finish;
 	}
-    if (!strcmp(arg, "fxparam")) {
+	if (!strcmp(arg, "fxparam")) {
 		result = handle_fxparam(session);
 		goto finish;
 	}
-    if (!strcmp(arg, "fxbypass")) {
+	if (!strcmp(arg, "fxbypass")) {
 		result = handle_fxbypass(session);
 		goto finish;
 	}
-    if (!strcmp(arg, "fxvalstr")) {
+	if (!strcmp(arg, "fxvalstr")) {
 		result = handle_fxvalstr(session);
 		goto finish;
 	}
-    if (!strcmp(arg, "fxsave")) {
+	if (!strcmp(arg, "fxsave")) {
 		result = handle_fxsave(session);
 		goto finish;
 	}
-    if (!strcmp(arg, "fxpreset")) {
+	if (!strcmp(arg, "fxpreset")) {
 		result = handle_fxpreset(session);
 		goto finish;
 	}
-    if (!strcmp(arg, "fxwatch")) {
+	if (!strcmp(arg, "fxwatch")) {
 		result = handle_fxwatch(session);
 		goto finish;
 	}
@@ -873,7 +871,7 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 	}
 
 	if (!strcmp(arg, "getcodecs")){
- 		result = handle_getcodecs(session);
+		result = handle_getcodecs(session);
 		goto finish;
 	}
 */
@@ -895,92 +893,92 @@ finish:
 }
 
 unsigned char loadConfiguration(ctl_session *session, char *file_path){
-    FILE *fp;
-    char *result, line[4096];
-     
-    if((fp = fopen(file_path, "r")) == NULL)
-        return 0;
-    result = fgets(line, sizeof(line), fp);
-    while(result != NULL){
-        if((line[0] != ';') && (line[0] != '-')){ // not a commented or pre-config line (';' or '-' as first char in line)
-            processCommand(session, line, NULL);
-        }
-        result = fgets(line, sizeof line, fp);
-    }
-    fclose(fp);
+	FILE *fp;
+	char *result, line[4096];
+	
+	if((fp = fopen(file_path, "r")) == NULL)
+		return 0;
+	result = fgets(line, sizeof(line), fp);
+	while(result != NULL){
+		if((line[0] != ';') && (line[0] != '-')){ // not a commented or pre-config line (';' or '-' as first char in line)
+			processCommand(session, line, NULL);
+		}
+		result = fgets(line, sizeof line, fp);
+	}
+	fclose(fp);
 	return 1;
 }
 
 void* sessionThread(ctl_session *session){
-    char command[4096]; /* receive data buffer */
-    char block[1024]; /* receive data buffer */
-    char *fragment, *save_pointer;
-    int rx_length, tx_length;
+	char command[4096]; /* receive data buffer */
+	char block[1024]; /* receive data buffer */
+	char *fragment, *save_pointer;
+	int rx_length, tx_length;
 	int i, old;
 	ctl_session *recPtr;
 	
-    pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
-    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
-    
-    // display version
-    tx_length = snprintf(command, sizeof command, "AudioRack Server, version %s\n", versionStr);
+	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+	
+	// display version
+	tx_length = snprintf(command, sizeof command, "AudioRack Server, version %s\n", versionStr);
 
-    if(my_send(session, command, tx_length, 0) < 0) goto finish;
-    tx_length = snprintf(command, sizeof command, "Copyright (C) 2004-2019 Ethan Funk\n\n");
-    if(my_send(session, command, tx_length, 0) < 0)goto finish;
-    tx_length = snprintf(command, sizeof command, "AudioRack Server comes with ABSOLUTELY NO WARRANTY; for details\n");
-    if(my_send(session, command, tx_length, 0) < 0) goto finish;
-    tx_length = snprintf(command, sizeof command, "type `info'.  This is free software, and you are welcome\n");
-    if(my_send(session, command, tx_length, 0) < 0) goto finish;
-    tx_length = snprintf(command, sizeof command, "to redistribute it under certain conditions; See the\n");
-    if(my_send(session, command, tx_length, 0) < 0) goto finish;
-    tx_length = snprintf(command, sizeof command, "GNU General Public License included with this program for details.\n\n");
-    if(my_send(session, command, tx_length, 0) < 0) goto finish;
-    tx_length = snprintf(command, sizeof command, "==================================================================\n");
-    if(my_send(session, command, tx_length, 0) < 0) goto finish;
+	if(my_send(session, command, tx_length, 0) < 0) goto finish;
+	tx_length = snprintf(command, sizeof command, "Copyright (C) 2004-2019 Ethan Funk\n\n");
+	if(my_send(session, command, tx_length, 0) < 0)goto finish;
+	tx_length = snprintf(command, sizeof command, "AudioRack Server comes with ABSOLUTELY NO WARRANTY; for details\n");
+	if(my_send(session, command, tx_length, 0) < 0) goto finish;
+	tx_length = snprintf(command, sizeof command, "type `info'.  This is free software, and you are welcome\n");
+	if(my_send(session, command, tx_length, 0) < 0) goto finish;
+	tx_length = snprintf(command, sizeof command, "to redistribute it under certain conditions; See the\n");
+	if(my_send(session, command, tx_length, 0) < 0) goto finish;
+	tx_length = snprintf(command, sizeof command, "GNU General Public License included with this program for details.\n\n");
+	if(my_send(session, command, tx_length, 0) < 0) goto finish;
+	tx_length = snprintf(command, sizeof command, "==================================================================\n");
+	if(my_send(session, command, tx_length, 0) < 0) goto finish;
 
-    // send prompt
-    tx_length = strlen(constPrompt);
-    if(my_send(session, constPrompt, tx_length, 0) < 0) goto finish;
-    command[0] = 0;
-    
-    // wait for a client command to arrive
-    rx_length = my_recv(session, block, sizeof(block) - 1);
+	// send prompt
+	tx_length = strlen(constPrompt);
+	if(my_send(session, constPrompt, tx_length, 0) < 0) goto finish;
+	command[0] = 0;
+	
+	// wait for a client command to arrive
+	rx_length = my_recv(session, block, sizeof(block) - 1);
 	if(rx_length >= 0)
 		block[rx_length] = 0; // null at end of segment to make it a c-string
-    else 
+	else 
 		block[0] = 0;
 	
 	session->silent = 0;	
-    while(rx_length > 0){
-        // "\n" is our command delimitor
-        fragment = strtok_r(block, "\n", &save_pointer);
-        while(fragment){
-            // delimitor found in the string
-            strncat(command, fragment, sizeof(command) - (strlen(command) + 1));
-            if(processCommand(session, command, NULL))
-                goto finish;
-			
-            // send prompt
-            tx_length = strlen(constPrompt);
-            if(my_send(session, constPrompt, tx_length, 0) < 0) 
+	while(rx_length > 0){
+		// "\n" is our command delimitor
+		fragment = strtok_r(block, "\n", &save_pointer);
+		while(fragment){
+			// delimitor found in the string
+			strncat(command, fragment, sizeof(command) - (strlen(command) + 1));
+			if(processCommand(session, command, NULL))
 				goto finish;
-            command[0] = 0;
-            // check for another one
-            fragment = strtok_r(NULL, "\n", &save_pointer);
-        }
-        // no delimitor left in the string... save whats left, the delimitor my show up in the next round
-        if(save_pointer)
-            strncat(command, save_pointer, sizeof(command) - (strlen(command) + 1));
-        // wait for a client command to arrive
-        rx_length = my_recv(session, block, sizeof(block) - 1);
+
+			// send prompt
+			tx_length = strlen(constPrompt);
+			if(my_send(session, constPrompt, tx_length, 0) < 0) 
+				goto finish;
+			command[0] = 0;
+			// check for another one
+			fragment = strtok_r(NULL, "\n", &save_pointer);
+		}
+		// no delimitor left in the string... save whats left, the delimitor my show up in the next round
+		if(save_pointer)
+			strncat(command, save_pointer, sizeof(command) - (strlen(command) + 1));
+		// wait for a client command to arrive
+		rx_length = my_recv(session, block, sizeof(block) - 1);
 		if(rx_length >= 0)
 			block[rx_length] = 0; // null at end of segment to make it a c-string
 		else
 			block[0] = 0;
-    }
+	}
 finish:
-    pthread_mutex_lock(&sMutex);
+	pthread_mutex_lock(&sMutex);
 	if(session->cs > 0){
 		shutdown(session->cs, SHUT_RDWR);
 		close(session->cs); /* close client socket connection */
@@ -1009,22 +1007,22 @@ finish:
 
 void* TCPListener(void *refCon){    
 	ctl_session *recPtr;
-    socklen_t namelen; /* length of client name */
-    int ns; /* client socket */
-    int i;
-    struct sockaddr_in6 client; /* client address information */
+	socklen_t namelen; /* length of client name */
+	int ns; /* client socket */
+	int i;
+	struct sockaddr_in6 client; /* client address information */
 
 	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 
-    /* when listenSocket is closed, ns will be negative (error),
-     * and function loop will exit */
+	/* when listenSocket is closed, ns will be negative (error),
+	 * and function loop will exit */
 	do{
 		namelen = sizeof(client); 
-        ns = accept(listenSocket, (struct sockaddr *)&client, &namelen); /* wait for connection request */
-        if(ns > 0) {
-            pthread_mutex_lock(&sMutex);
-            for(i=0; i<sessionListSize;i++){
+		ns = accept(listenSocket, (struct sockaddr *)&client, &namelen); /* wait for connection request */
+		if(ns > 0) {
+			pthread_mutex_lock(&sMutex);
+			for(i=0; i<sessionListSize;i++){
 				recPtr = &sessionList[i];
 				if(recPtr->cs == 0){
 					recPtr->cs = ns;
@@ -1039,28 +1037,28 @@ void* TCPListener(void *refCon){
 					pthread_detach(recPtr->sessionThread);
 					break;
 				}
-            }
-            pthread_mutex_unlock(&sMutex);
-         
-            if(i == sessionListSize){
-   			serverLogMakeEntry("Connection Listener: requests exceed max number of allowed connections");
-                    send( ns, "maximum number of connection exceeded. Try again later.\n", 57, 0);
-                    close(ns);
-            }
-        }
-    }while(ns > 0);
+			}
+			pthread_mutex_unlock(&sMutex);
+	
+			if(i == sessionListSize){
+				serverLogMakeEntry("Connection Listener: requests exceed max number of allowed connections");
+				send( ns, "maximum number of connection exceeded. Try again later.\n", 57, 0);
+				close(ns);
+			}
+		}
+	}while(ns > 0);
 	return NULL;
 }
 
 char *initSessions(unsigned int maxSessions, short *tcpPort){
 	short s;
 	struct sockaddr_in6 server; /* server address information */
-    socklen_t namelen; /* length of client name */
-   	int trueVal = 1;
+	socklen_t namelen; /* length of client name */
+	int trueVal = 1;
 	
 	/* create a session list mutex */
-    pthread_mutex_init(&sMutex, NULL);  
-    
+	pthread_mutex_init(&sMutex, NULL);  
+
 	listen_thread = 0;
 	listenSocket = -1;
 	sessionList = (ctl_session *)calloc(maxSessions, sizeof(ctl_session));
@@ -1068,46 +1066,45 @@ char *initSessions(unsigned int maxSessions, short *tcpPort){
 		return "failed to allocate memory for session list.";
 	sessionListSize = maxSessions;
 	
-    s = socket(AF_INET6, SOCK_STREAM, 0); /* create stream socket using TCP */
-    if(s == -1) {
+	s = socket(AF_INET6, SOCK_STREAM, 0); /* create stream socket using TCP */
+	if(s == -1) {
 		free(sessionList);
 		return "TCP listen socket creation failed";
-    }
-    
+	}
+
 	setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &trueVal, sizeof(trueVal));
 	memset(&server, 0, sizeof(server));
-    server.sin6_family = AF_INET6; 
-    server.sin6_port = htons(*tcpPort); 
-    server.sin6_addr = in6addr_any;
+	server.sin6_family = AF_INET6; 
+	server.sin6_port = htons(*tcpPort); 
+	server.sin6_addr = in6addr_any;
 
-    if(bind(s, (struct sockaddr *) &server, sizeof( server )) < 0 ) { /* bind server address to socket */
+	if(bind(s, (struct sockaddr *) &server, sizeof( server )) < 0 ) { /* bind server address to socket */
 		free(sessionList);
 		close(s);
 		return  "bind() Error binding server to port";
-    }
+	}
 	
-    /* find out what port was assigned */
-    namelen = sizeof(server);
-    if(getsockname(s, (struct sockaddr*) &server, &namelen) < 0 ) {
+	/* find out what port was assigned */
+	namelen = sizeof(server);
+	if(getsockname(s, (struct sockaddr*) &server, &namelen) < 0 ) {
 		free(sessionList);
 		close(s);
 		return "getsockname() failed to get port number";
-    }
-    *tcpPort = ntohs(server.sin6_port);
-    
-    if(listen(s, 1) != 0 ) { /* listen for a connection */
+	}
+	*tcpPort = ntohs(server.sin6_port);
+
+	if(listen(s, 1) != 0 ) { /* listen for a connection */
 		free(sessionList);
 		close(s);
 		return "listen() failed";
-    }
-    
-    listenSocket = s;
-    
-    /* create a listener thread to listen for TCP connection requests 
-     * and spaun off additional threads for those sessions */
-    pthread_create(&listen_thread, NULL, &TCPListener, NULL);
-    
-    /* sucess! */
+	}
+
+	listenSocket = s;
+
+	/* create a listener thread to listen for TCP connection requests 
+	 * and spaun off additional threads for those sessions */
+	pthread_create(&listen_thread, NULL, &TCPListener, NULL);
+	/* sucess! */
 	return NULL;
 }
 
@@ -1180,18 +1177,18 @@ unsigned char handle_lastaid(ctl_session *session){
 }
 
 unsigned char handle_help(ctl_session *session){
-    FILE *fp;
+	FILE *fp;
 	char *result, buf[256];
-     
-    if((fp = fopen("/opt/audiorack/support/help.txt", "r")) == NULL){
+
+	if((fp = fopen("/opt/audiorack/support/help.txt", "r")) == NULL){
 		session->errMSG = "The help file is missing: /opt/audiorack/support/help.txt\n";
 		return rError;	
 	}
-    while(result = fgets(buf, sizeof(buf), fp)){
+	while(result = fgets(buf, sizeof(buf), fp)){
 		while(result = strchr(buf, '\r'))
 			// convert CR to LF chars
 			*result = '\n';
-        my_send(session, buf, strlen(buf), session->silent);
+		my_send(session, buf, strlen(buf), session->silent);
 	}
 	fclose(fp);
 	return rNone;
@@ -1200,26 +1197,26 @@ unsigned char handle_help(ctl_session *session){
 unsigned char handle_clients(ctl_session *session){
 	char buf[4096]; /* send data buffer */
 	char str[256];
-    int tx_length;
+	int tx_length;
 
 	// list the current connected clients
 	tx_length = snprintf(buf, sizeof buf - 1, "Connected clients\n");
 	my_send(session, buf, tx_length, session->silent);
 	pthread_mutex_lock(&sMutex);
 	for(int cn=0; cn<sessionListSize; cn++){
-	   if(sessionList[cn].cs > 0){
+		if(sessionList[cn].cs > 0){
 			if(inet_ntop(AF_INET6, &sessionList[cn].client.sin6_addr, str, sizeof(str)))
 			tx_length = snprintf(buf, sizeof buf - 1, "#%d from %s\n", cn+1, str);
 			my_send(session, buf, tx_length, session->silent);
-	   }
-	} 
+		}
+	}
 	pthread_mutex_unlock( &sMutex );
 	return rNone;
 }
 
 unsigned char handle_echo(ctl_session *session){
 	char buf[4096]; /* send data buffer */
-    int tx_length;
+	int tx_length;
 
 	if(session->save_pointer){
 		// first parameter, message to echo is in save_pointer
@@ -1246,7 +1243,7 @@ unsigned char handle_config(ctl_session *session){
 
 unsigned char handle_info(ctl_session *session){
 	char buf[4096]; /* send data buffer */
-    int tx_length;
+	int tx_length;
 	
 	if(!session->silent){
 		tx_length = snprintf(buf, sizeof buf, "AudioRack Server, version %s\n", versionStr);
@@ -1640,7 +1637,7 @@ unsigned char handle_stop(ctl_session *session){
 unsigned char handle_pstat(ctl_session *session){
 	char *tmp;
 	char buf[4096]; /* send data buffer */
-    int tx_length;
+	int tx_length;
 	unsigned int i;
 	unsigned int mrev;
 	float dur, btime;
@@ -1682,7 +1679,7 @@ unsigned char handle_pstat(ctl_session *session){
 
 unsigned char handle_meters(ctl_session *session){
 	char buf[4096]; /* send data buffer */
-    int tx_length;
+	int tx_length;
 	unsigned int i, c;
 	unsigned int max;
 	unsigned int chanWidth;
@@ -1974,7 +1971,7 @@ unsigned char handle_bal(ctl_session *session){
 
 unsigned char handle_mutes(ctl_session *session){
 	char buf[4096]; /* send data buffer */
-    int tx_length;
+	int tx_length;
 	uint32_t mute;
 	
 	mute = mixEngine->activeBus;
@@ -2105,7 +2102,7 @@ unsigned char handle_load(ctl_session *session){
 	uint32_t aLong;
 	inChannel *instance;
 	char buf[4096]; /* send data buffer */
-    int tx_length;
+	int tx_length;
 
 	// first parameter, player number
 	param = strtok_r(NULL, " ", &session->save_pointer);
@@ -2193,7 +2190,7 @@ unsigned char handle_settings(ctl_session *session){
 unsigned char handle_get(ctl_session *session){
 	char *param, *val;
 	char buf[4096]; /* send data buffer */
-    int tx_length;
+	int tx_length;
 
 	// first parameter, property key
 	param = strtok_r(NULL, " ", &session->save_pointer);
@@ -2245,7 +2242,7 @@ unsigned char handle_set(ctl_session *session){
 }
 
 unsigned char handle_saveset(ctl_session *session){
- 	FILE *fp;
+	FILE *fp;
 	char *fPath;
 	char **keys;
 	char **values;
@@ -2277,14 +2274,14 @@ unsigned char handle_saveset(ctl_session *session){
 
 unsigned char handle_metalist(ctl_session *session){
 	char buf[4096]; /* send data buffer */
-    int tx_length;
+	int tx_length;
 	uidRecord *rec;
 
 	tx_length = snprintf(buf, sizeof buf, "meta-UID\tRev\tusers\n");
 	my_send(session, buf, tx_length, session->silent);
 
-    pthread_rwlock_rdlock(&dataLock);
-    rec = (uidRecord *)&metaList;
+	pthread_rwlock_rdlock(&dataLock);
+	rec = (uidRecord *)&metaList;
 	while(rec = (uidRecord *)getNextNode((LinkedListEntry *)rec)){
 		tx_length = snprintf(buf, sizeof buf, "%08x\t%u\t%u\n", rec->UID, rec->rev, rec->refCnt);
 		my_send(session, buf, tx_length, session->silent);
@@ -2302,7 +2299,7 @@ unsigned char handle_dumpmeta(ctl_session *session){
 	char **values;
 	unsigned int count, i;
 	char buf[4096]; /* send data buffer */
-    int tx_length;
+	int tx_length;
 
 	// first parameter, meta data item UID in hex format
 	param = strtok_r(NULL, " ", &session->save_pointer);
@@ -2349,7 +2346,7 @@ unsigned char handle_getmeta(ctl_session *session){
 	int sInt;
 	uint32_t aLong;
 	char buf[4096]; /* send data buffer */
-    int tx_length;
+	int tx_length;
 
 	// first parameter, meta data item UID in hex format
 	param = strtok_r(NULL, " ", &session->save_pointer);
@@ -2399,7 +2396,7 @@ unsigned char handle_setmeta(ctl_session *session){
 	int sInt;
 	uint32_t aLong;
 	char buf[4096]; /* send data buffer */
-    int tx_length;
+	int tx_length;
 
 	// first parameter, meta data item UID in hex format or player number in decimal format
 	param = strtok_r(NULL, " ", &session->save_pointer);
@@ -2499,7 +2496,7 @@ unsigned char handle_delmeta(ctl_session *session){
 
 unsigned char handle_srcports(ctl_session *session){
 	char buf[4096]; /* send data buffer */
-    int tx_length;
+	int tx_length;
 	int size, i;
 	const char **ports, *port;
 	
@@ -2522,7 +2519,7 @@ unsigned char handle_srcports(ctl_session *session){
 
 unsigned char handle_dstports(ctl_session *session){
 	char buf[4096]; /* send data buffer */
-    int tx_length;
+	int tx_length;
 	int size, i;
 	const char **ports, *port;
 	
@@ -2579,7 +2576,7 @@ unsigned char handle_savein(ctl_session *session){
 
 unsigned char handle_dumpin(ctl_session *session){
 	char buf[4096]; /* send data buffer */
-    int tx_length;
+	int tx_length;
 	inputRecord *rec;
 	
 	// dump all line-input definitions
@@ -2599,7 +2596,7 @@ unsigned char handle_dumpin(ctl_session *session){
 unsigned char handle_getin(ctl_session *session){
 	char *param;
 	char buf[4096]; /* send data buffer */
-    int tx_length;
+	int tx_length;
 	inputRecord *rec = NULL;
 		
 	// first parameter, input Name
@@ -2803,9 +2800,9 @@ unsigned char handle_saveout(ctl_session *session){
 
 unsigned char handle_dumpout(ctl_session *session){
 	char buf[4096]; /* send data buffer */
-    int tx_length;
-    int i;
-   	outChannel *instance;
+	int tx_length;
+	int i;
+	outChannel *instance;
 	
 	// dump all output group definitions 
 	tx_length = snprintf(buf, sizeof buf, "Name\tvolume\tMute\tBus\tPort List\n");
@@ -2907,9 +2904,9 @@ unsigned char handle_setdly(ctl_session *session){
 
 unsigned char handle_getdly(ctl_session *session){
 	char buf[4096]; /* send data buffer */
-    int tx_length;
-    int i;
-   	outChannel *instance;
+	int tx_length;
+	int i;
+	outChannel *instance;
 	
 	// dump all output group definitions 
 	tx_length = snprintf(buf, sizeof buf, "Dest ID\t\tName\t\tDelay\n");
@@ -2928,8 +2925,8 @@ unsigned char handle_getdly(ctl_session *session){
 }
 
 unsigned char handle_dump(void){
-    int i;
-   	outChannel *instance;
+	int i;
+	outChannel *instance;
 	
 	// set all output group delays to zero 
 	instance = mixEngine->outs;
@@ -2995,8 +2992,8 @@ unsigned char handle_getout(ctl_session *session){
 	uint32_t nameHash;
 	outChannel *instance;
 	char buf[4096]; /* send data buffer */
-    int tx_length;
-    int i;
+	int tx_length;
+	int i;
 
 	param = strtok_r(NULL, " ", &session->save_pointer);
 	if(param && strlen(param)){
@@ -3031,12 +3028,12 @@ unsigned char handle_getout(ctl_session *session){
 						
 unsigned char handle_jconlist(ctl_session *session){
 	char buf[4096]; /* send data buffer */
-    int tx_length;
-    connRecord *rec;
-    jack_port_t *jport;
-    const char **conns, **ptr;
-    const char *name;
-    unsigned char flag;
+	int tx_length;
+	connRecord *rec;
+	jack_port_t *jport;
+	const char **conns, **ptr;
+	const char *name;
+	unsigned char flag;
 
 	tx_length = snprintf(buf, sizeof buf, "connected\t(source)>(destination)\n");
 	my_send(session, buf, tx_length, session->silent);
@@ -3153,7 +3150,7 @@ unsigned char handle_setmm(ctl_session *session){
 unsigned char handle_getmm(ctl_session *session){
 	char *param;
 	char buf[4096]; /* send data buffer */
-    int tx_length;
+	int tx_length;
 	inputRecord *rec = NULL;
 		
 	// first parameter, input Name
@@ -3218,7 +3215,7 @@ unsigned char handle_task(ctl_session *session){
 
 unsigned char handle_tasks(ctl_session *session){
 	char buf[4096]; /* send data buffer */
-    int tx_length;
+	int tx_length;
 	taskRecord *rec, *prev;
 
 	// dump the task list
@@ -3269,7 +3266,7 @@ unsigned char handle_deltask(ctl_session *session){
 
 unsigned char handle_urlmeta(ctl_session *session){
 	char buf[4096]; /* send data buffer */
-    int tx_length, i, count;
+	int tx_length, i, count;
 	uint32_t localUID;
 	char **keys;
 	char **values;  
@@ -3302,7 +3299,7 @@ unsigned char handle_urlmeta(ctl_session *session){
 
 unsigned char handle_dblist(ctl_session *session){
 	char buf[4096]; /* send data buffer */
-    int tx_length;
+	int tx_length;
 
 	if(!session->silent){
 		tx_length = snprintf(buf, sizeof buf, "Name\tRev\n");
@@ -3317,7 +3314,7 @@ unsigned char handle_cue(ctl_session *session){
 	uint32_t aLong;
 	inChannel *instance;
 	char buf[4096]; // send data buffer
-    int tx_length;
+	int tx_length;
 
 	// first parameter, url (file, input name, etc), is in save_pointer
 	if(session->save_pointer){
@@ -3482,7 +3479,7 @@ unsigned char handle_logmeta(ctl_session *session){
 unsigned char handle_stat(ctl_session *session){
 	char buf[4096]; /* send data buffer */
 	char *tmp;
-    int tx_length;
+	int tx_length;
 	
 	// play list status
 	if(plRunning)
@@ -3530,7 +3527,7 @@ unsigned char handle_list(ctl_session *session){
 	unsigned int i;
 	float totalTime;
 	char buf[4096]; /* send data buffer */
-    int tx_length;
+	int tx_length;
 	float segInT;
 	float segOutT;
 	float fadeT;
@@ -3603,10 +3600,10 @@ unsigned char handle_add(ctl_session *session){
 	char *param;
 	char *end;
 	char buf[4096]; /* send data buffer */
-    uint32_t aLong, idx;
+	uint32_t aLong, idx;
 	int aInt;
-    int bInt;
-    int tx_length;
+	int bInt;
+	int tx_length;
 
 	aLong = 0;
 	// first parameter, position (-1 for end of list) or UID
@@ -3762,9 +3759,9 @@ unsigned char handle_uadd(ctl_session *session){
 	char *param;
 	char *end, *tmp;
 	char buf[4096]; /* send data buffer */
-    uint32_t aLong;
+	uint32_t aLong;
 	int aInt;
-    int tx_length;
+	int tx_length;
 	
 	// first parameter, position (-1 for end of list) or UID
 	param = strtok_r(NULL, " ", &session->save_pointer);
@@ -3856,7 +3853,7 @@ unsigned char handle_expand(ctl_session *session){
 	char *param;
 	char *end;
 	char *tmp;
-    uint32_t aLong, pos;
+	uint32_t aLong, pos;
 	queueRecord *instance;
 
 	// first parameter, uid of list item (playlist) to expand
@@ -3926,7 +3923,7 @@ unsigned char handle_getuid(ctl_session *session){
 
 unsigned char handle_inuid(ctl_session *session){
 	char buf[16]; /* send data buffer */
-    int tx_length;
+	int tx_length;
 	char *url;
 	uint32_t uid;
 	
@@ -3955,7 +3952,7 @@ unsigned char handle_inuid(ctl_session *session){
 unsigned char handle_waitseg(ctl_session *session){
 	char *param;
 	char *end;
-    uint32_t aLong;
+	uint32_t aLong;
 	uint32_t pos;
 	int next;
 	int sInt;
@@ -4239,11 +4236,12 @@ unsigned char handle_coilset(ctl_session *session, unsigned char val){
 
 unsigned char handle_rstat(ctl_session *session){
 	char buf[4096]; /* send data buffer */
-    int tx_length;
-    unsigned int i;
+	int tx_length;
+	unsigned char empty;
+	unsigned int i;
 	uint32_t UID;
 	int status;
-	float pos;
+	float pos, vol;
 	time_t when;
 	char *name;
 	
@@ -4259,6 +4257,9 @@ unsigned char handle_rstat(ctl_session *session){
 		pos = GetMetaFloat(UID, "Position", NULL);
 		if((status & rec_running) && (when = GetMetaInt(UID, "TimeStamp", NULL)))
 			pos = pos + (time(NULL) - when);
+		vol = GetMetaFloat(UID, "Volume", &empty);
+		if(empty)
+			vol = 1.0;
 		tx_length = snprintf(buf, sizeof buf, "%08x\t%d\t%.1f\t%u\t%u\t%.3f\t%s\n", UID, status, pos, (unsigned int)GetMetaInt(UID, "Limit", NULL), 
 								(unsigned int)GetMetaInt(UID, "Persistent", NULL), GetMetaFloat(UID, "Volume", NULL), name);
 		free(name);

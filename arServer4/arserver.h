@@ -102,7 +102,7 @@ enum{
 };
 
 enum{
- 	auto_off = 0,
+	auto_off = 0,
 	auto_live,
 	auto_unatt
 };

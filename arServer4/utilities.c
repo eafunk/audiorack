@@ -73,7 +73,7 @@ void str_setstr(char **string, const char *cStr){
 	
 	if(cStr == NULL)
 		return;
-	if(*string != NULL)
+	if(*string)
 		free(*string);
 	*string = strdup(cStr);
 }
@@ -767,7 +767,7 @@ void releaseTaskRecord(taskRecord *root, taskRecord *rec){
     
 	/* A running task should never be released to reference count 0 
 	 * when the task completes, it will self-release */
-    rec->refCnt--;
+	rec->refCnt--;
 	if(rec->refCnt == 0){
 		/* if reference count is zero, unhook and free the record */
 		prev = root;
