@@ -984,7 +984,7 @@ void* handleCtlQueues(void *refCon){
 									}
 								}else if(!strcasecmp(item->string, "ISRC")){
 									if(item->valuestring && (strlen(item->valuestring))){
-										gst_tag_list_add(tags, GST_TAG_MERGE_REPLACE, GST_TAG_ARTIST, item->valuestring, NULL);
+										gst_tag_list_add(tags, GST_TAG_MERGE_REPLACE, GST_TAG_ISRC, item->valuestring, NULL);
 									}
 								}
 							}while(item = item->next);
