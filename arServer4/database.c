@@ -107,8 +107,9 @@ void HandleDBerror(dbi_conn Conn, void *user_argument){
 	userData->flag = 1;
 	dbi_conn_error(Conn, &msg);
 	if(msg){
-		str_setstr(&str, "[database] ");
+		str_setstr(&str, "[libdbi] ");
 		str_appendstr(&str, userData->message);
+		str_appendstr(&str, "-");
 		str_appendstr(&str, msg);
 		serverLogMakeEntry(str);
 		free(str);
@@ -238,7 +239,7 @@ unsigned char MakeLogEntry(ProgramLogRecord *rec){
 
 	prefix = GetMetaData(0, "db_prefix", 0);
 	
-	errRec.message = "MakeLogEntry ";
+	errRec.message = "MakeLogEntry";
 	dbi_conn_error_handler(conn, HandleDBerror, (void*)(&errRec));	
 	
 	// make a new entry:
@@ -351,7 +352,7 @@ unsigned char updateLogMeta(uint32_t uid){
 	
 		prefix = GetMetaData(0, "db_prefix", 0);
 		
-		errRec.message = "updateLogMeta ";
+		errRec.message = "updateLogMeta";
 		dbi_conn_error_handler(conn, HandleDBerror, (void*)(&errRec));	
 		
 		// make a new entry:
@@ -422,7 +423,7 @@ void DeleteLogEntry(void *inRef){
 	
 	prefix = GetMetaData(0, "db_prefix", 0);
 	
-	errRec.message = "DeleteLogEntry ";
+	errRec.message = "DeleteLogEntry";
 	dbi_conn_error_handler(conn, HandleDBerror, (void*)(&errRec));	
 	result = dbi_conn_queryf(conn, "DELETE FROM %slogs WHERE ID = %lu AND (Added & 1) = 1", prefix, *logID);
 
@@ -455,7 +456,7 @@ short dbPLGetNextMeta(uint32_t index, uint32_t ID, uint32_t UID){
 	
 	prefix = GetMetaData(0, "db_prefix", 0);
 	
-	errRec.message = "dbPLGetNextMeta ";
+	errRec.message = "dbPLGetNextMeta";
 	dbi_conn_error_handler(conn, HandleDBerror, (void *)(&errRec));	
 	
 	// perform the sql query function
@@ -765,7 +766,7 @@ char *dbGetInfo(const char *property){
 	prefix = GetMetaData(0, "db_prefix", 0);
 	dbi_conn_quote_string(conn, &propCpy);
 
-	errRec.message = "dbGetInfo ";
+	errRec.message = "dbGetInfo";
 	dbi_conn_error_handler(conn, HandleDBerror, (void *)(&errRec));	
 	
 	// perform the sql query function
@@ -826,7 +827,7 @@ unsigned char db_initialize(struct dbErr *inRec){
 	char line[4096];
 	struct dbErr errRec;
 	
-	errRec.message = "dbInitialize ";
+	errRec.message = "dbInitialize";
 	errRec.flag = 1;
 	fp = NULL;
 	
@@ -870,7 +871,7 @@ unsigned char db_initialize(struct dbErr *inRec){
 	
 	if((fp = fopen(ini_file_path, "r")) == NULL){
 		if(!versionStr || !strlen(versionStr)){
-			str_setstr(&tmp, "[database] dbInitialize: template file '");
+			str_setstr(&tmp, "[database] dbInitialize- template file '");
 			str_appendstr(&tmp, ini_file_path);
 			str_appendstr(&tmp, "': Could not open file for reading");
 			serverLogMakeEntry(tmp);
@@ -910,9 +911,9 @@ cleanup:
 	}
 	if(!errRec.flag){
 		versionStr = dbGetInfo("Version");
-		str_setstr(&tmp, " [database] dbInitialize '");
+		str_setstr(&tmp, " [database] dbInitialize-");
 		str_appendstr(&tmp, dbName);
-		str_appendstr(&tmp, "': initialized/updated to version ");
+		str_appendstr(&tmp, ": initialized/updated to version ");
 		str_appendstr(&tmp, versionStr);
 		serverLogMakeEntry(tmp);
 		free(dbName);
@@ -996,7 +997,7 @@ void dbPick(taskRecord *parent){
 	field = 0;
 	lastResult = NULL;
 
-	errRec.message = "db query Pick ";
+	errRec.message = "dbPick";
 	dbi_conn_error_handler(conn, HandleDBerror, (void *)(&errRec));	
 	
 	// parse query string for multiple queries, separated with ';' char
@@ -1046,7 +1047,7 @@ void dbPick(taskRecord *parent){
 								str_insertstr(&tmp, ": split failed on item:///", 0);
 								str_insertstr(&tmp, (name = GetMetaData(parent->UID, "Name", 0)), 0);
 								free(name);
-								str_insertstr(&tmp, "Database- [db query Pick] ", 0);
+								str_insertstr(&tmp, "[database] dbPick-", 0);
 								serverLogMakeEntry(tmp);
 								free(tmp);
 							}
@@ -1069,7 +1070,7 @@ void dbPick(taskRecord *parent){
 								str_insertstr(&tmp, ": split failed on item:///", 0);
 								str_insertstr(&tmp, (name = GetMetaData(parent->UID, "Name", 0)), 0);
 								free(name);
-								str_insertstr(&tmp, "Database- [db query Pick] ", 0);
+								str_insertstr(&tmp, "[database] dbPick-", 0);
 								serverLogMakeEntry(tmp);
 								free(tmp);
 							}
@@ -1092,7 +1093,7 @@ void dbPick(taskRecord *parent){
 									str_insertstr(&tmp, ": split failed on item:///", 0);
 									str_insertstr(&tmp, (name = GetMetaData(parent->UID, "Name", 0)), 0);
 									free(name);
-									str_insertstr(&tmp, "Database- [db query Pick] ", 0);
+									str_insertstr(&tmp, "[database] dbPick-", 0);
 									serverLogMakeEntry(tmp);
 									free(tmp);
 								}
@@ -1133,7 +1134,7 @@ void dbPick(taskRecord *parent){
 									str_insertstr(&tmp, ": split failed on item:///", 0);
 									str_insertstr(&tmp, (name = GetMetaData(parent->UID, "Name", 0)), 0);
 									free(name);
-									str_insertstr(&tmp, "Database- [db query Pick] ", 0);
+									str_insertstr(&tmp, "[database] dbPick-", 0);
 									serverLogMakeEntry(tmp);
 									free(tmp);
 								}else{								
@@ -1152,21 +1153,21 @@ void dbPick(taskRecord *parent){
 				free(mode);
 			}else{
 				tmp = GetMetaData(parent->UID, "Name", 0);
-				str_insertstr(&tmp, "Database- [db query Pick] ", 0);
+				str_insertstr(&tmp, "[database] dbPick-", 0);
 				str_appendstr(&tmp, ": no result.");
 				serverLogMakeEntry(tmp);
 				free(tmp);
 			}
 		}else{
 			tmp = GetMetaData(parent->UID, "Name", 0);
-			str_insertstr(&tmp, "Database- [db query Pick] ", 0);
+			str_insertstr(&tmp, "[database] dbPick-", 0);
 			str_appendstr(&tmp, ": NULL result.");
 			serverLogMakeEntry(tmp);
 			free(tmp);
 		}
 	}else{
 		tmp = GetMetaData(parent->UID, "Name", 0);
-		str_insertstr(&tmp, "Database- [db query Pick] ", 0);
+		str_insertstr(&tmp, "[database] dbPick-", 0);
 		str_appendstr(&tmp, ": timeout.");
 		serverLogMakeEntry(tmp);
 		free(tmp);
@@ -2802,7 +2803,7 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, dbi_conn conn, unsigned char
 		SetMetaData(UID, "Missing", "1");	
 
 		msg = NULL;
-		str_setstr(&msg, "Database- item ");
+		str_setstr(&msg, "[database] GetdbFileMetaData-");
 		str_appendstr(&msg, (tmp = GetMetaData(UID, "Name", 0)));
 		free(tmp);
 		str_appendstr(&msg, " ID#");
@@ -3210,7 +3211,7 @@ void dbFileSync(ctl_session *session, unsigned char silent){
 	my_send(session, buf, tx_length, silent);
 	tx_length = snprintf(buf, sizeof buf, "Checked=%u, Missing=%u, Error=%u, Fixed=%u", (unsigned int)count, (unsigned int)missing, (unsigned int)error, (unsigned int)fixed);
 	MSG = NULL;
-	str_setstr(&MSG, "dbSync - database '");
+	str_setstr(&MSG, "[database] dbSync-");
 	str_appendstr(&MSG, (tmp = GetMetaData(0, "db_name", 0)));
 	free(tmp);
 	str_appendstr(&MSG, "': ");
@@ -3273,7 +3274,7 @@ int dbHashSearchFileHeiarchy(ctl_session *session, unsigned char silent, const c
 		tx_length = snprintf(buf, sizeof buf, " Searching...\n");
 		my_send(session, buf, tx_length, silent);
 		tmp = NULL;
-		str_setstr(&tmp, "dbFileSearch - searching for moved files: ");
+		str_setstr(&tmp, "database] dbFileSearch-searching for moved files: ");
 		str_appendstr(&tmp, searchPath);
 		serverLogMakeEntry(tmp);
 		free(tmp);
@@ -3319,13 +3320,13 @@ int dbHashSearchFileHeiarchy(ctl_session *session, unsigned char silent, const c
 											tx_length = snprintf(buf, sizeof buf, " Fixed\n");
 											my_send(session, buf, tx_length, silent);
 											tmp = NULL;
-											str_setstr(&tmp, "dbFileSearch - Found missing file: ");
+											str_setstr(&tmp, "[database] dbFileSearch-Found missing file: ");
 											str_appendstr(&tmp, fts_entry->fts_path);
 											serverLogMakeEntry(tmp);
 											free(tmp);
 										}
 									}else{
-										str_setstr(&tmp, "dbFileSearch - Fix failed for found missing file: ");
+										str_setstr(&tmp, "[database] dbFileSearch-Fix failed for found missing file: ");
 										str_appendstr(&tmp, fts_entry->fts_path);
 										serverLogMakeEntry(tmp);
 										free(tmp);

@@ -79,7 +79,7 @@ void jack_shutdown_callback(void *arg){
 	 * is 0xffffffff in hex, and invalid port ID. */
 	putCBQitem(&mixEngineRef->cbQueue, (unsigned)(-1));
 	pthread_cond_broadcast(&mixEngineRef->cbQueueSemaphore);
-	serverLogMakeEntry("jack-audio- jackd audio server has gone away: We are shutting down too.");
+	serverLogMakeEntry("[jack-audio] -:Jackd audio server has gone away. We are shutting down too.");
 }
  
 static void jack_reg_callback(jack_port_id_t port_id, int isReging, void *arg){

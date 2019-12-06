@@ -122,7 +122,7 @@ void loadPreConfig(void)
 			str_setstr(&startup_path, AppSupportDirectory);
 			str_appendstr(&startup_path, "user_startup.conf"); 
 			if((fp = fopen(startup_path, "r")) == NULL){
-				serverLogMakeEntry("Config File- tried standard startup.conf file paths: Could not open file for reading");
+				serverLogMakeEntry("[main] loadPreConfig-: tried standard startup.conf file paths: Could not open file for reading");
 				/* set back to default if no config file found */
 				if(pwrec = getpwuid(geteuid())){
 					str_setstr(&startup_path, pwrec->pw_dir);
@@ -135,7 +135,7 @@ void loadPreConfig(void)
 		}
 	}else{
 		if((fp = fopen(startup_path, "r")) == NULL){
-			snprintf(line, sizeof line, "Config File- %s Could not open file for reading", startup_path);
+			snprintf(line, sizeof line, "[main] loadPreConfig-%s:Could not open file for reading", startup_path);
 			serverLogMakeEntry(line);
 			return;
 		}
@@ -633,7 +633,7 @@ int main(int argc, const char *argv[])
 	
 	/* this initializes gstream for media metadata/tag extraction */
 	if(!mediaInit())	
-		serverLogMakeEntry("Failed to initialize gstreamer library. This is trouble!");
+		serverLogMakeEntry("[main] mediaInit-:Failed to initialize gstreamer library. This is trouble!");
 
 	initAutomator();
 	
@@ -660,7 +660,7 @@ int main(int argc, const char *argv[])
 		write(STDERR_FILENO, command, strlen(command));
 	}
 */
-	snprintf(command, sizeof command, "Server has started on port %d", tcpPort);
+	snprintf(command, sizeof command, "[main] -:Server has started on port %d", tcpPort);
 	serverLogMakeEntry(command);
 
 	snprintf(command, sizeof command, "Server has started\n");

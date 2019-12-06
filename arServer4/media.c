@@ -227,7 +227,7 @@ char *getScriptFromFile(const char *file, unsigned char silent){
 
 	if(!(fp = fopen(file, "r"))){
 		if(!silent){
-			str_setstr(&tmp, "fileOpenScript- ");
+			str_setstr(&tmp, "[main] getScriptFromFile-");
 			str_appendstr(&tmp, file);
 			str_appendstr(&tmp, ": couldn't open file for reading");
 			serverLogMakeEntry(tmp);
@@ -653,25 +653,25 @@ void handle_discovered(GstDiscoverer *discoverer, GstDiscovererInfo *info, uint3
 	result = gst_discoverer_info_get_result(info);
 	switch(result) {
 		case GST_DISCOVERER_URI_INVALID:
-			snprintf(buf, sizeof buf, "media tags: Invalid URI for %s", uri);
+			snprintf(buf, sizeof buf, "[media] handle_discovered-tags: Invalid URI for %s", uri);
 			serverLogMakeEntry(buf);
 			break;
 		case GST_DISCOVERER_ERROR:
-			snprintf(buf, sizeof buf, "media tags: Discovery error for %s", uri);
+			snprintf(buf, sizeof buf, "[media] handle_discovered-%s: Discovery error", uri);
 			serverLogMakeEntry(buf);
 			break;
 		case GST_DISCOVERER_TIMEOUT:
-			snprintf(buf, sizeof buf, "media tags: Discovery timedote URI for %s", uri);
+			snprintf(buf, sizeof buf, "[media] handle_discovered-%s: Discovery timeout", uri);
 			serverLogMakeEntry(buf);
 			break;
 		case GST_DISCOVERER_BUSY:
-			snprintf(buf, sizeof buf, "media tags: Invalid URI for %s", uri);
+			snprintf(buf, sizeof buf, "[media] handle_discovered-%s: Invalid URI", uri);
 			serverLogMakeEntry(buf);
 			break;
 		case GST_DISCOVERER_MISSING_PLUGINS:{
 			s = gst_discoverer_info_get_misc(info);
 			tmp = gst_structure_to_string(s);
-			snprintf(buf, sizeof buf, "media tags: missing gstreamer plugin, %s, for %s", tmp, uri);
+			snprintf(buf, sizeof buf, "[media] handle_discovered-%s: missing gstreamer plugin %s", uri, tmp);
 			serverLogMakeEntry(buf);
 			free(tmp);
 			break;
@@ -679,7 +679,7 @@ void handle_discovered(GstDiscoverer *discoverer, GstDiscovererInfo *info, uint3
 	}
 
 	if(result != GST_DISCOVERER_OK){
-		snprintf(buf, sizeof buf, "media tags: failed to read tags for %s", uri);
+		snprintf(buf, sizeof buf, "[media] handle_discovered-%s:failed to read tags", uri);
 		serverLogMakeEntry(buf);
 		SetMetaData(UID, "Missing", "1");
 		return;
@@ -726,7 +726,7 @@ void GetGstDiscoverMetaData(uint32_t UID, const char *url_str){
 	}else{
 		char buf[4096];
 		SetMetaData(UID, "Missing", "1");
-		snprintf(buf, sizeof buf, "media tags: failed to get media tag for %s", url_str);
+		snprintf(buf, sizeof buf, "[media] GetGstDiscoverMetaData-%s:failed to get media tag", url_str);
 		serverLogMakeEntry(buf);
 	}
 
@@ -1524,7 +1524,8 @@ void dbPLOpen(uint32_t UID){
 		if(!strlen(itemURL)){
 			// failed to resolve
 			tmp = GetMetaData(pass.localUID, "Name", 0);
-			str_insertstr(&tmp, "dbPLOpen: couldn't resolve item ", 0);
+			str_insertstr(&tmp, "[media] dbPLOpen-", 0);
+			str_appendstr(&tmp, ": couldn't resolve item ");
 			serverLogMakeEntry(tmp);
 			free(tmp);
 		}else{
@@ -1576,7 +1577,8 @@ void fplFilePLOpen(struct locals *locBlock, uint32_t plUID){
 	itemURL = GetMetaData(plUID, "URL", 0);
 	if(fplPLGetNextMeta(locBlock->fp, locBlock->plMeta)){
 		// error... 		
-		str_insertstr(&itemURL, "fplFilePLOpen: corrupt file header for fpl ", 0);
+		str_insertstr(&itemURL, "[media] fplFilePLOpen-", 0);
+		str_appendstr(&itemURL, ": corrupt file header for fpl");
 		serverLogMakeEntry(itemURL);
 		free(itemURL);
 		return;
@@ -1590,7 +1592,8 @@ void fplFilePLOpen(struct locals *locBlock, uint32_t plUID){
 		idOK = 1;
 	}else{
 		idOK = 0;
-		str_insertstr(&itemURL, "fplFilePLOpen: different current/saved databases; item searches disabled for fpl ", 0);
+		str_insertstr(&itemURL, "[media] fplFilePLOpen-", 0);
+		str_appendstr(&itemURL, ": different current/saved databases; item searches disabled for fpl ");
 		serverLogMakeEntry(itemURL);
 	}
 	free(fp);
@@ -1615,7 +1618,8 @@ void fplFilePLOpen(struct locals *locBlock, uint32_t plUID){
 		itemURL = FindFromMeta(locBlock->localUID);
 		if(!strlen(itemURL)){
 			// failed to resolve
-			str_insertstr(&tmp, "fplFilePLOpen: couldn't resolve item ", 0);
+			str_insertstr(&tmp, "[media] fplFilePLOpen-", 0);
+			str_appendstr(&tmp, ": couldn't resolve item");
 			serverLogMakeEntry(tmp);
 			free(tmp);
 		}else{
@@ -1673,7 +1677,8 @@ void plsFilePLOpen(struct locals *locBlock, uint32_t plUID, char *filePath){
 	if(plsPLGetNextMeta(locBlock->fp, 0, filePath)){
 		// error... 
 		tmp = strdup(filePath);
-		str_insertstr(&tmp, "plsFilePLOpen: corrupt file header for pls ", 0);
+		str_insertstr(&tmp, "[media] fplFilePLOpen-", 0);
+		str_appendstr(&tmp, ": corrupt file header for pls ");
 		serverLogMakeEntry(tmp);
 		free(tmp);
 		return;
@@ -1689,7 +1694,8 @@ void plsFilePLOpen(struct locals *locBlock, uint32_t plUID, char *filePath){
 		itemURL = FindFromMeta(locBlock->localUID);
 		if(!strlen(itemURL)){
 			// failed to resolve
-			str_insertstr(&tmp, "fplFilePLOpen: couldn't resolve item ", 0);
+			str_insertstr(&tmp, "[media] fplFilePLOpen-", 0);
+			str_appendstr(&tmp, ": couldn't resolve item ");
 			serverLogMakeEntry(tmp);
 			free(tmp);
 		}else{
@@ -1747,7 +1753,8 @@ void m3uFilePLOpen(struct locals *locBlock, uint32_t plUID, char *filePath){
 	// read past header
 	if(m3uPLGetNextMeta(locBlock->fp, 0, filePath)){
 		tmp = strdup(filePath);
-		str_insertstr(&tmp, "m3uFilePLOpen: corrupt file header for pls ", 0);
+		str_insertstr(&tmp, "[media] m3uFilePLOpen-", 0);
+		str_appendstr(&tmp, ": corrupt file header for pls");
 		serverLogMakeEntry(tmp);
 		free(tmp);
 		return;
@@ -1763,7 +1770,8 @@ void m3uFilePLOpen(struct locals *locBlock, uint32_t plUID, char *filePath){
 		itemURL = FindFromMeta(locBlock->localUID);
 		if(!strlen(itemURL)){
 			// failed to resolve
-			str_insertstr(&tmp, "m3uFilePLOpen: couldn't resolve item ", 0);
+			str_insertstr(&tmp, "[media] m3uFilePLOpen-", 0);
+			str_appendstr(&tmp, ": couldn't resolve item");
 			serverLogMakeEntry(tmp);
 			free(tmp);
 		}else{
@@ -1814,8 +1822,9 @@ void filePLOpen(uint32_t UID){
 	//get path from file url
 	url = GetMetaData(UID, "URL", 0);
 	tmp = str_NthField(url, "://", 1);
-    if(!tmp){
-		str_insertstr(&url, "filePLOpen: bad URL ", 0);
+	if(!tmp){
+		str_insertstr(&url, "[media] filePLOpen-", 0);
+		str_appendstr(&url, ": bad URL");
 		serverLogMakeEntry(url);
 		free(url);
 		goto cleanup;   
@@ -1830,7 +1839,8 @@ void filePLOpen(uint32_t UID){
 	free(tmp);
 
 	if((locBlock.fp = fopen(path, "r")) == NULL){
-		str_insertstr(&path, "filePLOpen: couldn't open file for reading ", 0);
+		str_insertstr(&path, "[media] filePLOpen-", 0);
+		str_appendstr(&path, ": couldn't open file for reading");
 		serverLogMakeEntry(path);
 		free(path);
 		goto cleanup;
@@ -1847,6 +1857,7 @@ void filePLOpen(uint32_t UID){
 			m3uFilePLOpen(&locBlock, UID, path);
 			break;
 		default:	// unknown file type
+			str_insertstr(&url, "[media] filePLOpen-", 0);
 			str_insertstr(&path, "filePLOpen: unknown header in file ", 0);
 			serverLogMakeEntry(path);
 	}

@@ -63,10 +63,10 @@ unsigned char initAutomator(void){
 	
 	if(GetMetaInt(0, "auto_startup", NULL)){
 		autoState = auto_unatt;
-		serverLogMakeEntry("Automation - Switched to auto (startup action)");
+		serverLogMakeEntry("[automation] -:Switched to auto (startup action)");
 	}else{
 		autoState = auto_off;
-		serverLogMakeEntry("Automation - Switched to off (startup action)");
+		serverLogMakeEntry("[automation] -:Switched to off (startup action)");
 	}
 	
 	pthread_mutex_init(&mgrMutex, NULL);
@@ -821,7 +821,7 @@ void watchdogReset(void){
 			if((difftime(time(NULL), silent_event) > silent_timeout)){
 				if(!silent_tryseg){
 					// first try to seg all
-					serverLogMakeEntry("Automation - Silence detection timed out: trying seg all");
+					serverLogMakeEntry("[automation] -:Silence detection timed out: trying seg all");
 					silent_tryseg = 1;
 					silent_event = time(NULL);
 					
@@ -836,7 +836,7 @@ void watchdogReset(void){
 						}
 					}	
 				}else{
-					serverLogMakeEntry("Automation - Silence detection timed out: trying restart");
+					serverLogMakeEntry("[automation] -:Silence detection timed out: trying restart");
 					sleep(5);	// wait 5 seconds for log entry to be made
 					write(STDOUT_FILENO, "#", 1);
 					return;
@@ -1044,14 +1044,16 @@ void PlayListFiller(uint32_t *lastFillID, int *listPos){
 				if(!strlen(url)){
 					// failed to resolve
 					tmp = GetMetaData(itemUID, "Name", 0);
-					str_insertstr(&tmp, "Automation- Filler: couldn't resolve item ", 0);
+					str_insertstr(&tmp, "[automation] PlayListFiller-", 0);
+					str_appendstr(&tmp, ": couldn't resolve item");
 					serverLogMakeEntry(tmp);
 					free(tmp);
 				}
 				*listPos = *listPos + 1;
 			}else{
 				tmp = GetMetaData(localUID, "Name", 0);
-				str_insertstr(&tmp, "Automation- Filler: couldn't read playlist ", 0);
+				str_insertstr(&tmp, "[automation] PlayListFiller-", 0);
+				str_appendstr(&tmp, ": couldn't read playlist");
 				serverLogMakeEntry(tmp);
 				free(tmp);
 				if(strlen(url))
@@ -1166,7 +1168,7 @@ void QueManagerTask(unsigned char *stop){
 		if((autoState == auto_live) && (difftime(time(NULL), live_event) > autoLiveTimeout)){
 			autoState = auto_unatt;
 			// send out notifications
-			serverLogMakeEntry("Automation - Switched to auto (live time-out)");
+			serverLogMakeEntry("[automation] -Switched to auto (live time-out)");
 			
 			notifyData	data;
 			data.reference = 0;
@@ -1279,7 +1281,7 @@ void QueManagerTask(unsigned char *stop){
 					trec->cancelThread = 1;
 					trec->timeOut = 0;
 					char buf[96];
-					snprintf(buf, sizeof buf, "Task- %08x, thread sig# %08x: timed out.", (unsigned int)trec->UID, (unsigned int)trec->thread);
+					snprintf(buf, sizeof buf, "[task] -%08x, thread sig# %08x: timed out.", (unsigned int)trec->UID, (unsigned int)trec->thread);
 					serverLogMakeEntry(buf); 
 					trec->timeOut = 0;
 				}

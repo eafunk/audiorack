@@ -608,7 +608,7 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 	if (!strcmp(arg, "autoon")) {   
 		autoState = auto_unatt;
 		// send out notifications
-		serverLogMakeEntry("Automation - Switched to auto (user action)");
+		serverLogMakeEntry("[automation] -:Switched to auto (user action)");
 
 		notifyData	data;
 		data.reference = 0;
@@ -622,7 +622,7 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 	if (!strcmp(arg, "autooff")) {   
 		autoState = auto_off;
 		// send out notifications
-		serverLogMakeEntry("Automation - Switched to off (user action)");
+		serverLogMakeEntry("[automation] -:Switched to off (user action)");
 
 		notifyData	data;
 		data.reference = 0;
@@ -636,7 +636,7 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 	if (!strcmp(arg, "autolive")) {   
 		autoState = auto_live;
 		// send out notifications
-		serverLogMakeEntry("Automation - Switched to live (user action)");
+		serverLogMakeEntry("[automation] -:Switched to live (user action)");
 
 		notifyData	data;
 		data.reference = 0;
@@ -1041,7 +1041,7 @@ void* TCPListener(void *refCon){
 			pthread_mutex_unlock(&sMutex);
 	
 			if(i == sessionListSize){
-				serverLogMakeEntry("Connection Listener: requests exceed max number of allowed connections");
+				serverLogMakeEntry("[session] TCPListener-new connections: requests exceed max number of allowed connections");
 				send( ns, "maximum number of connection exceeded. Try again later.\n", 57, 0);
 				close(ns);
 			}
@@ -4187,7 +4187,7 @@ unsigned char handle_coilset(ctl_session *session, unsigned char val){
 										size = size + rx_length;
 										if(size == 6){
 											if((reply.pading != 0) || (reply.length != packet.length)){
-												tmp = strdup("Modbus Send: Bad reply length from ");
+												tmp = strdup("[session] handle_coilset-Modbus Send: Bad reply length from ");
 												str_appendstr(&tmp, addr);
 												serverLogMakeEntry(tmp);
 												free(tmp);
@@ -4198,7 +4198,7 @@ unsigned char handle_coilset(ctl_session *session, unsigned char val){
 										if(size == limit){
 											// we have a whole packet
 											if(memcmp(&packet, &reply, size))
-												tmp = strdup("Modbus Send: Reply mismatch from ");
+												tmp = strdup("[session] handle_coilset-Modbus Send: Reply mismatch from ");
 												str_appendstr(&tmp, addr);
 												serverLogMakeEntry(tmp);
 												free(tmp);
@@ -4207,7 +4207,7 @@ unsigned char handle_coilset(ctl_session *session, unsigned char val){
 									}
 										
 									if(rx_length < 0){
-										tmp = strdup("Modbus Send: No reply from ");
+										tmp = strdup("[session] handle_coilset-Modbus Send: No reply from ");
 										str_appendstr(&tmp, addr);
 										serverLogMakeEntry(tmp);
 										free(tmp);
@@ -4215,7 +4215,7 @@ unsigned char handle_coilset(ctl_session *session, unsigned char val){
 									close(sock);
 									return rOK;
 								}else{
-									tmp = strdup("Modbus Send: Connection failed to ");
+									tmp = strdup("[session] handle_coilset-Modbus Send: Connection failed to ");
 									str_appendstr(&tmp, addr);
 									serverLogMakeEntry(tmp);
 									free(tmp);

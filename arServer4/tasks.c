@@ -438,32 +438,32 @@ void modbusPoll(void  *refIn){
 		result = modbusQuery(&rec->sock, rec->addr, rec->unitID, rec->inputID);
 		switch(result){
 			case -1:
-				tmp = strdup("Modbus Query: connection failed to ");
+				tmp = strdup("[session] modbusPoll-Modbus Query: connection failed to ");
 				str_appendstr(&tmp, rec->addr);
 				serverLogMakeEntry(tmp);
 				free(tmp);
 				break;
 			case -2:
-				tmp = strdup("Modbus Query: losted connection from ");
+				tmp = strdup("[session] modbusPoll-Modbus Query: losted connection from ");
 				str_appendstr(&tmp, rec->addr);
 				serverLogMakeEntry(tmp);
 				free(tmp);
 				break;
 			case -3:
-				tmp = strdup("Modbus Query: Invalid reply  from ");
+				tmp = strdup("[session] modbusPoll-Modbus Query: Invalid reply  from ");
 				str_appendstr(&tmp, rec->addr);
 				serverLogMakeEntry(tmp);
 				free(tmp);
 				break;
 			case -4:
 			case -5:
-				tmp = strdup("Modbus Query: Wrong size reply from ");
+				tmp = strdup("[session] modbusPoll-Modbus Query: Wrong size reply from ");
 				str_appendstr(&tmp, rec->addr);
 				serverLogMakeEntry(tmp);
 				free(tmp);
 				break;
 			case -6:
-				tmp = strdup("Modbus Query: Socket error from ");
+				tmp = strdup("[session] modbusPoll-Modbus Query: Socket error from ");
 				str_appendstr(&tmp, rec->addr);
 				serverLogMakeEntry(tmp);
 				free(tmp);

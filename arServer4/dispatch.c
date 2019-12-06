@@ -842,7 +842,7 @@ void notifyMakeEntry(char type, void *data, unsigned short size)
 		}else{
 			// no room in the queue... drop record
 			pthread_mutex_unlock(&notifyQueueLock);
-			serverLogMakeEntry("Notification Queue- Queue full, entry dropped.");
+			serverLogMakeEntry("[dispatch] notifyMakeEntry-notifyQueue:Queue full, entry dropped.");
 			free(record);
 		}
 	}
@@ -985,7 +985,7 @@ void programLogMakeEntry(ProgramLogRecord *entry){
 	}else{
 		// no room in the queue... drop record
 		pthread_mutex_unlock(&pgmLogQueueLock);
-		serverLogMakeEntry("Program Log Queue- Queue full, log entry dropped.");
+		serverLogMakeEntry("[dispatch] programLogMakeEntry-programQueue:Queue full, entry dropped.");
 		if(entry->name)
 			free(entry->name);
 		if(entry->artist)
