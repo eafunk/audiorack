@@ -1663,7 +1663,7 @@ unsigned char handle_pstat(ctl_session *session){
 			tx_length = snprintf(buf, sizeof buf, "%u\t%u\t%08x\t%u\t%s\t%.3f\t%.2f\t%06x\t%.2f\t%.1f\t%.1f\t%d\t%.2f\t%.2f\n", 
 				i, (unsigned int)instance->status, (unsigned int)instance->UID, 
 				mrev, type, instance->vol, instance->bal,
-				instance->busses, instance->pos, dur, btime, 
+				(instance->busses & 0x00ffffff), instance->pos, dur, btime, 
 				instance->segNext - 1, instance->posSeg, instance->fadePos);
 			free(type);
 			my_send(session, buf, tx_length, session->silent);
