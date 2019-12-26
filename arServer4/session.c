@@ -2709,7 +2709,7 @@ unsigned char handle_setout(ctl_session *session){
 									instance->reqBus = bus;
 									instance->requested = instance->requested | change_bus;
 								}
-								updateOutputConnections(mixEngine, instance, 1, session->save_pointer);							
+								updateOutputConnections(mixEngine, instance, 1, session->save_pointer, NULL);
 
 								pthread_rwlock_unlock(&mixEngine->outGrpLock);
 								free(name);
@@ -2748,7 +2748,7 @@ unsigned char handle_setout(ctl_session *session){
 								port++;
 							}
 
-							updateOutputConnections(mixEngine, instance, 1, session->save_pointer);							
+							updateOutputConnections(mixEngine, instance, 1, session->save_pointer, NULL);
 							
 							pthread_rwlock_unlock(&mixEngine->outGrpLock);
 							free(name);
@@ -2971,7 +2971,7 @@ unsigned char handle_delout(ctl_session *session){
 						jack_port_rename(mixEngine->client, *port, buf);
 						port++;
 					}
-					updateOutputConnections(mixEngine, instance, 1, NULL);
+					updateOutputConnections(mixEngine, instance, 1, NULL, NULL);
 					
 					pthread_rwlock_unlock(&mixEngine->outGrpLock);
 					free(name);						

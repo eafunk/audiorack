@@ -198,7 +198,7 @@ char *initMixer(mixEngineRecPtr *mixEngineRef, unsigned int width,
 						
 void shutdownMixer(mixEngineRecPtr mixEngineRef);
 void updateOutputConnections(mixEngineRecPtr mixEngineRef, outChannel *rec, 
-							unsigned char updatePorts, const char *portList);
+							unsigned char updatePorts, const char *portList, const char *matchOnly);
 							
 jack_port_id_t *getCBQitem(callbackQueue *Q);
 

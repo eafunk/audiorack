@@ -174,7 +174,7 @@ typedef struct __attribute__((packed)){		/* data structures for each channel ins
 }vuNData; 
 
 /* Global Variables */
-extern const char *versionStr;
+extern const char *versionStr;	// set in main.c
 extern mixEngineRecPtr mixEngine;
 extern unsigned char run;	// signal by program to threads/processes to stop
 extern unsigned char quit;	// set by user action to exit program

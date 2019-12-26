@@ -207,8 +207,10 @@ void *jackChangeWatcher(void *refCon){
 										if(clist = str_NthField(plist, "&", c)){
 											i = 0;
 											while(pname = str_NthField(clist, "+", i)){
-												if(!jack_port_connected_to(*pptr, name))
-													jack_connect(mixEngine->client, jack_port_name(*pptr), pname);
+												if(!strcmp(pname, name)){
+													if(!jack_port_connected_to(*pptr, name))
+														jack_connect(mixEngine->client, jack_port_name(*pptr), pname);
+												}
 												free(pname);
 												i++;
 											}
@@ -225,8 +227,10 @@ void *jackChangeWatcher(void *refCon){
 										if(clist = str_NthField(plist, "&", c)){
 											i = 0;
 											while(pname = str_NthField(clist, "+", i)){
-												if(!jack_port_connected_to(*pptr, name))
-													jack_connect(mixEngine->client, jack_port_name(*pptr), pname);
+												if(!strcmp(pname, name)){
+													if(!jack_port_connected_to(*pptr, name))
+														jack_connect(mixEngine->client, jack_port_name(*pptr), pname);
+												}
 												free(pname);
 												i++;
 											}
@@ -244,14 +248,7 @@ void *jackChangeWatcher(void *refCon){
 						orec = mixEngine->outs;
 						pthread_rwlock_rdlock(&mixEngine->outGrpLock);
 						for(i=0; i<mixEngine->outCount; i++){
-							/* while it may seem inefficient to call the updateOutputConnections
-							 * funtion for each output group with out verifying if the output group
-							 * actually contains a connection to the named port, it turns out that
-							 * most of what updateOutputConnections does is itterate though the 
-							 * output group's connection list, so we might as well just have 
-							 * updateOutputConnections do it, rathet than checking here, and then
-							 * doing it again in updateOutputConnections if a match is found. */
-							updateOutputConnections(mixEngine, orec, 0, NULL);
+							updateOutputConnections(mixEngine, orec, 0, NULL, name);
 							orec++;
 						}
 						pthread_rwlock_unlock(&mixEngine->outGrpLock);							

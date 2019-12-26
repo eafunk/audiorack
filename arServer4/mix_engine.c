@@ -70,7 +70,7 @@ unsigned char checkPnumber(int pNum)
 	return 1;
 }
 
-/* 3 JACK callback for the condition stated in the function name */
+/* 3 JACK callbacks for the condition stated in the function name */
 void jack_shutdown_callback(void *arg){
 	mixEngineRecPtr mixEngineRef = (mixEngineRecPtr)arg;
 	
@@ -721,10 +721,10 @@ int process(jack_nframes_t nframes, void *arg){
 	if(wakeChanged)
 		pthread_cond_broadcast(&mixEngineRef->changedSemaphore);
 
-	return 0;      
+	return 0;
 }
 
-/**
+/*
  * Set up the mixer and associated JACK ports
  * based on the give in, out and bus counts.
  * Must be called AFTER we have connected to a JACK server
@@ -985,7 +985,7 @@ void shutdownMixer(mixEngineRecPtr mixEngineRef){
 	free(mixEngineRef);
 }
 
-void updateOutputConnections(mixEngineRecPtr mixEngineRef, outChannel *rec, unsigned char updatePorts, const char *portList){
+void updateOutputConnections(mixEngineRecPtr mixEngineRef, outChannel *rec, unsigned char updatePorts, const char *portList, const char *matchOnly){
 	/* NOTE:  the outGrpLock lock is assumed to already be read locked, or
 	 * if updatePorts is true, write locked. If updatePorts is false, the
 	 * existing record list will be used to reconnect ports, if needed       */
@@ -1050,8 +1050,10 @@ void updateOutputConnections(mixEngineRecPtr mixEngineRef, outChannel *rec, unsi
 			if(newChList = str_NthField(rec->portList, "&", c)){
 				i = 0;
 				while(portName = str_NthField(newChList, "+", i)){
-					if(!jack_port_connected_to(*cPort, portName))
-						jack_connect(mixEngineRef->client, jack_port_name(*cPort), portName);
+					if((matchOnly == NULL) || !strcmp(portName, matchOnly)){
+						if(!jack_port_connected_to(*cPort, portName))
+							jack_connect(mixEngineRef->client, jack_port_name(*cPort), portName);
+					}
 					free(portName);
 					i++;
 				}
