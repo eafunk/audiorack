@@ -2067,10 +2067,12 @@ unsigned char handle_unload(ctl_session *session){
 		}
 		port = instance->in_jPorts;
 		cmax = mixEngine->chanCount;
+		pthread_mutex_lock(&mixEngine->jackMutex);
 		for(c=0; c<cmax; c++){
 			jack_port_disconnect(mixEngine->client, *port);
 			port++;
 		}
+		pthread_mutex_unlock(&mixEngine->jackMutex);
 		return rOK;
 /*		
 		if(pLocks[aInt]->readLock(false)){
@@ -2500,8 +2502,10 @@ unsigned char handle_srcports(ctl_session *session){
 	int size, i;
 	const char **ports, *port;
 	
-
-	if(ports = jack_get_ports(mixEngine->client, NULL, JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput)){
+	pthread_mutex_lock(&mixEngine->jackMutex);
+	ports = jack_get_ports(mixEngine->client, NULL, JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput);
+	pthread_mutex_unlock(&mixEngine->jackMutex);
+	if(ports){
 		tx_length = snprintf(buf, sizeof buf, "Client:Port\n");
 		my_send(session, buf, tx_length, session->silent);
 		i=0;
@@ -2510,7 +2514,7 @@ unsigned char handle_srcports(ctl_session *session){
 			my_send(session, buf, tx_length, session->silent);
 			i++;
 		}
-		free(ports);
+		jack_free(ports);
 		return rNone;
 	}
 	session->errMSG = "Error retreaving current Jack client and port list.\n";
@@ -2523,7 +2527,10 @@ unsigned char handle_dstports(ctl_session *session){
 	int size, i;
 	const char **ports, *port;
 	
-	if(ports = jack_get_ports(mixEngine->client, NULL, JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput)){
+	pthread_mutex_lock(&mixEngine->jackMutex);
+	ports = jack_get_ports(mixEngine->client, NULL, JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput);
+	pthread_mutex_unlock(&mixEngine->jackMutex);
+	if(ports){
 		tx_length = snprintf(buf, sizeof buf, "Client:Port\n");
 		my_send(session, buf, tx_length, session->silent);
 		i=0;
@@ -2742,12 +2749,13 @@ unsigned char handle_setout(ctl_session *session){
 							port = instance->jPorts;
 							max = mixEngine->chanCount;
 							/* set port name */
+							pthread_mutex_lock(&mixEngine->jackMutex);
 							for(c=0; c<max; c++){
 								snprintf(buf, sizeof buf, "%s_ch%d", instance->name, c);
 								jack_port_rename(mixEngine->client, *port, buf);
 								port++;
 							}
-
+							pthread_mutex_unlock(&mixEngine->jackMutex);
 							updateOutputConnections(mixEngine, instance, 1, session->save_pointer, NULL);
 							
 							pthread_rwlock_unlock(&mixEngine->outGrpLock);
@@ -2966,11 +2974,13 @@ unsigned char handle_delout(ctl_session *session){
 					port = instance->jPorts;
 					max = mixEngine->chanCount;
 					/* unset port name */
+					pthread_mutex_lock(&mixEngine->jackMutex);
 					for(c=0; c<max; c++){
 						snprintf(buf, sizeof buf, "Out%dch%d", i, c);
 						jack_port_rename(mixEngine->client, *port, buf);
 						port++;
 					}
+					pthread_mutex_unlock(&mixEngine->jackMutex);
 					updateOutputConnections(mixEngine, instance, 1, NULL, NULL);
 					
 					pthread_rwlock_unlock(&mixEngine->outGrpLock);
@@ -3042,8 +3052,10 @@ unsigned char handle_jconlist(ctl_session *session){
 	rec = (connRecord *)&connList;
 	while(rec = (connRecord *)getNextNode((LinkedListEntry *)rec)){
 		flag = 0;
+		pthread_mutex_lock(&mixEngine->jackMutex);
 		if(jport = jack_port_by_name(mixEngine->client, rec->src)){	
 			if(conns = jack_port_get_all_connections(mixEngine->client, jport)){
+				pthread_mutex_unlock(&mixEngine->jackMutex);
 				ptr = conns;
 				while(name = *ptr){
 					if(!strcmp(name, rec->dest)){
@@ -3053,8 +3065,10 @@ unsigned char handle_jconlist(ctl_session *session){
 					ptr++;
 				}
 				jack_free(conns);
-			}
-		}
+			}else
+				pthread_mutex_unlock(&mixEngine->jackMutex);
+		}else
+			pthread_mutex_unlock(&mixEngine->jackMutex);
 		tx_length = snprintf(buf, sizeof buf, "%d\t%s>%s\n", 
 					flag, rec->src, rec->dest);
 		my_send(session, buf, tx_length, session->silent);
@@ -3069,7 +3083,9 @@ unsigned char handle_jackconn(ctl_session *session){
 	if(session->save_pointer && strlen(session->save_pointer)){
 		if(src = str_NthField(session->save_pointer, ">", 0)){
 			if(dest = str_NthField(session->save_pointer, ">", 1)){
+				pthread_mutex_lock(&mixEngine->jackMutex);
 				if(!jack_connect(mixEngine->client, src, dest)){
+					pthread_mutex_unlock(&mixEngine->jackMutex);
 					pthread_rwlock_wrlock(&connLock);
 					setValuesForConn((connRecord *)&connList, src, dest);
 					pthread_rwlock_unlock(&connLock);
@@ -3077,6 +3093,7 @@ unsigned char handle_jackconn(ctl_session *session){
 					free(src);
 					return rOK;	
 				}else{
+					pthread_mutex_unlock(&mixEngine->jackMutex);
 					free(dest);
 					free(src);
 					session->errMSG = "Connection failed.\n";
@@ -3101,12 +3118,15 @@ unsigned char handle_jackdisc(ctl_session *session){
 				pthread_rwlock_wrlock(&connLock);
 				if(rec = findConnRecord((connRecord *)&connList, src, dest))
 					releaseConnRecord((connRecord *)&connList, rec);
-				pthread_rwlock_unlock(&connLock);	
-				if(!jack_disconnect(mixEngine->client, src, dest)){			
+				pthread_rwlock_unlock(&connLock);
+				pthread_mutex_lock(&mixEngine->jackMutex);
+				if(!jack_disconnect(mixEngine->client, src, dest)){
+					pthread_mutex_unlock(&mixEngine->jackMutex);
 					free(dest);
 					free(src);
 					return rOK;	
 				}else{
+					pthread_mutex_unlock(&mixEngine->jackMutex);
 					free(dest);
 					free(src);
 					session->errMSG = "Disconnect failed.\n";
