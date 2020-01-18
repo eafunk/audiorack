@@ -259,7 +259,9 @@ uint32_t SplitItem(uint32_t parent, char *URLstr, unsigned char last){
 			free(tmp);
 			SetMetaData(newID, "OwnerID", (tmp = GetMetaData(parent, "ID", 0)));
 			free(tmp);
-			SetMetaData(newID, "Together", (tmp = GetMetaData(parent, "Together", 0)));
+			tmp = GetMetaData(parent, "Together", 0)
+			if(strlen(tmp))
+				SetMetaData(newID, "Together", tmp);
 			free(tmp);
 			if(atof(tmp = GetMetaData(parent, "FadeOut", 0)) > 0.0)
 				SetMetaData(newID, "FadeOut", tmp);

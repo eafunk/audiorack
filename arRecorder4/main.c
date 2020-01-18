@@ -176,7 +176,7 @@ typedef struct _CustomData {
 	gboolean terminate;		/* Should we terminate execution? */
 	gboolean persist;		/* should we keep running when jack ports are disconnected? */
 	unsigned char tagBus;	/* bit number [1..8] of tag play bus that must be set to pass tags down pipeline */
-	float curPos;			/* position update in seconds */
+	double curPos;			/* position update in seconds */
 	pthread_mutex_t ctlMutex;
 	pthread_cond_t ctlSemaphore;
 	pthread_mutex_t pushMutex;
@@ -207,7 +207,6 @@ void INThandler(int sig){	/* CONTROL-C toggles record/pause */
 
 void QUIThandler(int sig){	/* CONTROL-\ triggers end-of-recording clean-up/shutdown */
 	data.closeReq = 1;
-fprintf(stderr, "Quit: closereq =1, status=%d\n", data.status);
 }
 
 void clearCBQ(callbackQueue *Q){
@@ -373,7 +372,7 @@ int CreateFPLHeader(FILE *fpl, char *Name, int *fpFilePos){
 	return durFilePos;
 }
 
-void CloseFPL(FILE *fpl, float duration, int durFilePos){	
+void CloseFPL(FILE *fpl, double duration, int durFilePos){	
 	char *tmp = NULL;
 	char *dur;
 	
@@ -392,7 +391,7 @@ void CloseFPL(FILE *fpl, float duration, int durFilePos){
 	fclose(fpl);
 }
 
-void AddFPLEntryFromProgramLogStruct(FILE *fpl, float Offset, ProgramLogRecord *Rec, int *fpFilePos){	
+void AddFPLEntryFromProgramLogStruct(FILE *fpl, double Offset, ProgramLogRecord *Rec, int *fpFilePos){	
 	char *fpstr, *tmp;
 	char *line = NULL;
 
@@ -812,7 +811,6 @@ void* pushRingbufferSamples(void *refCon){
 		// if we should be "playing" and the pipeline is stopped, get it going
 		if((data->status & (rec_start | rec_running)) && (data->state != GST_STATE_PLAYING)){
 			gst_element_set_state(data->pl, GST_STATE_PLAYING);
-g_print("setting pipeline to play\n");			
 		} 
 
 		if(data->closeReq){
@@ -822,8 +820,6 @@ g_print("setting pipeline to play\n");
 			data->closeReq = FALSE;
 			data->status = data->status & ~(rec_start | rec_running);
 			data->closeWaiting = TRUE;
-fprintf(stderr, "hadling close: closewait=1, status=%d\n", data->status);
-
 		}
 			 
 		if(data->flushAudio){
@@ -838,10 +834,10 @@ fprintf(stderr, "hadling close: closewait=1, status=%d\n", data->status);
 					jack_ringbuffer_peek(data->ringbuffer, info.data, size);
 					if(gst_app_src_push_buffer(GST_APP_SRC(data->asrc), buffer) == GST_FLOW_OK){
 						jack_ringbuffer_read_advance(data->ringbuffer, size);
-						float pos = data->curPos;
-						float time = (float)size / (float)(data->sampleRate * data->chCount * sizeof(jack_default_audio_sample_t));
+						double pos = data->curPos;
+						double time = (double)size / (double)(data->sampleRate * data->chCount * sizeof(jack_default_audio_sample_t));
 						data->curPos = pos + time; 
-						if(data->limit && (data->curPos >= (float)data->limit)){
+						if(data->limit && (data->curPos >= (double)data->limit)){
 							// reached recording time limit
 							data->status = data->status | rec_done;
 							gst_element_send_event(data->pl, gst_event_new_eos());
@@ -850,15 +846,16 @@ fprintf(stderr, "hadling close: closewait=1, status=%d\n", data->status);
 					}
 					gst_buffer_unmap(buffer, &info);
 					buffer = NULL;
-				}
-				if(buffer)
+				}else
+				if(buffer){
 					// failed to hand off buffer to gstreamer pipeline
-					gst_buffer_unref(buffer);	
+					gst_buffer_unref(buffer);
+				}
 			}
 		}
 		pthread_mutex_lock(&data->pushMutex);
 		pthread_cond_wait(&data->pushSemaphore, &data->pushMutex);
-		pthread_mutex_unlock(&data->pushMutex);		
+		pthread_mutex_unlock(&data->pushMutex);
 	}while(!data->terminate);
 	
     return NULL;
@@ -951,15 +948,16 @@ void* handleCtlQueues(void *refCon){
 					jack_ringbuffer_read(data->ctlrecvqueue, (char*)packet, len+7);
 					packet->data[len] = 0;
 					if(obj = cJSON_Parse(packet->data)){
-						if(item = obj->child){
+						if(item = obj->child){ 
 							tags = gst_tag_list_new_empty();
+							gst_tag_list_set_scope(tags, GST_TAG_SCOPE_GLOBAL);
 							memset(&logRec, 0, sizeof(ProgramLogRecord));
 							do{
 								if(item->child && item->string){
 									if(jstr = cJSON_PrintUnformatted(item)){
 										str_insertstr(&jstr, "=", 0);
 										str_insertstr(&jstr, item->string, 0);
-										gst_tag_list_add(tags, GST_TAG_MERGE_REPLACE, GST_TAG_EXTENDED_COMMENT, jstr, NULL);
+										gst_tag_list_add(tags, GST_TAG_MERGE_REPLACE, "extended-comment", jstr, NULL);
 										free(jstr);
 									}
 								}else if(!strcasecmp(item->string, "Name")){
@@ -1053,8 +1051,6 @@ void handle_message(CustomData *data, GstMessage *msg) {
 			if(!data->closeWaiting)
 				data->status = data->status | rec_err_con_fail;
 			gst_element_set_state(data->pl, GST_STATE_READY);
-fprintf(stderr, "EOS MSG: status=%d\n", data->status);
-		
 			break;
 		case GST_MESSAGE_STATE_CHANGED:
 			gst_message_parse_state_changed(msg, &old_state, &new_state, &pending_state);
@@ -1066,7 +1062,6 @@ fprintf(stderr, "EOS MSG: status=%d\n", data->status);
 				data->state = new_state;
 								
 				if(new_state == GST_STATE_READY){
-g_print("status set to ready\n");
 					data->status = data->status | rec_ready;
 					data->settingsChanged = TRUE;
 					pthread_cond_broadcast(&data->ctlSemaphore);
@@ -1107,7 +1102,7 @@ void mainloop(int next_arg, char *argv[], int apl_arg, unsigned char persist, lo
 	GError *err = NULL;
 	GstStateChangeReturn ret;
 	GstMessage *msg = NULL;
-	GstBus *bus;
+	GstBus *bus = NULL;
 	GstAudioInfo info; 
 	GstCaps *audio_caps;
 	jack_options_t options = JackUseExactName;
@@ -1241,24 +1236,24 @@ void mainloop(int next_arg, char *argv[], int apl_arg, unsigned char persist, lo
 		g_printerr("\nERROR: JACK midi ports allocation failed.\n");
 		goto finish;
 	}
-				
+
 	/* Configure appsource to match JACK pad properties */
 	gst_audio_info_set_format(&info, GST_AUDIO_FORMAT_F32, data.sampleRate, data.chCount, NULL);
 	audio_caps = gst_audio_info_to_caps(&info);
 	gst_app_src_set_caps(GST_APP_SRC(data.asrc), audio_caps);
 	gst_caps_unref(audio_caps);
 	
- 	/* create push thread to take realtime data from ringbuffer and push it into the gstreamer appsrc element */
+	/* create push thread to take realtime data from ringbuffer and push it into the gstreamer appsrc element */
 	pthread_mutex_init(&data.pushMutex, NULL);  
-    pthread_cond_init(&data.pushSemaphore, NULL);
-    pthread_create(&data.pushThread, NULL, &pushRingbufferSamples, &data);
-      
-    /* create control port queue monitor thread */
-    pthread_mutex_init(&data.ctlMutex, NULL);  
-    pthread_cond_init(&data.ctlSemaphore, NULL);
-    pthread_create(&data.ctlThread, NULL, &handleCtlQueues, &data);
-     
-    if(apl_arg){
+	pthread_cond_init(&data.pushSemaphore, NULL);
+	pthread_create(&data.pushThread, NULL, &pushRingbufferSamples, &data);
+	
+	/* create control port queue monitor thread */
+	pthread_mutex_init(&data.ctlMutex, NULL);  
+	pthread_cond_init(&data.ctlSemaphore, NULL);
+	pthread_create(&data.ctlThread, NULL, &handleCtlQueues, &data);
+	
+	if(apl_arg){
 		if(data.ascPlayList = fopen(argv[apl_arg], "w+")){
 
 			char *tmp, *loc, *cpy = strdup(argv[apl_arg]);
@@ -1326,7 +1321,7 @@ void mainloop(int next_arg, char *argv[], int apl_arg, unsigned char persist, lo
 		g_printerr("\nERROR: failed to connect to %s:ctlIn midi ports... no control: start/stop,end using signals (ctl-c, ctl-\\).\n", pname);
 	}
 
-    signal(SIGINT, INThandler);		// CTL-c
+	signal(SIGINT, INThandler);		// CTL-c
 	signal(SIGQUIT, QUIThandler);	// ctl-\
 
 	data.settingsChanged = TRUE;	// trigger initial setting announcement
@@ -1370,10 +1365,14 @@ finish:
 	if(data.pushThread){
 		pthread_cond_broadcast(&data.pushSemaphore);
 		pthread_join(data.pushThread, NULL);
+		pthread_cond_destroy(&data.pushSemaphore);
+		pthread_mutex_destroy(&data.pushMutex);
 	}
 	if(data.ctlThread){
 		pthread_cond_broadcast(&data.ctlSemaphore);
 		pthread_join(data.ctlThread, NULL);
+		pthread_cond_destroy(&data.ctlSemaphore);
+		pthread_mutex_destroy(&data.ctlMutex);
 	}
 	if(data.client){
 		jack_deactivate(data.client);
@@ -1405,15 +1404,13 @@ finish:
 	}
 	if(data.pl){
 		gst_element_set_state(data.pl, GST_STATE_NULL);
-		gst_object_unref(data.pl);
-		gst_object_unref(bus);
+		// wait upto 5 seconds for state change
+		gst_element_get_state(data.pl, NULL, NULL, 5 * GST_MSECOND);
+		if(bus)
+			gst_object_unref(bus);
 	}
 	if(data.ascPlayList)
 		CloseFPL(data.ascPlayList, data.curPos, durFilePos);
-    pthread_cond_destroy(&data.pushSemaphore);
-	pthread_mutex_destroy(&data.pushMutex);
-    pthread_cond_destroy(&data.ctlSemaphore);
-    pthread_mutex_destroy(&data.ctlMutex);
 	munlock(&data, sizeof(CustomData));
 	gst_deinit();
 }
