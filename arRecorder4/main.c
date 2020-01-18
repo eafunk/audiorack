@@ -176,7 +176,7 @@ typedef struct _CustomData {
 	gboolean terminate;		/* Should we terminate execution? */
 	gboolean persist;		/* should we keep running when jack ports are disconnected? */
 	unsigned char tagBus;	/* bit number [1..8] of tag play bus that must be set to pass tags down pipeline */
-	double curPos;			/* position update in seconds */
+	GstClockTime curPos;			/* position update in sst clock time units */
 	pthread_mutex_t ctlMutex;
 	pthread_cond_t ctlSemaphore;
 	pthread_mutex_t pushMutex;
@@ -801,13 +801,14 @@ static int jack_process(jack_nframes_t nframes, void *arg){
 void* pushRingbufferSamples(void *refCon){
 	CustomData *data = (CustomData*)refCon;
 	GstBuffer *buffer;
-	GstMapInfo info;
+	void *mem;
 	GstState state, pending;
 	guint size;
+	GstClockTime timestamp, dur;
 
-    pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
-    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
-    do{
+	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+	do{
 		// if we should be "playing" and the pipeline is stopped, get it going
 		if((data->status & (rec_start | rec_running)) && (data->state != GST_STATE_PLAYING)){
 			gst_element_set_state(data->pl, GST_STATE_PLAYING);
@@ -829,28 +830,28 @@ void* pushRingbufferSamples(void *refCon){
 		}
 		
 		if(size = jack_ringbuffer_read_space(data->ringbuffer)){
-			if(buffer = gst_buffer_new_allocate(NULL, size, NULL)){
-				if(gst_buffer_map(buffer, &info, GST_MAP_WRITE)){
-					jack_ringbuffer_peek(data->ringbuffer, info.data, size);
+			if(mem = malloc(size)){
+				if(buffer = gst_buffer_new_wrapped(mem, size)){
+					jack_ringbuffer_peek(data->ringbuffer, mem, size);
+					timestamp = data->curPos;
+					dur = gst_util_uint64_scale_int(size, GST_SECOND, data->sampleRate * data->chCount * sizeof(jack_default_audio_sample_t));
+					GST_BUFFER_TIMESTAMP(buffer) = timestamp;
+					GST_BUFFER_DURATION(buffer) = dur;
 					if(gst_app_src_push_buffer(GST_APP_SRC(data->asrc), buffer) == GST_FLOW_OK){
 						jack_ringbuffer_read_advance(data->ringbuffer, size);
-						double pos = data->curPos;
-						double time = (double)size / (double)(data->sampleRate * data->chCount * sizeof(jack_default_audio_sample_t));
-						data->curPos = pos + time; 
-						if(data->limit && (data->curPos >= (double)data->limit)){
+						data->curPos = timestamp + dur; 
+						if(data->limit && (gst_util_uint64_scale_int(data->curPos, 1, GST_SECOND) >= data->limit)){
 							// reached recording time limit
 							data->status = data->status | rec_done;
 							gst_element_send_event(data->pl, gst_event_new_eos());
 							data->closeReq = TRUE;
 						}
+					}else{
+						// failed to hand off buffer to gstreamer pipeline
+						gst_buffer_unref(buffer);
 					}
-					gst_buffer_unmap(buffer, &info);
-					buffer = NULL;
 				}else
-				if(buffer){
-					// failed to hand off buffer to gstreamer pipeline
-					gst_buffer_unref(buffer);
-				}
+					free(mem);
 			}
 		}
 		pthread_mutex_lock(&data->pushMutex);
@@ -858,7 +859,7 @@ void* pushRingbufferSamples(void *refCon){
 		pthread_mutex_unlock(&data->pushMutex);
 	}while(!data->terminate);
 	
-    return NULL;
+	return NULL;
 }
 
 static gboolean gst_send_tag_event(GstElement *src, GstTagList *tags){
@@ -895,7 +896,7 @@ char *settingsToControlPacketData(CustomData *data){
 		cJSON_AddFalseToObject(obj, "Locked");
 	cJSON_AddNumberToObject(obj, "TagBus", data->tagBus); // bus bit +1
 	cJSON_AddNumberToObject(obj, "Start", data->start);
-	cJSON_AddNumberToObject(obj, "Position", data->curPos);
+	cJSON_AddNumberToObject(obj, "Position", (double)gst_util_uint64_scale_int(data->curPos, 10, GST_SECOND) * 0.1);
 	cJSON_AddNumberToObject(obj, "Volume", data->vol);
 	
 	cJSON_AddNumberToObject(obj, "Status", data->status);
@@ -1007,7 +1008,9 @@ void* handleCtlQueues(void *refCon){
 									if((item = cJSON_GetObjectItem(ar, "Comment")) && (item->valuestring))
 										logRec.comment = item->valuestring;
 								}
-								AddFPLEntryFromProgramLogStruct(data->ascPlayList, data->curPos, &logRec, &data->fpFilePos);
+								AddFPLEntryFromProgramLogStruct(data->ascPlayList, 
+													(double)gst_util_uint64_scale_int(data->curPos, 10, GST_SECOND) * 0.1,
+													&logRec, &data->fpFilePos);
 							}
 						}
 						cJSON_Delete(obj);
@@ -1145,7 +1148,7 @@ void mainloop(int next_arg, char *argv[], int apl_arg, unsigned char persist, lo
 	data.closeWaiting = FALSE;
 	data.pushThread = 0;
 	data.ctlThread = 0;
-	data.curPos = 0.0;
+	data.curPos = 0;
 	data.persist = persist;
 	data.limit = limit;
 	data.start = start;
@@ -1344,9 +1347,9 @@ void mainloop(int next_arg, char *argv[], int apl_arg, unsigned char persist, lo
 				
 			/* ...and update/print status & record time. */
 			if(data.status & rec_running)
-				g_print("Recording %f\r", data.curPos);
+				g_print("Recording %.1f\r", (double)gst_util_uint64_scale_int(data.curPos, 10, GST_SECOND) * 0.1);
 			else
-				g_print("Stopped %f\r", data.curPos);
+				g_print("Stopped %.1f\r", (double)gst_util_uint64_scale_int(data.curPos, 10, GST_SECOND) * 0.1);
 				
 			if((data.closeWaiting) && (data.state != GST_STATE_PLAYING)){
 				g_print("Shutting down.\n");
@@ -1410,7 +1413,7 @@ finish:
 			gst_object_unref(bus);
 	}
 	if(data.ascPlayList)
-		CloseFPL(data.ascPlayList, data.curPos, durFilePos);
+		CloseFPL(data.ascPlayList, (double)gst_util_uint64_scale_int(data.curPos, 10, GST_SECOND) * 0.1, durFilePos);
 	munlock(&data, sizeof(CustomData));
 	gst_deinit();
 }
@@ -1462,7 +1465,7 @@ int main(int argc, char *argv[]){
 			mainloop(i, argv, aplarg, pers, limit, start, bit);
 			return 0;
 		}
-	}	
+	}
 	fprintf(stderr, "Usage: (optional, in front of required) [required - in order]\n"); 
 	fprintf(stderr, "%s (-p) (-a file-path) (-s unix-start-time) (-l time-limit-seconds) (-b tags-bus-bit-number) [our unique Jack name] [control client name] [ctlUID] [jack port connection list] [gstreamer-pipline]\n\n", argv[0]);
 	fprintf(stderr, "-p optionaly enables jack connection persistance, causing arRecorder to keep running when jack connections are lost\n");

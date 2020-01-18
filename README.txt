@@ -101,12 +101,12 @@ being installed on your system.  You will ikely need the header files
 installed on your system to build the project as well. This usually 
 implies the developer version of these packages must be intsalled:
 
-gstreamer1			including all good, bad and ugly plugins, bad may 
+gstreamer1		including all good, bad and ugly plugins, bad may 
 					require manual install.
 					
 gstreamer-pbutils
 
-jackd 				version 2, and any support libraries/programs for 
+jackd 			version 2, and any support libraries/programs for 
 					you to set up and manageaudio on your system.
 
 arServer4, in addition, depends on the following libraries:
@@ -156,16 +156,16 @@ configuration found in the /opt/audiorack/support/ directory.
 
 This default configuration will create a .audiorack directory in the 
 user's account that runs the program.  This directory is used to store
-program settings, and can optionally conatin an alternate startup file.
-An optional startup file can contain pre-load configuration flags which
+program settings, and can optionally contain an alternate startup file.
+An alternate startup file can contain pre-load configuration flags which
 are treated as if the command line options were passed when the program 
 was run. Copy the /opt/audiorack/support/user_startup.conf into your new
 ~/.audiorack directory as ars_startup.conf and edit it to customize this
 startup file.
 
 Note that this default launch of arServer4 will run arServer4 in the
-background, keep-alive on, standard sockets closed.  For debugging, run 
-with the -e and -n options to keep stderr open, and to run directly, 
+background, keep-alive on, standard IO sockets closed.  For debugging, 
+run with the -e and -n options to keep stderr open, and to run directly, 
 without a running through a secondary "keep-alive/watchdog" process.
 
 To see all the command line options for arServer:

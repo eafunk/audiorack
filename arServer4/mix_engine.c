@@ -81,7 +81,17 @@ void jack_shutdown_callback(void *arg){
 	pthread_cond_broadcast(&mixEngineRef->cbQueueSemaphore);
 	serverLogMakeEntry("[jack-audio] -:Jackd audio server has gone away. We are shutting down too.");
 }
- 
+
+void jack_connchange_callback(jack_port_id_t a, jack_port_id_t b, int connect, void *arg){
+	mixEngineRecPtr mixEngineRef = (mixEngineRecPtr)arg;
+	
+	/* this is a jackd connection change notice.  We indicate this to the callback
+	 * handler via a callback-queue entry with a port ID set to -2, which 
+	 * is 0xfffffffe in hex, and invalid port ID. */
+	putCBQitem(&mixEngineRef->cbQueue, (unsigned)(-2));
+	pthread_cond_broadcast(&mixEngineRef->cbQueueSemaphore);
+}
+
 static void jack_reg_callback(jack_port_id_t port_id, int isReging, void *arg){
 	mixEngineRecPtr mixEngineRef = (mixEngineRecPtr)arg;
 	
@@ -105,6 +115,7 @@ static void jack_rename_callback(jack_port_id_t port_id, const char *old_name, c
 }
 
 void setInChanToDefault(inChannel *chrec){
+	chrec->isConnected = 0;
 	chrec->vol = def_vol;		// default scalar gain
 	chrec->busses = def_busses;	// default bus settings
 	chrec->bal = def_bal;		// default balance value
@@ -160,7 +171,6 @@ int process(jack_nframes_t nframes, void *arg){
 	valuetype *val;
 	unsigned int groupGain, least;
 	unsigned char wakeChanged;
-	unsigned char isConnected;
 	float curSegLevel;	
 	unsigned char handled = 0;
 	
@@ -424,12 +434,7 @@ int process(jack_nframes_t nframes, void *arg){
 			activeBus = activeBus | busbits;
 			
 		curSegLevel = 0;
-		isConnected = 0;
 		for(c=0; c<ccount; c++){
-			/* noted any connection to an inputs port in the status */
-			if(jack_port_connected(*in_port))
-				isConnected = 1;
-				
 			/* channel c of input number i */
 			in = samp = jack_port_get_buffer(*in_port, nframes);
 			// volume and balance scaling
@@ -509,7 +514,7 @@ int process(jack_nframes_t nframes, void *arg){
 			in_port++;
 		}			
 
-		if(isConnected){
+		if(inchrec->isConnected){
 			if((inchrec->status & status_standby) == 0){
 				inchrec->status = inchrec->status & (~status_loading);
 				inchrec->status = inchrec->status | status_standby;
@@ -758,6 +763,8 @@ char *initMixer(mixEngineRecPtr *mixEngineRef, unsigned int width,
 	mixRef->outCount = outputs;
 	mixRef->busCount = buses;
 	
+	pthread_mutex_init(&mixRef->jackMutex, NULL);  
+	
 	pthread_mutex_init(&mixRef->ctlOutQueueMutex, NULL);  
 	pthread_mutex_init(&mixRef->changedMutex, NULL);  
 	pthread_cond_init(&mixRef->changedSemaphore, NULL);
@@ -889,8 +896,9 @@ char *initMixer(mixEngineRecPtr *mixEngineRef, unsigned int width,
 	jack_on_shutdown(mixRef->client, jack_shutdown_callback, mixRef);
 	
 	jack_set_port_registration_callback(mixRef->client, jack_reg_callback, mixRef);
-	jack_set_port_rename_callback(mixRef->client, jack_rename_callback,mixRef);
-		
+	jack_set_port_rename_callback(mixRef->client, jack_rename_callback, mixRef);
+	jack_set_port_connect_callback(mixRef->client, jack_connchange_callback, mixRef);
+	
 	if(jack_activate(mixRef->client)) 
 		return "cannot activate client";
 							
@@ -980,6 +988,8 @@ void shutdownMixer(mixEngineRecPtr mixEngineRef){
 	pthread_spin_destroy(&mixEngineRef->cbQueue.spinlock);
 	jack_client_close(mixEngineRef->client);
 
+	pthread_mutex_destroy(&mixEngineRef->jackMutex);  
+
 	/* free mixer container structure */
 	munlock(mixEngineRef, sizeof(mixEngineRec));
 	free(mixEngineRef);
@@ -1015,8 +1025,11 @@ void updateOutputConnections(mixEngineRecPtr mixEngineRef, outChannel *rec, unsi
 			while(oldChList && (portName = str_NthField(oldChList, "+", i))){
 				if(!newChList || (!strstr(newChList, portName))){
 					// not in new list: disconnect the port
-					if(strlen(portName))
+					if(strlen(portName)){
+						pthread_mutex_lock(&mixEngineRef->jackMutex);
 						jack_disconnect(mixEngineRef->client, jack_port_name(*cPort), portName);
+						pthread_mutex_unlock(&mixEngineRef->jackMutex);
+					}
 				}
 				i++;
 				free(portName);
@@ -1051,8 +1064,10 @@ void updateOutputConnections(mixEngineRecPtr mixEngineRef, outChannel *rec, unsi
 				i = 0;
 				while(portName = str_NthField(newChList, "+", i)){
 					if((matchOnly == NULL) || !strcmp(portName, matchOnly)){
+						pthread_mutex_lock(&mixEngineRef->jackMutex);
 						if(!jack_port_connected_to(*cPort, portName))
 							jack_connect(mixEngineRef->client, jack_port_name(*cPort), portName);
+						pthread_mutex_unlock(&mixEngineRef->jackMutex);
 					}
 					free(portName);
 					i++;

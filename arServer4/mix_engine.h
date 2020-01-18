@@ -57,6 +57,7 @@ typedef struct{
 
 typedef struct{
 	unsigned char sourceType;
+	unsigned char isConnected;
 	uint32_t UID;
 	pid_t attached;
 	FILE *aplFile;
@@ -112,6 +113,7 @@ typedef struct {
 } outChannel;
 
 typedef struct{
+	pthread_mutex_t jackMutex;
 	unsigned int chanCount;
 	unsigned int inCount;
 	unsigned int outCount;
@@ -136,8 +138,8 @@ typedef struct{
 	
 	pthread_rwlock_t outGrpLock;
 	pthread_mutex_t changedMutex;
-    pthread_cond_t changedSemaphore;
-    uint32_t activeBus;
+	pthread_cond_t changedSemaphore;
+	uint32_t activeBus;
     
 /* NOTE: outGrpLock is for read/write locking output group name, nameHash, 
  * and portList string values of the mix engine "outs" list. This is not 

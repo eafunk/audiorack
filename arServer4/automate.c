@@ -259,7 +259,7 @@ uint32_t SplitItem(uint32_t parent, char *URLstr, unsigned char last){
 			free(tmp);
 			SetMetaData(newID, "OwnerID", (tmp = GetMetaData(parent, "ID", 0)));
 			free(tmp);
-			tmp = GetMetaData(parent, "Together", 0)
+			tmp = GetMetaData(parent, "Together", 0);
 			if(strlen(tmp))
 				SetMetaData(newID, "Together", tmp);
 			free(tmp);
@@ -488,10 +488,12 @@ void UnloadItem(int pos, queueRecord *qrec){
 		qrec->player = 0;
 		port = instance->in_jPorts;
 		cmax = mixEngine->chanCount;
+		pthread_mutex_lock(&mixEngine->jackMutex);
 		for(c=0; c<cmax; c++){
 			jack_port_disconnect(mixEngine->client, *port);
 			port++;
 		}
+		pthread_mutex_unlock(&mixEngine->jackMutex);
 	}
 }
 

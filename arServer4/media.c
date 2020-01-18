@@ -960,11 +960,14 @@ uint32_t LoadJackPlayer(int pNum, const char *url_str, uint32_t UID){
 				while(portName = str_NthField(chanList, "+", i)){
 					if(strlen(portName)){
 						decodedName = uriDecode(portName);
+						pthread_mutex_lock(&mixEngine->jackMutex);
 						if(!jack_connect(mixEngine->client, decodedName, jack_port_name(*in_port))){
+							pthread_mutex_unlock(&mixEngine->jackMutex);
 							isConnected++;
 							if(!sourceName)
 								sourceName = str_NthField(decodedName, ":", 0);
-						}
+						}else
+							pthread_mutex_unlock(&mixEngine->jackMutex);
 						free(decodedName);
 					}
 					free(portName);
@@ -1057,9 +1060,12 @@ uint32_t LoadInputPlayer(int pNum, const char *url_str, uint32_t UID){
 					while(portName = str_NthField(chanList, "+", i)){
 						if(strlen(portName)){
 							decodedName = uriDecode(portName);
+							pthread_mutex_lock(&mixEngine->jackMutex);
 							if(!jack_connect(mixEngine->client, decodedName, jack_port_name(*in_port))){
+								pthread_mutex_unlock(&mixEngine->jackMutex);
 								isConnected++;
-							}
+							}else
+								pthread_mutex_unlock(&mixEngine->jackMutex);
 							free(decodedName);
 						}
 						free(portName);
@@ -1439,8 +1445,11 @@ uint32_t LoadPlayer(int *pNum, const char *url_str, uint32_t UID, unsigned char 
 					if(chanList = str_NthField(mmList, "&", c)){
 						i = 0;
 						while(portName = str_NthField(chanList, "+", i)){
-							if(strlen(portName))
+							if(strlen(portName)){
+								pthread_mutex_lock(&mixEngine->jackMutex);
 								jack_connect(mixEngine->client, jack_port_name(*port), portName);
+								pthread_mutex_unlock(&mixEngine->jackMutex);
+							}
 							free(portName);
 							i++;
 						}

@@ -468,10 +468,12 @@ unsigned char releaseQueueRecord(queueRecord *root, queueRecord *rec, unsigned c
 			// after jack port disconnection
 			port = instance->in_jPorts;
 			cmax = mixEngine->chanCount;
+			pthread_mutex_lock(&mixEngine->jackMutex);
 			for(c=0; c<cmax; c++){
 				jack_port_disconnect(mixEngine->client, *port);
 				port++;
 			}
+			pthread_mutex_unlock(&mixEngine->jackMutex);
 		}
 		
 		free(rec);

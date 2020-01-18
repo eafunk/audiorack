@@ -80,7 +80,7 @@ unsigned char initDispatcherThreads(void){
 	unsigned int bytes;
 
 	dispRun = 1;
-	
+
 	pthread_mutex_init(&lastsegMutex, NULL);
 	pthread_cond_init(&lastsegSemaphore, NULL);
 	
@@ -168,18 +168,41 @@ void *jackChangeWatcher(void *refCon){
 	connRecord *jcrec;
 	outChannel *orec;
 	inChannel *inrec;
+	unsigned char isConnected;
 
 	while(dispRun){
 		while(IDptr = getCBQitem(&mixEngine->cbQueue)){
 			if(*IDptr == (unsigned)(-1)){
 				/* jackd has quit or crashed.  We need to shutdown. */
 				quit = 1;
-			}else if(port = jack_port_by_id(mixEngine->client, *IDptr)){	
+			}else if(*IDptr == (unsigned)(-2)){
+fprintf(stderr, "updating all inputs' connection status\n");
+				// Check if any of our inputs
+				// has had a change in connection status
+				inrec = mixEngine->ins;
+				cmax = mixEngine->chanCount;
+				for(i=0; i<mixEngine->inCount; i++){
+					pptr = inrec->in_jPorts;
+					isConnected = 0;
+					for(c=0; c<cmax; c++){
+						if(jack_port_connected(*pptr))
+							isConnected = 1;
+						pptr++;
+					}
+					// update connected status
+					inrec->isConnected = isConnected;
+					inrec++;
+				}
+			}else if(port = jack_port_by_id(mixEngine->client, *IDptr)){
+				pthread_mutex_lock(&mixEngine->jackMutex);
 				if(jack_port_flags(port) & JackPortIsOutput)
 					isSource = 1;
 				else
 					isSource = 0;
-				if(name = jack_port_name(port)){
+				name = jack_port_name(port);
+				pthread_mutex_unlock(&mixEngine->jackMutex);
+
+				if(name){
 					/* search jackconn list for port name */
 					pthread_rwlock_rdlock(&connLock);
 					jcrec = (connRecord *)&connList;
@@ -190,7 +213,9 @@ void *jackChangeWatcher(void *refCon){
 							jcrec = findConnRecord(jcrec, NULL, name);
 						if(jcrec){
 							/* found... reconnect */
+							pthread_mutex_lock(&mixEngine->jackMutex);
 							jack_connect(mixEngine->client, jcrec->src, jcrec->dest);
+							pthread_mutex_unlock(&mixEngine->jackMutex);
 						}
 					}
 					pthread_rwlock_unlock(&connLock);
@@ -208,8 +233,10 @@ void *jackChangeWatcher(void *refCon){
 											i = 0;
 											while(pname = str_NthField(clist, "+", i)){
 												if(!strcmp(pname, name)){
+													pthread_mutex_lock(&mixEngine->jackMutex);
 													if(!jack_port_connected_to(*pptr, name))
 														jack_connect(mixEngine->client, jack_port_name(*pptr), pname);
+													pthread_mutex_unlock(&mixEngine->jackMutex);
 												}
 												free(pname);
 												i++;
@@ -228,8 +255,10 @@ void *jackChangeWatcher(void *refCon){
 											i = 0;
 											while(pname = str_NthField(clist, "+", i)){
 												if(!strcmp(pname, name)){
+													pthread_mutex_lock(&mixEngine->jackMutex);
 													if(!jack_port_connected_to(*pptr, name))
 														jack_connect(mixEngine->client, jack_port_name(*pptr), pname);
+													pthread_mutex_unlock(&mixEngine->jackMutex);
 												}
 												free(pname);
 												i++;
@@ -241,8 +270,8 @@ void *jackChangeWatcher(void *refCon){
 								}
 								free(plist);
 							}
-							inrec++;	
-						}						
+							inrec++;
+						}
 					}else{
 						/* itterate though the output groups, attempting to reconnect unconnected ports. */
 						orec = mixEngine->outs;
@@ -303,10 +332,12 @@ void *playerChangeWatcher(void *refCon){
 							jack_port_t **port;
 							port = instance->in_jPorts;
 							cmax = mixEngine->chanCount;
+							pthread_mutex_lock(&mixEngine->jackMutex);
 							for(c=0; c<cmax; c++){
 								jack_port_disconnect(mixEngine->client, *port);
 								port++;
 							}
+							pthread_mutex_unlock(&mixEngine->jackMutex);
 						}
 					}
 					data.senderID = 0;
@@ -503,8 +534,11 @@ void *playerChangeWatcher(void *refCon){
 							if(chanList = str_NthField(mmList, "&", c)){
 								i = 0;
 								while(portName = str_NthField(chanList, "+", i)){
-									if(strlen(portName))
+									if(strlen(portName)){
+										pthread_mutex_lock(&mixEngine->jackMutex);
 										jack_disconnect(mixEngine->client, jack_port_name(*port), portName);
+										pthread_mutex_unlock(&mixEngine->jackMutex);
+									}
 									free(portName);
 									i++;
 								}
@@ -568,7 +602,10 @@ void *playerChangeWatcher(void *refCon){
 				name = NULL;
 				str_setstr(&url, "");
 				for(c=0; c<mixEngine->chanCount; c++){
-					if(conList = jack_port_get_connections(instance->in_jPorts[c])){	
+					pthread_mutex_lock(&mixEngine->jackMutex);
+					conList = jack_port_get_connections(instance->in_jPorts[c]);
+					pthread_mutex_unlock(&mixEngine->jackMutex);
+					if(conList){	
 						if(conList[0]){
 							// first port connection name only
 							if(strlen(url))
@@ -579,7 +616,7 @@ void *playerChangeWatcher(void *refCon){
 							}
 							str_appendstr(&url, conList[0]);
 						}
-						free(conList);
+						jack_free(conList);
 					}
 				}
 				str_insertstr(&url, "jack:///", 0);
@@ -950,7 +987,9 @@ void* metersUpdateThread(void *refCon){
 			notifyData	data;
 			data.senderID = 0;
 			data.reference = 0;
+			pthread_mutex_lock(&mixEngine->jackMutex);
 			total = jack_cpu_load(mixEngine->client);
+			pthread_mutex_unlock(&mixEngine->jackMutex);
 			data.value.iVal = 0;
 			data.value.cVal[0] = (unsigned char)roundf(100. * total);
 			notifyMakeEntry(nType_load, &data, sizeof(data));
@@ -1422,7 +1461,6 @@ void *controlQueueInWatcher(void *refCon){
 
 						}
 						if(((packet->type & cType_MASK) == cType_end) && ((packet->type & cPeer_MASK) == cPeer_recorder)){
-	fprintf(stderr, "ctlQueInWatcher: rec end uid=%08x\n", packet->peer);
 							releaseMetaRecord(packet->peer);
 						}
 
