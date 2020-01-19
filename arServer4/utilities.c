@@ -614,7 +614,7 @@ const char *getValueForKey(keyValueRecord *root, const char *key){
 		}
 		prev = current; 
 	} 
-    return NULL; 	
+   return NULL; 	
 }
 
 keyValueRecord *getRecordForKey(keyValueRecord *root, const char *key){

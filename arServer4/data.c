@@ -279,20 +279,19 @@ unsigned char UpdateMetaData(uint32_t uid, const char *key, const char *value){
 	// find UID record
 	if(rec = (uidRecord *)findNode((LinkedListEntry *)&metaList, uid, NULL, NULL)){
 		// now find value for key
-		if(tmp = getValueForKey((keyValueRecord *)&rec->child, key)){
-			if(strcmp(tmp, value)){
-				setValueForKey((keyValueRecord *)&rec->child, key, value);		
-				rec->rev++;
-				pthread_rwlock_unlock(&dataLock);
+		tmp = getValueForKey((keyValueRecord *)&rec->child, key);
+		if(!tmp || strcmp(tmp, value)){
+			setValueForKey((keyValueRecord *)&rec->child, key, value);
+			rec->rev++;
+			pthread_rwlock_unlock(&dataLock);
 
-				notifyData	data;
-				data.reference = htonl(uid);
-				data.senderID = 0;
-				data.value.iVal = 0;
-				notifyMakeEntry(nType_mstat, &data, sizeof(data));
-								
-				return 1;
-			}
+			notifyData	data;
+			data.reference = htonl(uid);
+			data.senderID = 0;
+			data.value.iVal = 0;
+			notifyMakeEntry(nType_mstat, &data, sizeof(data));
+			
+			return 1;
 		}
 		pthread_rwlock_unlock(&dataLock);
 	}else{

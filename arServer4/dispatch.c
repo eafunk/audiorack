@@ -176,7 +176,6 @@ void *jackChangeWatcher(void *refCon){
 				/* jackd has quit or crashed.  We need to shutdown. */
 				quit = 1;
 			}else if(*IDptr == (unsigned)(-2)){
-fprintf(stderr, "updating all inputs' connection status\n");
 				// Check if any of our inputs
 				// has had a change in connection status
 				inrec = mixEngine->ins;
@@ -1314,7 +1313,7 @@ void *controlQueueInWatcher(void *refCon){
 														entryRec->location = item->valueint;
 												}
 											}	
-																		
+											
 											if(GetMetaInt(inchrec->UID, "NoLog", NULL)){
 												entryRec->added = 2;
 												entryRec->post = 0;

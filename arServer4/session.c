@@ -1231,7 +1231,7 @@ unsigned char handle_config(ctl_session *session){
 	// first parameter, file path is in save_pointer
 	if(session->save_pointer != NULL){
 		if(!loadConfiguration(session, session->save_pointer)){
-			session->errMSG = "Could not open configuartion file for reading";
+			session->errMSG = "Could not open configuartion file for reading.\n";
 		}else{
 			return rOK;
 		}
@@ -4506,6 +4506,7 @@ unsigned char handle_newrec(ctl_session *session){
 	if(newUID = createMetaRecord(NULL, NULL)){
 		SetMetaData(newUID, "Type", "encoder");
 		SetMetaData(newUID, "Status", "0");
+		SetMetaData(newUID, "Pipeline", "");
 		session->lastUID = newUID;
 		tx_length = snprintf(buf, sizeof buf, "UID=%08x\n", (unsigned int)newUID);
 		my_send(session, buf, tx_length, session->silent);
