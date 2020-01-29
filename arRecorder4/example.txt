@@ -1,0 +1,19 @@
+Test Run
+./arRecorder4 -p -b 1 test ars9550 12 ars9550:Monitor_ch0,ars9550:Monitor_ch1 "appsrc name=audiosrc ! audioconvert ! lamemp3enc target=bitrate cbr=true bitrate=192 ! filesink location=out.mp3"
+
+Pipelines:
+General form: "appsrc name=audiosrc ! audioconvert ! <sample-rate converter> ! <format specifier> ! <compression coder> ! <conatiner muxer> ! <sink>
+
+MP3 file (lame picks sample rate): "appsrc name=audiosrc ! audioconvert ! lamemp3enc target=bitrate bitrate=192 ! filesink location=out.mp3"
+
+shout/icecast: "appsrc name=audiosrc ! audioconvert ! audioresample ! audio/x-raw,rate=32000,channels=1 ! lamemp3enc target=bitrate cbr=true bitrate=128 ! shout2send ip=127.0.0.1 port=8000 password=hackme mount=/test"
+
+MPEG4 audio file: "appsrc name=audiosrc ! audioconvert ! audioresample ! audio/x-raw,rate=44100,channels=2 ! faac rate-control=ABR,bitrate=96000 ! mp4mux ! filesink location=foo.m4a 
+
+WAVE file: "appsrc name=audiosrc ! audioconvert ! audioresample ! audio/x-raw-int,rate=44100,channels=2,width=16,depth=16,signed=true ! wavenc ! filesink location=foo.wav
+
+OPUS with ogg container: "appsrc name=audiosrc ! audioconvert ! audioresample ! audio/x-raw,rate=48000,channels=2 ! opusenc bitrate=64000 ! oggmux ! filesink location=out.ogg"
+
+RSP/MP3: "appsrc name=audiosrc ! audioconvert ! audioresample ! audio/x-raw,rate=32000,channels=2 ! lamemp3enc target=bitrate cbr=true bitrate=128 ! rspsink sendto=127.0.0.1:5076"
+
+RSP/OPUS: "appsrc name=audiosrc ! audioconvert ! audioresample ! audio/x-raw,rate=48000,channels=2 ! opusenc bitrate=64000 ! mpegtsmux ! rspsink sendto=127.0.0.1:5076"

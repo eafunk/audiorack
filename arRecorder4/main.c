@@ -176,7 +176,7 @@ typedef struct _CustomData {
 	gboolean terminate;		/* Should we terminate execution? */
 	gboolean persist;		/* should we keep running when jack ports are disconnected? */
 	unsigned char tagBus;	/* bit number [1..8] of tag play bus that must be set to pass tags down pipeline */
-	GstClockTime curPos;			/* position update in sst clock time units */
+	GstClockTime curPos;			/* position update in gst clock time units */
 	pthread_mutex_t ctlMutex;
 	pthread_cond_t ctlSemaphore;
 	pthread_mutex_t pushMutex;
@@ -1172,7 +1172,9 @@ void mainloop(int next_arg, char *argv[], int apl_arg, unsigned char persist, lo
 		goto finish;
 	}
 	data.chCount = str_CountFields(argv[next_arg+3], "&") + 1;
-
+	g_object_set(G_OBJECT(data.asrc), "stream-type", 0,
+            "is-live", TRUE, "format", GST_FORMAT_TIME, NULL);
+            
 	/* setup JACK and get pads properties */
 	data.client = jack_client_open(argv[next_arg], options, &status, server);
 	if(data.client == NULL) {
