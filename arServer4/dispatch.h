@@ -44,7 +44,7 @@ extern "C"
 #define 	nType_status	0x05	// over all status change - use stat to get info
 #define 	nType_mstat		0x06	// meta data record change - use dumpmeta to syncronize
 #define 	nType_rstat		0x07	// recorder status change - use rstat to get info
-#define 	nType_vu		0x08	// vu levels packet
+#define 	nType_vu			0x08	// vu levels packet
 #define 	nType_rgain		0x09	// recorder gain changed
 #define 	nType_pos		0x0a	// player position change
 #define 	nType_del		0x0b	// item deleted
@@ -61,31 +61,31 @@ extern "C"
 #define 	nType_outvol	0x11	// Change made to output volume
 
 
-// cType (control packet) real-time flagged packets are handled directly
+// cType (control packet) real-time packets are handled directly
 // in the jack process function.  Others are queued for handing in a 
 // non-realtime thread.
 
 #define cPeer_MASK		0x70
 #define cPeer_none		0x00
-#define cPeer_player	0x10
+#define cPeer_player		0x10
 #define cPeer_recorder	0x20
-#define cPeer_bus		0x30
-#define cPeer_allrec	0x40
+#define cPeer_bus			0x30
+#define cPeer_allrec		0x40
 
 #define cType_MASK		0x0f
-#define cType_tags	 	0	// tags - data is counted json string of track tags
-#define cType_pos 		1 	// position - data is a float (seconds)
-#define cType_start 	2	// start - data is empty	
-#define cType_stop	 	3	// stop - data is empty
-#define cType_end	 	4	// reached media end - data is empty.  Closes recorder
-#define cType_anc	 	5	// anounce (recorder) - data is json collection of recorder settings.
-#define cType_vu	 	6	// vU meters (recorder) - data is array of vuNData type (see below)
-#define cType_err	 	7	// error message - data is uint32 error code
-#define cType_reid	 	8	// change UID (recorder) - data is a new uint32 UID
-#define cType_vol	 	9	// change volume - data is a float
-#define cType_lock	 	10	// set recorder to locked - data is empty
-#define cType_unlock	11	// set recorder to unlocked - data is empty
-#define cType_posack	12	// arServer acknowlage of pos change back to a player - data is empty
+#define cType_tags		0	// tags - data is counted json string of track tags
+#define cType_pos			1	// position - data is a float (seconds)
+#define cType_start		2	// start - data is empty	
+#define cType_stop		3	// stop - data is empty
+#define cType_end			4	// reached media end - data is empty.  Closes recorder
+#define cType_anc			5	// anounce (recorder) - data is json collection of recorder settings.
+#define cType_vu			6	// vU meters (recorder) - data is array of vuNData type (see below)
+#define cType_err			7	// error message - data is uint32 error code
+#define cType_reid		8	// change UID (recorder) - data is a new uint32 UID
+#define cType_vol			9	// change volume - data is a float
+#define cType_lock		10	// set recorder to locked - data is empty
+#define cType_unlock		11	// set recorder to unlocked - data is empty
+#define cType_posack		12	// arServer acknowlage of pos change back to a player - data is empty
 
 typedef struct {
 		void *next;			// next record in list, or NULL for end

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2019 Ethan Funk
+  Copyright (C) 2019-2020 Ethan Funk
   
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU Lesser General Public License as published by
@@ -18,6 +18,7 @@
 */
 
 #include "arserver.h"
+#include "database.h"
 #include "mix_engine.h"
 #include "session.h"
 #include "data.h"
@@ -37,7 +38,7 @@
 #define maxSessions 20
 
 /* program wide globals */
-const char *versionStr="4.0.1beta";
+const char *versionStr="4.0.1c";
 mixEngineRecPtr mixEngine;
 unsigned char run;
 unsigned char quit;
@@ -579,7 +580,7 @@ int main(int argc, const char *argv[])
     // display version
 	snprintf(command, sizeof command, "AudioRack Server, version %s\n", versionStr);
 	write(STDERR_FILENO, command, strlen(command));
-	snprintf(command, sizeof command, "Copyright (C) 2004-2019 Ethan Funk\n\n");
+	snprintf(command, sizeof command, "Copyright (C) 2004-2020 Ethan Funk\n\n");
 	write(STDERR_FILENO, command, strlen(command));
 
 	snprintf(command, sizeof command, "AudioRack Server comes with ABSOLUTELY NO WARRANTY; for details\n");
@@ -648,7 +649,9 @@ int main(int argc, const char *argv[])
 	session.lastUID = 0;
 	log_busses = 0x0c;	// default log busses: main and alt only.
 	loadConfiguration(&session, startup_path);
-  
+	if(db_preflight())
+		serverLogMakeEntry("[main] db_preflight-:Failed to initialize dtatbase libraries. This is trouble!");
+	
 /* No IAX support yet 
 	if(iaxp_initialize()){
 		ServerLoger->MakeEntry("IAX telephone client failed to initialized");
@@ -691,8 +694,7 @@ int main(int argc, const char *argv[])
  	// often enough.
 	QueManagerTask(&quit);	
 					
- 	run = 0;					// tell all other threads to finish
-
+	run = 0;					// tell all other threads to finish
 	
 	shutdownSessions();
 	shutdownDispatcherThreads();
@@ -700,6 +702,7 @@ int main(int argc, const char *argv[])
 	freeTaskList();
 	freeDataLists();
 	shutdownMixer(mixEngine);  
+	db_shutdown();
 	  
 /*	iaxp_shutdown(); */
 

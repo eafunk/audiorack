@@ -825,7 +825,7 @@ void watchdogReset(void){
 			if((difftime(time(NULL), silent_event) > silent_timeout)){
 				if(!silent_tryseg){
 					// first try to seg all
-					serverLogMakeEntry("[automation] -:Silence detection timed out: trying seg all");
+					serverLogMakeEntry("[automation] -:Silence detection timed out; trying seg all");
 					silent_tryseg = 1;
 					silent_event = time(NULL);
 					
@@ -840,7 +840,7 @@ void watchdogReset(void){
 						}
 					}	
 				}else{
-					serverLogMakeEntry("[automation] -:Silence detection timed out: trying restart");
+					serverLogMakeEntry("[automation] -:Silence detection timed out; trying restart");
 					sleep(5);	// wait 5 seconds for log entry to be made
 					write(STDOUT_FILENO, "#", 1);
 					return;
@@ -860,13 +860,13 @@ void watchdogReset(void){
 
 void SchedulerInserter(time_t *lastSchedTime, unsigned char highOnly){
 	queueRecord *instance;
+	void *dbresult;
 	int listSize;
 	short priority;
 	short lastPriority;
 	uint32_t UID, item;
 	time_t endTime, firstTime, target, lastTarget;
 	struct tm lastTimeRec, endTimeRec;
-	dbi_result db_result;
 	char *tmp;
 
 	listSize = queueCount();
@@ -904,8 +904,8 @@ void SchedulerInserter(time_t *lastSchedTime, unsigned char highOnly){
 	localtime_r(lastSchedTime, &lastTimeRec);
 	if(lastTimeRec.tm_min != endTimeRec.tm_min){
 		// minutes of time last and end are different... check for schedule inserts
-		db_result = NULL;
-		while(item = dbGetNextScheduledItem(&db_result, &target, &priority, *lastSchedTime, endTime, highOnly)){
+		dbresult = NULL;
+		while(item = dbGetNextScheduledItem(&dbresult, &target, &priority, *lastSchedTime, endTime, highOnly)){
 			// item priorities of 8 or greater will supress all lesser priority items targeted for the same time from being added
 			// otherwise , items are added in descending order of priority for the same target time.
 			if((lastPriority < 8) || (target != lastTarget)){

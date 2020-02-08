@@ -533,7 +533,7 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 			result = rError;
 		}
 		goto finish;
-    }
+	}
 	if(!strcmp(arg, "dbfilesearch")) {
 		uint32_t pace;
 		char *tmp;

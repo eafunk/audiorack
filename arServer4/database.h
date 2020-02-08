@@ -25,15 +25,37 @@ extern "C"
 {
 #endif
 
-#include <dbi/dbi.h>
+//#include <dbi/dbi.h>
+#include <mysql/mysql.h>
 #include <dirent.h>
 #include "arserver.h"
 #include "session.h"
 
+enum{
+ 	dbtype_none 		=0,
+	dbtype_mysql 		=1,
+	dbtype_postgresql	=2
+};
+
 struct dbErr{
-	const char *message;
+	const char *tag;
 	unsigned char flag;
 };
+
+struct dbInstanceStruct{
+	int type;
+	struct dbErr errRec;
+	void *instance;
+	void *result;
+	void *row;
+	unsigned int num_fields;
+	void *fields;
+};
+
+typedef struct dbInstanceStruct dbInstance;
+
+unsigned char db_preflight(void);
+void db_shutdown(void);
 
 void DumpDBDriverList(ctl_session *session, char *buf, size_t size);
 unsigned char MakeLogEntry(ProgramLogRecord *rec);
@@ -44,18 +66,18 @@ unsigned char dbTaskRunner(uint32_t UID, unsigned char load);
 void clearCachedFingerprint(void);
 unsigned int getFingerprint(void);
 char *dbGetInfo(const char *property);
-unsigned char db_initialize(struct dbErr *inRec);
+unsigned char db_initialize(dbInstance *db);
 void dbPick(taskRecord *parent);
 void folderPick(taskRecord *parent);
 uint32_t dbGetFillID(time_t *when);
 char *dbGetItemName(uint32_t ID);
 void dbMacroReplace(char **query);
-uint32_t dbGetNextScheduledItem(dbi_result *db_result, time_t *targetTime, short *priority, time_t from_t, time_t to_t, unsigned char highOnly);
+uint32_t dbGetNextScheduledItem(void **result, time_t *targetTime, short *priority, time_t from_t, time_t to_t, unsigned char highOnly);
 void dbSaveFilePos(uint32_t UID, float position);
 char *dbGetReqestComment(time_t theTime);
 char *dbGetCurrentMSG(void);
-char *FindFromMeta(uint32_t UID);											
-void GetItemMetaData(uint32_t UID, const char *url);			
+char *FindFromMeta(uint32_t UID);
+void GetItemMetaData(uint32_t UID, const char *url);
 uint32_t IDSearchMarkedFile(const char *path, const char *Hash);
 void dbFileSync(ctl_session *session, unsigned char silent);
 void dbFileSearch(ctl_session *session, unsigned char silent, const char *Path, uint32_t pace);

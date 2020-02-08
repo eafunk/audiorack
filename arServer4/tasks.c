@@ -100,6 +100,9 @@ void createTaskItem(char *theName, void (*theProc)(void *), void *usrDataPtr, ui
 	uidRecord *uid_rec;
 	/* name is copied and release by the task */
 	/* If userData pptr is NOT NULL, it will be freed when task finishes */
+	if(!run)
+		// don't run new tasks when we are shutting down
+		return;
 	if(rec = (taskRecord *)calloc(1, sizeof(taskRecord))){
 		rec->refCnt = 1;
 		rec->finished = 0;

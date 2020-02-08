@@ -117,6 +117,8 @@ void str_cutstr(char **string, unsigned int pos, unsigned int length);
 unsigned int str_CountFields(char *string, const char *token);
 char *str_prefixSpan(char *string, const char *prefix);
 char *str_NthField(const char *string, const char *token, unsigned int field);
+void str_strip_chr(char **string, const char find);
+char *str_firstnonspace(char *string);
 void str_ReplaceAll(char **theStr, const char *find, const char *replace);
 char *fstr(double num, int dp);
 char *istr(long num);

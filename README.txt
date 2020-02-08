@@ -111,12 +111,7 @@ jackd 			version 2, and any support libraries/programs for
 
 arServer4, in addition, depends on the following libraries:
 
-libdbi
-
 libdbd-mysql
-NOTE: there is a thread-safety bug in libdbd-mysql.  I have included a fix
-in a libdbi-drivers-0.9.0 directory in this project.  It will need to be
-built and installed as separetly from this project.
 
 *** BUILDING ***
 
@@ -133,19 +128,9 @@ binary files are installed in /opt/audiorack/bin, and support files
 are installed in /opt/audiorack/support, from the support directory 
 in this project.
 
-You will also need to make and intsall fixed libdbd mysql drivers.
-You will need the libdbi developer package installed with header files, 
-and the mysqlclient (or MariaDB equivelent) developer package installed.
-
-Then go into the libdbi-drivers-0.9.0 directory and:
-	sudo ./configure --with-mysql
-if you get errors related to the finding the libdbi library file:
-	sudo ./configure --with-mysql --with-dbi-libdir=<path to libdbi>
-where in Ubuntu 19.10 <path to libdbi> is /usr/lib/x86_64-linux-gnu/
-
 	sudo make
 
-	sudo install
+	sudo make install
 
 *** RUNNING ***
 

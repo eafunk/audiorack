@@ -3,7 +3,7 @@ CC=gcc
 CFLAGS = -g3
 SRC = $(wildcard *.c)
 INC = $(wildcard *.h)
-LDFLAGS = -lm -ldl -ldbi -lpthread `pkg-config --cflags --libs jack gstreamer-1.0 gstreamer-pbutils-1.0`
+LDFLAGS = -lm -ldl -lmysqlclient -lpthread `pkg-config --cflags --libs jack gstreamer-1.0 gstreamer-pbutils-1.0`
 
 all: $(TARGET)
 

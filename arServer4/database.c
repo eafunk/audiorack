@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2019 Ethan Funk
+  Copyright (C) 2019-2020 Ethan Funk
   
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU Lesser General Public License as published by
@@ -15,7 +15,10 @@
   along with this program; if not, write to the Free Software 
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 */
+#define _GNU_SOURCE		// needed for vasprintf() function use
+#include <stdio.h>		// needed for vasprintf() function use
 
+#include <stdarg.h>
 #include <sys/types.h> 
 #include <sys/stat.h> 
 #include <fts.h>
@@ -35,189 +38,455 @@
 
 #define def_mount_list	"/private/var/automount/Network,/Network,/Volumes"
 
-pthread_key_t gthread_dbi_inst = 0;
-pthread_key_t gthread_dbi_conn = 0;
-pthread_once_t gthread_dbi_key_once = PTHREAD_ONCE_INIT;
-pthread_mutex_t dbiMutex = PTHREAD_MUTEX_INITIALIZER;
-
 unsigned int dbFPcache = 0;
 
-void dbi_instance_free(void *value){
-	dbi_conn conn;
+/**************************************************************************
+ * Thread Safe Database Abstraction Functions- only MySQL support for now *
+ **************************************************************************/
+
+pthread_key_t gthread_db_inst = 0;
+pthread_once_t gthread_db_key_once = PTHREAD_ONCE_INIT;
+
+volatile long instCnt = 0;
+
+unsigned char db_preflight(void){
+	// this MUST be called prior to any threads being created,
+	// but after server logging has been configured.
+	// returns 0 for no error.
+	int result;
 	
-	if(conn = pthread_getspecific(gthread_dbi_conn)){
-		dbi_conn_error_handler(conn, NULL, NULL);	
-		dbi_conn_close(conn);
-		pthread_setspecific(gthread_dbi_conn, NULL);
+	if(result = mysql_library_init(0, NULL, NULL)){
+		char *str = NULL;
+		char *val;
+		str_setstr(&str, "[mysqldb] Failed to initialize mysqlclient library - error ");
+		val = istr(result);
+		str_appendstr(&str, val);
+		serverLogMakeEntry(str);
+		free(val);
+		free(str);
+		return 1;
 	}
-	pthread_mutex_lock(&dbiMutex);
-	dbi_shutdown_r((dbi_inst)value);
-	pthread_mutex_unlock(&dbiMutex);
-	pthread_setspecific(gthread_dbi_inst, NULL);
+	return 0;
 }
 
-void make_dbi_keys(){	
-	// only dbi_inst needs a distructor function set since both inst and conn are set up 
-	// together, should be freed together to ensure the proper order for freeing: conn first then inst.
-	(void) pthread_key_create(&gthread_dbi_inst, dbi_instance_free);
-	(void) pthread_key_create(&gthread_dbi_conn, NULL);
-	pthread_setspecific(gthread_dbi_inst, NULL);
-	pthread_setspecific(gthread_dbi_conn, NULL);
+void db_shutdown(void){
+	// call at the end of main function, just befor shutting down, to clean up
+	mysql_library_end();
 }
 
-dbi_inst get_thread_dbi(dbi_conn *conn){
-	dbi_inst inst;
+void db_result_free(dbInstance *db){
+	if(db){
+		switch(db->type){
+			case dbtype_mysql:
+				if(db->result){
+					db->fields = NULL;
+					db->row = NULL;
+					db->num_fields = 0;
+					mysql_free_result((MYSQL_RES *)db->result);
+					db->result = NULL;
+				}
+				break;
+		}
+	}
+}
+
+void db_instance_free(void *value){
+	dbInstance *inst = (dbInstance*)value;
 	
-	*conn = NULL;
+	if(value){
+		switch(inst->type){
+			case dbtype_mysql:
+				db_result_free(inst);
+				if(inst->instance){
+					mysql_close((MYSQL*)inst->instance);
+				}
+				mysql_thread_end();
+				break;
+		}
+		free(value);
+fprintf(stderr, "free dbInst, cnt=%ld\n", --instCnt);
+	}
+	pthread_setspecific(gthread_db_inst, NULL);
+}
 
+void db_make_threadspecific(void){
+	pthread_key_create(&gthread_db_inst, db_instance_free);
+	pthread_setspecific(gthread_db_inst, NULL);
+}
+
+unsigned char db_get_thread_instance(dbInstance **inst){
+	// sets inst to a new or existing instance
+	// returns true if the instance is connected (verified with ping).
+	dbInstance *db;
+	
 	// create thread keys for a per-thread dbi instance and connections if they don't yet exist
-	pthread_once(&gthread_dbi_key_once, make_dbi_keys);
+	pthread_once(&gthread_db_key_once, db_make_threadspecific);
 	
 	// check to see if this thread has it's own dbi instance yet
-	if((inst = pthread_getspecific(gthread_dbi_inst)) == NULL) {
+	if((db = pthread_getspecific(gthread_db_inst)) == NULL) {
 		// create instance
-		if(dbi_initialize_r(dbi_path, &inst) < 0){
-			inst = NULL;
-		}
-		pthread_setspecific(gthread_dbi_inst, inst);
+		db = calloc(1, sizeof(dbInstance));
+		pthread_setspecific(gthread_db_inst, db);
+fprintf(stderr, "alloc dbInst, cnt=%ld\n", ++instCnt);
 	}
-	if(inst){
-		if(*conn = pthread_getspecific(gthread_dbi_conn)){
-			// see if the connection is still active... but clear any error handler first,
-			// so that a ping failure doesn't try to use a previous error handler from another stack frame.
-			dbi_conn_error_handler(*conn, NULL, NULL);	
-			if(!dbi_conn_ping(*conn)){
-				// connection has closed... release the connection instance and set to null,
-				// indicating that we need a new connection.
-				dbi_conn_close(*conn);
-				pthread_setspecific(gthread_dbi_conn, NULL);
-				*conn = NULL;
-			}
-		}		
-	}else
-		serverLogMakeEntry("[database] dbi_initialize_r failed to create libdbi instance for current string!");
-	return inst;
+	if(*inst = db){
+		// check connection status according to db type
+		switch(db->type){
+			case dbtype_mysql:
+				if(!mysql_ping((MYSQL*)db->instance)){
+					// Connected
+					return 1;
+				}
+		}
+	}
+	// Not connected
+	return 0;
 }
 
-void HandleDBerror(dbi_conn Conn, void *user_argument){
-	struct dbErr *userData = (struct dbErr*)user_argument;
-	const char *msg;
+static inline void db_set_errtag(dbInstance *db, const char *tag){
+	if(db){
+		db->errRec.tag = tag;
+		db->errRec.flag = 0;
+	}
+}
+
+void HandleDBerror(dbInstance *db){
 	char *str = NULL;
-	
-	userData->flag = 1;
-	dbi_conn_error(Conn, &msg);
-	if(msg){
-		str_setstr(&str, "[libdbi] ");
-		str_appendstr(&str, userData->message);
-		str_appendstr(&str, "-");
-		str_appendstr(&str, msg);
-		serverLogMakeEntry(str);
-		free(str);
-	}
-}
+	char *tmp;
+	unsigned int err;
 
-void DumpDBDriverList(ctl_session *session, char *buf, size_t size){
-	dbi_driver dvr;
-	dbi_inst instance;
-	const char *name, *version;
-	int tx_length;
-
-	dvr = NULL;
-	instance = NULL;
-    dbi_initialize_r(dbi_path, &instance);
-	if(instance){
-		while(dvr = dbi_driver_list_r(dvr, instance)){
-			name = dbi_driver_get_name(dvr);
-			version = dbi_driver_get_version(dvr);
-			tx_length = snprintf(buf, size, "%s\t%s\n", name, version);
-			my_send(session, buf, tx_length, 0);
+	if(db){
+		switch(db->type){
+			case dbtype_mysql:
+				// MySQL type handling 
+				if(err = mysql_errno((MYSQL *)db->instance)){
+					db->errRec.flag = 1;
+					
+					switch(db->type){
+						case dbtype_mysql:
+							str_setstr(&str, "[mysqldb] ");
+							break;
+						case dbtype_postgresql:
+							str_setstr(&str, "[postgresqldb] ");
+							break;
+						default:
+							str_setstr(&str, "[uninitdb] ");
+							break;
+					}
+					if(db->errRec.tag)
+						str_appendstr(&str, db->errRec.tag);
+					str_appendstr(&str, "-");
+					tmp = ustr(err);
+					str_appendstr(&str, tmp);
+					free(tmp);
+					str_appendstr(&str, ":");
+					str_appendstr(&str, mysql_error((MYSQL *)db->instance));
+					serverLogMakeEntry(str);
+					free(str);
+				}
+				break;
 		}
-		dbi_shutdown_r(instance);
 	}
 }
 
-dbi_conn dbSetupConnection(dbi_inst instance, char dbName){
-	dbi_conn conn;
-	struct dbErr errRec;
+unsigned char db_connection_setup(dbInstance *db, char useNamedDB){
+	// returns true if connection was sucessful
 	char *tmp;
 	short port;
 	char isValid;
-
-	if(instance == NULL)
-		return NULL;
-		
+	
+	if(!db)
+		return 0;
+	db_set_errtag(db, "db_connection_setup");
 	tmp = GetMetaData(0, "db_type", 0);
-	conn = dbi_conn_new_r(tmp, instance);
+	if(db->type == dbtype_none){
+			// brand new, uninitilized instance
+			if(!strcmp(tmp, "mysql")){
+				// setup for mysql type
+				db->type = dbtype_mysql;
+				db->instance = (void*)mysql_init(NULL);
+			}
+	}
+	// note: tmp contains the db_type value string 
+	switch(db->type){
+		case dbtype_mysql:
+			if(strcmp(tmp, "mysql")){
+				// type mismatch with already initialized instance
+				serverLogMakeEntry("[mysqldb] db_connection_setup-trying to change instance to a different type of database.");
+				free(tmp);
+				db_set_errtag(db, NULL);
+				return 0;
+			}
+			// get properties from arServer settings
+			char *host = GetMetaData(0, "db_server", 1);
+			int port = GetMetaInt(0, "db_port", &isValid);
+			char *user = GetMetaData(0, "db_user", 1);
+			char *pw = GetMetaData(0, "db_pw", 1);
+			char *name = NULL;
+			if(useNamedDB)
+				name = GetMetaData(0, "db_name", 1);
+			// and try to connect
+			MYSQL *res = mysql_real_connect((MYSQL*)db->instance, host, user, pw, name, port, NULL, 0);
+			if(host)
+				free(host);
+			if(user)
+				free(user);
+			if(pw)
+				free(pw);
+			if(name)
+				free(name);
+			if(res){
+				// connection sucess
+				db->result = NULL;
+				db->row = NULL;
+				db->fields = NULL;
+				db->num_fields = 0;
+				db_set_errtag(db, NULL);
+				return 1;
+			}else{
+				HandleDBerror(db);
+			}
+			break;
+	}
 	free(tmp);
-	if(conn == NULL){
-		return NULL;
-	}
-	
-	errRec.flag = 0;
-	errRec.message = "SetupConnection ";
-	dbi_conn_error_handler(conn, HandleDBerror, (void*)(&errRec));	
+	// if we get here, connection has failed
+	db_set_errtag(db, NULL);
+	return 0;
+}
 
-	// parameters for all database types
-	if(dbName){
-		tmp = GetMetaData(0, "db_name", 0);
-		dbi_conn_set_option(conn, "dbname", tmp);
-		free(tmp);
-		tmp = GetMetaData(0, "db_timeout", 0);
-		if(strlen(tmp))
-			dbi_conn_set_option(conn, "timeout", tmp);
-		free(tmp);
+dbInstance *db_get_and_connect(void){
+	dbInstance *instance = NULL;
+	// handy function that aquires (or creates) a db instance for this thread and sets up the connection.
+	// returns the instance pointer if all is well and connected, otherwise returns NULL
+	if(db_get_thread_instance(&instance))
+		return instance;
+	else{
+		// no connection yet for this thread... 
+		if(db_connection_setup(instance, 1))
+			return instance;
+	}
+	return NULL;
+}
+
+char db_quote_string(dbInstance *db, char **str){
+	// returns 0 when quoating was sucessful, and string will have a new memory location
+	unsigned long size, length;
+	char *newstr;
+	switch(db->type){
+		case dbtype_mysql:
+			length = strlen(*str);
+			newstr = malloc(length * 2 + 3);
+			newstr[0] = '\'';
+			size = mysql_real_escape_string_quote((MYSQL *)db->instance, newstr+1, *str, length, '\'');
+			newstr[++size] =  '\'';
+			newstr[++size] = 0;
+			free(*str);
+			*str = newstr;
+			return 0;
+	}
+	return 1;
+}
+
+unsigned char db_use_database(dbInstance *db, const char *name){
+	switch(db->type){
+		case dbtype_mysql:
+			if(!mysql_select_db((MYSQL*)db->instance, name))
+				// All is well
+				return 0;
+			break;
+	}
+	// invalid db type, or failed to select the database named
+	return 1;
+}
+
+void *db_result_detach(dbInstance *db){
+	// If a result is returned it will need to be reattached  to be freed.
+	// The result will no longer be available until re-attached
+	void *res;
+	res = db->result;
+	db->result = NULL;
+	db->fields = NULL;
+	db->row = NULL;
+	db->num_fields = 0;
+	return res;
+}
+
+void db_result_atach(dbInstance *db, void *res){
+	// An existing reult will be freed befor reattaching the passed reult
+	if(db->result)
+		db_result_free(db);
+	if(db->result = res){
+		switch(db->type){
+			case dbtype_mysql:
+				// if there is a non-null result, get associated field information
+				db->num_fields = mysql_num_fields((MYSQL_RES *)res);
+				db->fields = (void*)mysql_fetch_fields((MYSQL_RES *)res);
+				break;
+		}
+	}
+}
+
+unsigned char db_query(dbInstance *db, const char *querryStr){
+	// returns 0 if no error.
+time_t now;
+time(&now);
+fprintf(stderr, "\n%s: %s  query=%s\n", ctime(&now), db->errRec.tag, querryStr);
+
+	switch(db->type){
+		case dbtype_mysql:
+
+			if(mysql_real_query((MYSQL*)db->instance, querryStr, strlen(querryStr))){
+				HandleDBerror(db);
+				return 1;
+			}else{
+				if(db->result)
+					db_result_free(db);
+				db->result = (void *)mysql_store_result((MYSQL*)db->instance);
+				if(db->result){
+					// if there is a result, get associated field information
+					db->num_fields = mysql_num_fields((MYSQL_RES *)db->result);
+					db->fields = (void*)mysql_fetch_fields((MYSQL_RES *)db->result);
+				}
+				return 0;
+			}
+			break;
+	}
+	return 1;
+}
+
+unsigned char db_queryf(dbInstance *db, const char *querryStr, ...){
+	// returns 0 if no error.
+	char *statement;
+	va_list ap;
+	unsigned char ret;
+
+	va_start(ap, querryStr);
+	vasprintf(&statement, querryStr, ap);
+	va_end(ap);
+	ret = db_query(db, statement);
+	free(statement);
+	
+	return ret;
+}
+
+unsigned long long db_result_get_result_rows(dbInstance *db){
+	switch(db->type){
+		case dbtype_mysql:
+			if(db->result)
+				// rows in result
+				return mysql_num_rows((MYSQL_RES *)db->result);
+	}
+	return 0;
+}
+
+unsigned long long db_result_get_rows_affected(dbInstance *db){
+	switch(db->type){
+		case dbtype_mysql:
+			if(db->result)
+				// rows in result
+				return mysql_num_rows((MYSQL_RES *)db->result);
+			else
+				// no result, row inserted, updated, etc.
+				return mysql_affected_rows((MYSQL*)db->instance);
+	}
+	return 0;
+}
+
+unsigned char db_result_next_row(dbInstance *db){
+	// Call to select the first or next row of a query result.
+	// Returns true if the next row was selected, 0 if no more rows in result
+	switch(db->type){
+		case dbtype_mysql:
+			if(db->result){
+				if(db->row = (void*)mysql_fetch_row((MYSQL_RES *)db->result))
+					return 1;
+			}
+			break;
 	}
 	
-	tmp = GetMetaData(0, "db_type", 0);
-	if(!strcmp(tmp, "sqlite3")){
-		free(tmp);
-		// for sqlite3 only
-		tmp = GetMetaData(0, "db_dir", 0);
-		dbi_conn_set_option(conn, "sqlite3_dbdir", tmp);
-		free(tmp);
-	}else{
-		free(tmp);
-		// all other database types
-		tmp = GetMetaData(0, "db_server", 0);
-		dbi_conn_set_option(conn, "host", tmp);
-		free(tmp);
-		port = GetMetaInt(0, "db_port", &isValid);
-		if(isValid)
-			dbi_conn_set_option_numeric(conn, "port", port);
-		else
-			dbi_conn_set_option_numeric(conn, "port", 0);
-		tmp = GetMetaData(0, "db_user", 0);
-		dbi_conn_set_option(conn, "username", tmp);
-		free(tmp);
-		tmp = GetMetaData(0, "db_pw", 0);
-		dbi_conn_set_option(conn, "password", tmp);
-		free(tmp);
+	return 0;
+}
+
+unsigned char db_result_select_row(dbInstance *db, unsigned long long index){
+	// Returns true if the next row was selected, 0 if index is invalid, or other error
+	switch(db->type){
+		case dbtype_mysql:
+			if(db->result){
+				mysql_data_seek((MYSQL_RES *)db->result, index);
+				return db_result_next_row(db);
+			}
+			break;
 	}
-	pthread_mutex_lock(&dbiMutex);
-	if(dbi_conn_connect(conn)){
-		pthread_mutex_unlock(&dbiMutex);
-		dbi_conn_error_handler(conn, NULL, NULL);	
-		return NULL;
+	return 0;
+}
+
+const char *db_result_get_field_by_index(dbInstance *db, unsigned long long index, int *type){
+	// assumes a valid result from the last querry, and db_result_next_row()
+	// has been called sucessfully (with a true result code) to selected a result row.
+	// The return string will be null if there was an error, or the field is empty.
+	// Returned string are valid only durring the lifetime of the current row and result.
+	// db_result_next_row(), db_result_free(), or db_query() will invalidate the returned string.
+	switch(db->type){
+		case dbtype_mysql:
+			if(db->result && db->row){
+				if(index < db->num_fields){
+					char **rowdata = (char**)db->row;
+					MYSQL_FIELD *fields = (MYSQL_FIELD*)db->fields;
+					if(type)
+						*type = fields[index].type;
+					return rowdata[index];
+				}
+			}
+			break;
 	}
-	pthread_mutex_unlock(&dbiMutex);
-	if(errRec.flag){
-		dbi_conn_error_handler(conn, NULL, NULL);	
-		dbi_conn_close(conn);
-		return NULL;
+	if(type)
+		*type = -1;
+	return NULL;
+}
+
+const char *db_result_get_field_by_name(dbInstance *db, const char *name, int *type){
+	// assumes a valid result from the last querry, and db_result_next_row()
+	// has been called sucessfully (with a true result code) to selected a result row.
+	// The return string will be null if there was an error, or the field is empty.
+	// Returned string are valid only durring the lifetime of the current row and result.
+	// db_result_next_row(), db_result_free(), or db_query() will invalidate the returned string.
+	switch(db->type){
+		case dbtype_mysql:
+			if(db->result && db->row){
+				unsigned int idx = 0;
+				char **rowdata = (char**)db->row;
+				MYSQL_FIELD *fields = (MYSQL_FIELD*)db->fields;
+				while(idx < db->num_fields){
+					if(!strcmp(fields[idx].name, name)){
+						if(type)
+							*type = fields[idx].type;
+						return rowdata[idx];
+					}
+					idx++;
+				}
+			}
+			break;
 	}
-		
-	if(dbName)
-		// only set the thread connection if a database was selected,
-		// otherwise, a independent connection was requested
-		pthread_setspecific(gthread_dbi_conn, conn);
-	dbi_conn_error_handler(conn, NULL, NULL);	
-	return conn;
+	if(type)
+		*type = -1;
+	return NULL;
+}
+/*************************************
+ * end of database abstraction code 
+ *************************************/
+
+void DumpDBDriverList(ctl_session *session, char *buf, size_t size){
+	const char *version;
+	int tx_length;
+	
+	version = mysql_get_client_info();
+	tx_length = snprintf(buf, size, "%s\t%s\n", "mysql", version);
+	my_send(session, buf, tx_length, 0);
+	
 }
 
 unsigned char MakeLogEntry(ProgramLogRecord *rec){
-	dbi_inst instance = NULL;
-	dbi_conn conn = NULL;
-	dbi_result result = NULL;
+	dbInstance *instance = NULL;
 	char *Name = NULL;
 	char *Artist = NULL;
 	char *Album = NULL;
@@ -225,77 +494,63 @@ unsigned char MakeLogEntry(ProgramLogRecord *rec){
 	char *Source = NULL;
 	char *Owner = NULL;
 	char *prefix = NULL;
-	char *tmp;
-	uint32_t recID;
-	struct dbErr errRec;
+	const char *tmp;
 	unsigned char ret_val = 0;
 	
-	instance = get_thread_dbi(&conn);
-	if(conn == NULL){
-		// no connection yet for this thread... 
-		if((conn = dbSetupConnection(instance, 1)) == NULL)	
-			goto cleanup;
-	}
-
+	instance = db_get_and_connect();
+	if(!instance)
+		goto cleanup;
+		
+	db_set_errtag(instance, "MakeLogEntry");
 	prefix = GetMetaData(0, "db_prefix", 0);
-	
-	errRec.message = "MakeLogEntry";
-	dbi_conn_error_handler(conn, HandleDBerror, (void*)(&errRec));	
 	
 	// make a new entry:
 	// allocate, copy and encode the strings in the db's format
 	Name = strdup(rec->name);
-	dbi_conn_quote_string(conn, &Name);
+	db_quote_string(instance, &Name);
 	
 	Artist = strdup(rec->artist);
-	dbi_conn_quote_string(conn, &Artist);
+	db_quote_string(instance, &Artist);
 	
 	Album = strdup(rec->album);
-	dbi_conn_quote_string(conn, &Album);
+	db_quote_string(instance, &Album);
 	
 	Source = strdup(rec->source);
-	dbi_conn_quote_string(conn, &Source);
+	db_quote_string(instance, &Source);
 	
 	Comment = strdup(rec->comment);
-	dbi_conn_quote_string(conn, &Comment);
+	db_quote_string(instance, &Comment);
 
 	Owner = strdup(rec->owner);
-	dbi_conn_quote_string(conn, &Owner);
+	db_quote_string(instance, &Owner);
 			
 	if(rec->logID && rec->played){
-		result = dbi_conn_queryf(conn, "UPDATE %slogs SET Item = %lu, Time = %ld, Name = %s, Artist = %s, Album = %s, "
+		if(!db_queryf(instance, "UPDATE %slogs SET Item = %lu, Time = %ld, Name = %s, Artist = %s, Album = %s, "
 						"Added = %u, ArtistID = %lu, AlbumID = %lu, OwnerID = %lu, Comment = %s, Source = %s, Owner = %s WHERE ID = %lu", 
 						prefix, (unsigned long)rec->ID, (long)rec->when, Name, Artist, Album, (unsigned int)rec->added, (unsigned long)rec->artistID, 
-						(unsigned long)rec->albumID, (unsigned long)rec->ownerID, Comment, Source, Owner, (unsigned long)rec->logID);
-
-		if(result){
-			if(dbi_result_get_numrows_affected(result)){
+						(unsigned long)rec->albumID, (unsigned long)rec->ownerID, Comment, Source, Owner, (unsigned long)rec->logID)){
+			if(db_result_get_rows_affected(instance)){
 				ret_val = 1;
 				goto cleanup;
 			}
-			dbi_result_free(result);
 		}
 	} 
-
+	
 	// perform the sql insert function
-	result = dbi_conn_queryf(conn, "INSERT INTO %slogs (Item, Location, Time, Name, Artist, Album, Added, ArtistID, AlbumID, OwnerID, "
+	if(!db_queryf(instance, "INSERT INTO %slogs (Item, Location, Time, Name, Artist, Album, Added, ArtistID, AlbumID, OwnerID, "
 				"Comment, Source, Owner) VALUES (%lu, %lu, %ld, %s, %s, %s, %u, %lu, %lu, %lu, %s, %s, %s)", 
 				prefix, (unsigned long)rec->ID, (unsigned long)rec->location, (long)rec->when, Name, Artist, Album, (unsigned int)rec->added, 
-				(unsigned long)rec->artistID, (unsigned long)rec->albumID, (unsigned long)rec->ownerID, Comment, Source, Owner);
-	ret_val = 1;
-	// Get new log ID, if any
-	if(result && rec->UID){
-		dbi_result_free(result);
-		result = dbi_conn_queryf(conn, "SELECT ID FROM %slogs WHERE Item = %lu AND Location = %lu AND Time = %ld AND Source = %s",
-				prefix, (unsigned long)rec->ID, (unsigned long)rec->location, (long)rec->when, Source);
-		if(result){
-			if(dbi_result_has_next_row(result)){
-				if(dbi_result_next_row(result)){ 
-					recID = dbi_result_get_uint(result, "ID");
-					tmp = ustr(recID);
-					SetMetaData(rec->UID, "logID", tmp);
-					free(tmp);
-					rec->logID = recID;
+				(unsigned long)rec->artistID, (unsigned long)rec->albumID, (unsigned long)rec->ownerID, Comment, Source, Owner)){
+		ret_val = 1;
+		// Get new log ID, if any
+		if(rec->UID){
+			if(!db_queryf(instance, "SELECT ID FROM %slogs WHERE Item = %lu AND Location = %lu AND Time = %ld AND Source = %s",
+					prefix, (unsigned long)rec->ID, (unsigned long)rec->location, (long)rec->when, Source)){
+				if(db_result_next_row(instance)){
+					if(tmp = db_result_get_field_by_name(instance, "ID", NULL)){ 
+						SetMetaData(rec->UID, "logID", tmp);
+						rec->logID = atoll(tmp);
+					}
 				}
 			}
 		}
@@ -303,10 +558,8 @@ unsigned char MakeLogEntry(ProgramLogRecord *rec){
 	
 cleanup:
 	// clean up
-	if(result)
-		dbi_result_free(result);
-	if(conn)
-		dbi_conn_error_handler(conn, NULL, NULL);
+	db_result_free(instance);
+	db_set_errtag(instance, NULL);
 	// free char strings
 	if(prefix)
 		free(prefix);
@@ -327,9 +580,7 @@ cleanup:
 }
 
 unsigned char updateLogMeta(uint32_t uid){
-	dbi_inst instance = NULL;
-	dbi_conn conn = NULL;
-	dbi_result result = NULL;
+	dbInstance *instance = NULL;
 	unsigned char ret_val = 0;
 	char *Name = NULL;
 	char *Artist = NULL;
@@ -340,20 +591,13 @@ unsigned char updateLogMeta(uint32_t uid){
 	char *prefix = NULL;
 	char *tmp = NULL;
 	uint32_t recID;
-	struct dbErr errRec;
 	
 	if(recID = GetMetaInt(uid, "logID", NULL)){
-		instance = get_thread_dbi(&conn);
-		if(conn == NULL){
-			// no connection yet for this thread... 
-			if((conn = dbSetupConnection(instance, 1)) == NULL)	
-				goto cleanup;
-		}		
-	
+		instance = db_get_and_connect();
+		if(!instance)
+			goto cleanup;
+		db_set_errtag(instance, "updateLogMeta");
 		prefix = GetMetaData(0, "db_prefix", 0);
-		
-		errRec.message = "updateLogMeta";
-		dbi_conn_error_handler(conn, HandleDBerror, (void*)(&errRec));	
 		
 		// make a new entry:
 		Name = GetMetaData(uid, "Name", 0);
@@ -365,25 +609,25 @@ unsigned char updateLogMeta(uint32_t uid){
 
 		// encode the strings in the db's format
 
-		dbi_conn_quote_string(conn, &Name);
-		dbi_conn_quote_string(conn, &Artist);
-		dbi_conn_quote_string(conn, &Album);
-		dbi_conn_quote_string(conn, &Source);
-		dbi_conn_quote_string(conn, &Comment);
-		dbi_conn_quote_string(conn, &Owner);
+		db_quote_string(instance, &Name);
+		db_quote_string(instance, &Artist);
+		db_quote_string(instance, &Album);
+		db_quote_string(instance, &Source);
+		db_quote_string(instance, &Comment);
+		db_quote_string(instance, &Owner);
 		
 		// modify  entry
-		result = dbi_conn_queryf(conn, "UPDATE %slogs SET Name = %s, Artist = %s, "
+		if(!db_queryf(instance, "UPDATE %slogs SET Name = %s, Artist = %s, "
 					"Album = %s, Comment = %s, Source = %s, Owner = %s WHERE ID = %lu AND (Added & 1) = 1", 
-					prefix, Name, Artist, Album, Comment, Source, Owner, (unsigned long)recID);
-		ret_val = 1;
-		dbi_conn_error_handler(conn, NULL, NULL);
-
+					prefix, Name, Artist, Album, Comment, Source, Owner, (unsigned long)recID))
+			ret_val = 1;
 	}
 
 cleanup:
-	if(result)
-		dbi_result_free(result);
+	if(instance){
+		db_result_free(instance);
+		db_set_errtag(instance, NULL);
+	}
 	// free char strings
 	if(prefix)
 		free(prefix);
@@ -405,81 +649,57 @@ cleanup:
 
 void DeleteLogEntry(void *inRef){
 	uint32_t *logID;
-	dbi_inst instance = NULL;
-	dbi_conn conn = NULL;
-	dbi_result result = NULL;
+	dbInstance *instance = NULL;
 	char *prefix = NULL;
-	struct dbErr errRec;
 	taskRecord *parent = (taskRecord *)inRef;
 	
 	if((logID = (uint32_t *)(parent->userData)) == 0)
 		return;
-	instance = get_thread_dbi(&conn);
-	if(conn == NULL){
-		// no connection yet for this thread... 
-		if((conn = dbSetupConnection(instance, 1)) == NULL)	
-			goto cleanup;
-	}		
-	
+	instance = db_get_and_connect();
+	if(!instance)
+		goto cleanup;
+	db_set_errtag(instance, "DeleteLogEntry");
 	prefix = GetMetaData(0, "db_prefix", 0);
 	
-	errRec.message = "DeleteLogEntry";
-	dbi_conn_error_handler(conn, HandleDBerror, (void*)(&errRec));	
-	result = dbi_conn_queryf(conn, "DELETE FROM %slogs WHERE ID = %lu AND (Added & 1) = 1", prefix, *logID);
+	db_queryf(instance, "DELETE FROM %slogs WHERE ID = %lu AND (Added & 1) = 1", prefix, *logID);
 
 cleanup:
 	if(prefix)
 		free(prefix);
-	if(result)
-		dbi_result_free(result);
-	if(conn)
-		dbi_conn_error_handler(conn, NULL, NULL);
+	db_set_errtag(instance, NULL);
+	db_result_free(instance);
 }
 
 short dbPLGetNextMeta(uint32_t index, uint32_t ID, uint32_t UID){
-	dbi_inst instance = NULL;
-	dbi_conn conn = NULL;
-	dbi_result db_result = NULL;
+	dbInstance *instance = NULL;
 	short result;
 	const char *valStr;
 	const char *propStr;
 	char *prefix = NULL;
-	struct dbErr errRec;
 	
 	result = -1;
-	instance = get_thread_dbi(&conn);
-	if(conn == NULL){
-		// no connection yet for this thread... 
-		if((conn = dbSetupConnection(instance, 1)) == NULL)	
-			goto cleanup;
-	}		
-	
+	instance = db_get_and_connect();
+	if(!instance)
+		goto cleanup;
+	db_set_errtag(instance, "dbPLGetNextMeta");
 	prefix = GetMetaData(0, "db_prefix", 0);
 	
-	errRec.message = "dbPLGetNextMeta";
-	dbi_conn_error_handler(conn, HandleDBerror, (void *)(&errRec));	
-	
 	// perform the sql query function
-    db_result = dbi_conn_queryf(conn, "SELECT * FROM %splaylist WHERE ID = %lu AND Position = %lu", prefix, ID, index);
-	if(db_result == NULL){
-		dbi_result_free(db_result);
+	if(db_queryf(instance, "SELECT * FROM %splaylist WHERE ID = %lu AND Position = %lu", prefix, ID, index))
 		goto cleanup;
-	}
-	while(dbi_result_has_next_row(db_result)){
-		if(dbi_result_next_row(db_result)){
-			if(valStr = (const char*)dbi_result_get_string(db_result, "Value")){
-				if(propStr = (const char*)dbi_result_get_string(db_result, "Property")){
-					SetMetaData(UID, propStr, valStr);
-					result = 0;
-				}
+
+	while(db_result_next_row(instance)){
+		if(valStr = db_result_get_field_by_name(instance, "Value", NULL)){
+			if(propStr = db_result_get_field_by_name(instance, "Property", NULL)){
+				SetMetaData(UID, propStr, valStr);
+				result = 0;
 			}
 		}
 	}
-	dbi_result_free(db_result);
 	
 cleanup:
-	if(conn)
-		dbi_conn_error_handler(conn, NULL, NULL);
+	db_set_errtag(instance, NULL);
+	db_result_free(instance);
 	if(prefix)
 		free(prefix);
 	return result;
@@ -634,41 +854,6 @@ unsigned char dbTaskRunner(uint32_t UID, unsigned char load){
 						"GROUP BY [PFX]toc.ID "
 						"ORDER BY Time, RAND();");
 				}
-/*				if(supress == "Artist")
-					qStr = "SELECT "+prefix+"file.ID as ID, MAX("+prefix+"logs.Time) AS Time FROM ("+prefix+"category_item, "
-					+prefix+"file) LEFT JOIN "+prefix+"logs ON ("+prefix+"file.Artist = "
-					+prefix+"logs.ArtistID AND "+prefix+"logs.Time > (UNIX_TIMESTAMP() - 604800) AND "
-					+prefix+"logs.Location IN ("+include+")) LEFT JOIN "+prefix+"rest ON ("+prefix+"file.ID = "+prefix+"rest.Item AND "
-					+prefix+"rest.Location = "+GetMetaData(0, "db_loc")+") WHERE NOT ("
-					+prefix+"file.Missing <=> 1) AND "+prefix+"file.ID = "+prefix+"category_item.Item AND "
-					+prefix+"category_item.Category = "+value+" AND "+prefix+"rest.Added IS NULL GROUP BY "+prefix+"file.ID ORDER BY Time, RAND()";
-				else if(supress == "Album")
-					qStr = "SELECT "+prefix+"file.ID as ID, MAX("+prefix+"logs.Time) AS Time FROM ("+prefix+"category_item, "
-					+prefix+"file) LEFT JOIN "+prefix+"logs ON ("+prefix+"file.Album = "
-					+prefix+"logs.AlbumID AND "+prefix+"logs.Time > (UNIX_TIMESTAMP() - 604800) AND "
-					+prefix+"logs.Location IN ("+include+")) LEFT JOIN "+prefix+"rest ON ("+prefix+"file.ID = "+prefix+"rest.Item AND "
-					+prefix+"rest.Location = "+GetMetaData(0, "db_loc")+") WHERE NOT ("
-					+prefix+"file.Missing <=> 1) AND "+prefix+"file.ID = "+prefix+"category_item.Item AND "
-					+prefix+"category_item.Category = "+value+" AND "+prefix+"rest.Added IS NULL GROUP BY "+prefix+"file.ID ORDER BY Time, RAND()";
-				else if(supress == "Name")
-					qStr = "SELECT "+prefix+"toc.ID as ID, MAX("+prefix+"logs.Time) AS Time FROM ("+prefix+"category_item, "
-					+prefix+"toc) LEFT JOIN "+prefix+"logs ON ("+prefix+"toc.Name = "+prefix+"logs.Name AND "
-					+prefix+"logs.Time > (UNIX_TIMESTAMP() - 604800) AND "
-					+prefix+"logs.Location IN ("+include+")) LEFT JOIN "+prefix+"file ON ("
-					+prefix+"toc.ID = "+prefix+"file.ID) LEFT JOIN "+prefix+"rest ON ("+prefix+"toc.ID = "+prefix+"rest.Item AND "
-					+prefix+"rest.Location = "+GetMetaData(0, "db_loc")+") WHERE NOT ("+prefix+"file.Missing <=> 1) AND "
-					+prefix+"toc.ID = "+prefix+"category_item.Item AND "+prefix+"category_item.Category = "
-					+value+" AND "+prefix+"rest.Added IS NULL GROUP BY "+prefix+"toc.ID ORDER BY Time, RAND()";
-				else // order by item ID last played
-					qStr = "SELECT "+prefix+"toc.ID as ID, MAX("+prefix+"logs.Time) AS Time FROM ("+prefix+"category_item, "
-					+prefix+"toc) LEFT JOIN "+prefix+"logs ON ("+prefix+"toc.ID = "+prefix+"logs.Item AND "
-					+prefix+"logs.Time > (UNIX_TIMESTAMP() - 604800) AND "
-					+prefix+"logs.Location IN ("+include+")) LEFT JOIN "+prefix+"file ON ("
-					+prefix+"toc.ID = "+prefix+"file.ID) LEFT JOIN "+prefix+"rest ON ("+prefix+"toc.ID = "+prefix+"rest.Item AND "
-					+prefix+"rest.Location = "+GetMetaData(0, "db_loc")+") WHERE NOT ("+prefix+"file.Missing <=> 1) AND "
-					+prefix+"toc.ID = "+prefix+"category_item.Item AND "+prefix+"category_item.Category = "
-					+value+" AND "+prefix+"rest.Added IS NULL GROUP BY "+prefix+"toc.ID ORDER BY Time, RAND()";
-*/				
 				// note: "logs.Time > (UNIX_TIMESTAMP() - 604800)" limits search through logs back 1 week
 				// RAND() sorts all items with the same times (i.e. NULL) randomy 
 				
@@ -745,56 +930,38 @@ cleanup:
 }
 
 char *dbGetInfo(const char *property){
-	dbi_inst instance = NULL;
-	dbi_conn conn = NULL;
-	dbi_result db_result = NULL;
+	dbInstance *instance = NULL;
 	const char *Str;
 	char *prefix = NULL;
 	char *result;
 	char *propCpy = NULL;
-	struct dbErr errRec;
 	
 	result = strdup("");
-	instance = get_thread_dbi(&conn);
-	if(conn == NULL){
-		// no connection yet for this thread... 
-		if((conn = dbSetupConnection(instance, 1)) == NULL)	
-			goto cleanup;
-	}		
+	instance = db_get_and_connect();
+	if(!instance)
+		goto cleanup;
+	db_set_errtag(instance, "dbGetInfo");
+	prefix = GetMetaData(0, "db_prefix", 0);
 	
 	propCpy = strdup(property);
-	prefix = GetMetaData(0, "db_prefix", 0);
-	dbi_conn_quote_string(conn, &propCpy);
-
-	errRec.message = "dbGetInfo";
-	dbi_conn_error_handler(conn, HandleDBerror, (void *)(&errRec));	
+	db_quote_string(instance, &propCpy);
 	
 	// perform the sql query function
-    db_result = dbi_conn_queryf(conn, "SELECT Value FROM %sinfo WHERE Property = %s", prefix, propCpy);
-	if(db_result == NULL)
+	if(db_queryf(instance, "SELECT Value FROM %sinfo WHERE Property = %s", prefix, propCpy))
 		goto cleanup;
 	// get first record (should be the only record)
-	if(!dbi_result_has_next_row(db_result)){
-		dbi_result_free(db_result);
-		goto cleanup;
-	}
-	if(dbi_result_next_row(db_result)){ 
-		Str = (const char*)dbi_result_get_string(db_result, "Value");
-		if(Str)
+	if(db_result_next_row(instance)){ 
+		if(Str = db_result_get_field_by_name(instance, "Value", NULL))
 			str_setstr(&result, Str);
-	}else{
-		dbi_result_free(db_result);
-		goto cleanup;
 	}
-	dbi_result_free(db_result);
 
 cleanup:
 	if(prefix)
 		free(prefix);
 	if(propCpy)
 		free(propCpy);
-	if(conn)
-		dbi_conn_error_handler(conn, NULL, NULL);
+	db_result_free(instance);
+	db_set_errtag(instance, NULL);
 	return result;
 }
 
@@ -813,36 +980,38 @@ unsigned int getFingerprint(void){
 	return dbFPcache;
 }
 
-unsigned char db_initialize(struct dbErr *inRec){
-	dbi_inst instance = NULL;
-	dbi_conn conn = NULL;
-	dbi_result db_result = NULL;
+unsigned char db_initialize(dbInstance *db){
+	dbInstance *newinst;
 	char *dbName;
 	char *sqlstr = NULL;
-	char *typeStr = NULL;
+	char *typeStr;
 	char *versionStr = NULL;
 	char *ini_file_path = NULL;
 	char *tmp = NULL;
 	FILE *fp;
 	char line[4096];
-	struct dbErr errRec;
 	
-	errRec.message = "dbInitialize";
-	errRec.flag = 1;
+	newinst = NULL; // used as a flag to clean up new db at the end ofthe  first call of the call recursive chain
 	fp = NULL;
-	
 	typeStr = GetMetaData(0, "db_type", 0);
 	dbName = GetMetaData(0, "db_name", 0);
-
-	instance = get_thread_dbi(&conn);
-	// ignore conn... we want to create our own connection just for this
-	// with out a database selected
-	if((conn = dbSetupConnection(instance, 0)) == NULL)	
+	if(!strlen(typeStr) || !strlen(dbName))
 		goto cleanup;
+
+	if(!db){
+		/* set up a db instance and connection, independent of the thread associated db instance,
+		 * so we can start the connection off unassociated with a particular named database.  This
+		 * is required so we can connect, and THEN see if the named database exists, creating it if 
+		 * needed.  If we start off connecing with the named database, and the database doesn't exist
+		 * yet, the entire connection will fail. */
+		db = calloc(1, sizeof(dbInstance));
+		db_set_errtag(db, "dbInitialize");
+		newinst = db;  // this sets the flag that we are the first call of the call recursive chain
+		if(!db_connection_setup(db, 0))
+			goto cleanup;
+	}
 	
-	dbi_conn_error_handler(conn, NULL, NULL);	
-	
-	if(!dbi_conn_select_db(conn, dbName))
+	if(!db_use_database(db, dbName))
 		versionStr = dbGetInfo("Version");
 	if(versionStr && strlen(versionStr)){
 		// this is an upgrade to an existing database
@@ -851,23 +1020,18 @@ unsigned char db_initialize(struct dbErr *inRec){
 		str_appendstr(&ini_file_path, versionStr);
 		str_appendstr(&ini_file_path, ".dbi");
 	}else{
-		// create new database
+		// create new database if one with the given name doesn't already exist
 		str_setstr(&ini_file_path, AppSupportDirectory);
 		str_appendstr(&ini_file_path, typeStr);
 		str_appendstr(&ini_file_path, ".dbi");
 		str_setstr(&sqlstr, "CREATE DATABASE IF NOT EXISTS ");
 		str_appendstr(&sqlstr, dbName);
-		db_result = dbi_conn_query(conn, sqlstr);
-		if(db_result)
-			dbi_result_free(db_result);
-		else
+		
+		if(db_query(db, sqlstr))
 			goto cleanup;
-		if(dbi_conn_select_db(conn, dbName))
+		if(db_use_database(db, dbName))
 			goto cleanup;
 	}
-
-	if(inRec == NULL)
-		inRec = &errRec;
 	
 	if((fp = fopen(ini_file_path, "r")) == NULL){
 		if(!versionStr || !strlen(versionStr)){
@@ -877,39 +1041,33 @@ unsigned char db_initialize(struct dbErr *inRec){
 			serverLogMakeEntry(tmp);
 			free(tmp); 
 		}else
-			errRec.flag = 0;
+			db_set_errtag(db, "dbInitialize");
 		goto cleanup;
-	}	
+	}
 	
-	errRec.flag = 0;
-	dbi_conn_error_handler(conn, HandleDBerror, (void *)(inRec));	
+	db_set_errtag(db, "dbInitialize");
 	while(fgets(line, sizeof line, fp) != NULL){
 		// each line in the .dbi file is an sql command to execute
 		str_setstr(&sqlstr, line);
 		dbMacroReplace(&sqlstr);
-		db_result = dbi_conn_query(conn, sqlstr);
-		if(db_result) 
-			dbi_result_free(db_result);
+		if(!db_query(db, sqlstr))
+			db_result_free(db);
 	}
 	if(versionStr && strlen(versionStr))
 		// re-enter for another go-around so we upgrade
 		// all they way to the latest version.
-		db_initialize(inRec);
+		db_initialize(db);
 	
 cleanup:
+	free(dbName);
+	free(typeStr);
 	if(sqlstr)
 		free(sqlstr);
-	if(typeStr)
-		free(typeStr);
 	if(ini_file_path)
 		free(ini_file_path);
 	if(fp)
 		fclose(fp);
-	if(conn){
-		dbi_conn_error_handler(conn, NULL, NULL);	
-		dbi_conn_close(conn);
-	}
-	if(!errRec.flag){
+	if(!db->errRec.flag){
 		versionStr = dbGetInfo("Version");
 		str_setstr(&tmp, " [database] dbInitialize-");
 		str_appendstr(&tmp, dbName);
@@ -918,13 +1076,16 @@ cleanup:
 		serverLogMakeEntry(tmp);
 		free(dbName);
 		free(versionStr);
+		if(newinst)
+			db_instance_free(newinst);
 		return 1;
-	}else{
-		if(versionStr)
-			free(versionStr);
-		if(dbName)
-			free(dbName);
 	}
+	if(versionStr)
+		free(versionStr);
+	if(dbName)
+		free(dbName);
+	if(newinst)
+		db_instance_free(newinst);
 	return 0;
 }
 
@@ -950,17 +1111,15 @@ static inline float RandomNumber(void){
 }
 
 void dbPick(taskRecord *parent){
-	dbi_result result;
-	dbi_result lastResult;
-	dbi_result prevResult;
-	dbi_inst instance = NULL;
-	dbi_conn conn = NULL;
+	void *result;
+	void *lastResult = NULL;
+	dbInstance *instance = NULL;
 	unsigned int *id_array;
 	unsigned int i;
 	unsigned long field;
 	unsigned long long Item;
-	unsigned long count;
-	unsigned long row;
+	unsigned long long count;
+	long row;
 	unsigned char last;
 	uint32_t newUID;
 	int size;
@@ -968,10 +1127,10 @@ void dbPick(taskRecord *parent){
 	char *query;
 	char *qStr;
 	char *tmp;
+	const char *sval;
 	char *name;
 	char *single;
 	double targetTime;
-	struct dbErr errRec; 
 
 	tmp = GetMetaData(parent->UID, "Query", 0);
 	if(strlen(tmp) < 8){
@@ -984,39 +1143,35 @@ void dbPick(taskRecord *parent){
 	if(parent->UID){
 		str_ReplaceAll(&qStr, "[thisID]", (tmp = GetMetaData(parent->UID, "ID", 0)));
 		free(tmp);
-	}		
-
-	instance = get_thread_dbi(&conn);
-	if(conn == NULL){
-		// no connection yet for this thread... 
-		if((conn = dbSetupConnection(instance, 1)) == NULL){
-			free(qStr);
-			return;
-		}
 	}
-	field = 0;
-	lastResult = NULL;
 
-	errRec.message = "dbPick";
-	dbi_conn_error_handler(conn, HandleDBerror, (void *)(&errRec));	
-	
+	instance = db_get_and_connect();
+	if(!instance){
+		free(qStr);
+		return;
+	}
+	db_set_errtag(instance, "dbPick");
+
+	field = 0;
 	// parse query string for multiple queries, separated with ';' char
 	single = str_NthField(qStr, ";", field);
-
-	while(!parent->cancelThread && single && strlen(single)){
+	db_result_free(instance);
+	while(!parent->cancelThread && single && strlen(single) && str_firstnonspace(single)){
 		// perform the sql query function
 		// replace any special function macros
+		str_strip_chr(&single, '\n'); // strip out LF and CR
+		str_strip_chr(&single, '\r');
 		dbMacroReplace(&single);
-		result = dbi_conn_query(conn, single);
-		if(result){
-			count = dbi_result_get_numrows(result);
+		if(!db_query(instance, single)){
+			count = db_result_get_result_rows(instance);
 			if(count > 0){
-				prevResult = lastResult;
-				lastResult = result;
-				if(prevResult)
-					dbi_result_free(prevResult);
-			}else{
-				dbi_result_free(result);
+				if(result = db_result_detach(instance)){
+					if(lastResult){
+						db_result_atach(instance, lastResult);
+						db_result_free(instance);
+					}
+					lastResult = result;
+				}
 			}
 		}
 		field++;
@@ -1026,159 +1181,106 @@ void dbPick(taskRecord *parent){
 	free(qStr);
 	if(single)
 		free(single);
-		
-	if(!parent->cancelThread){
-		if(lastResult){
-			if(count = dbi_result_get_numrows(lastResult)){
-				mode = GetMetaData(parent->UID, "Mode", 0);
-				if(!strcmp(mode,"random")){
-					row = (unsigned long)(count * RandomNumber());
-					if(dbi_result_seek_row(lastResult, row+1)){ 
-						Item = dbi_result_get_ulonglong(lastResult, "ID");
-						dbi_result_free(lastResult);
-						lastResult = NULL;
+	if(lastResult){
+		db_result_atach(instance, lastResult);
+		if(!parent->cancelThread){
+			mode = GetMetaData(parent->UID, "Mode", 0);
+			count = db_result_get_result_rows(instance) - 1;
+			row = -1;
+			if(!strcmp(mode,"random"))
+				row = (unsigned long)(count * RandomNumber());
+			else if(!strcmp(mode,"weighted"))
+				row = (unsigned long)(count * GaussianNumber());
+			else if(!strcmp(mode,"first"))
+				row = 0;
+				
+			if(row >= 0){
+				// a single row selected
+				if(db_result_select_row(instance, row)){
+					Item = 0;
+					if(sval = db_result_get_field_by_name(instance, "ID", NULL)){
+						Item = atoll(sval);
 						if(Item){
 							tmp = ustr(Item);
 							str_insertstr(&tmp, "item:///", 0);
 							newUID = SplitItem(parent->UID, tmp, 1);
-							free(tmp);
 							if(newUID == 0){
+								free(tmp);
 								tmp = ustr(Item);
 								str_insertstr(&tmp, ": split failed on item:///", 0);
 								str_insertstr(&tmp, (name = GetMetaData(parent->UID, "Name", 0)), 0);
 								free(name);
 								str_insertstr(&tmp, "[database] dbPick-", 0);
 								serverLogMakeEntry(tmp);
-								free(tmp);
 							}
-						}
-					}
-				}
-				else if(!strcmp(mode,"weighted")){
-					row = (unsigned long)(count * GaussianNumber());
-					if(dbi_result_seek_row(lastResult, row+1)){ 
-						Item = dbi_result_get_ulonglong(lastResult, "ID");	
-						dbi_result_free(lastResult);
-						lastResult = NULL;
-						if(Item){
-							tmp = ustr(Item);
-							str_insertstr(&tmp, "item:///", 0);
-							newUID = SplitItem(parent->UID, tmp, 1);
 							free(tmp);
-							if(newUID == 0){
-								tmp = ustr(Item);
-								str_insertstr(&tmp, ": split failed on item:///", 0);
-								str_insertstr(&tmp, (name = GetMetaData(parent->UID, "Name", 0)), 0);
-								free(name);
-								str_insertstr(&tmp, "[database] dbPick-", 0);
-								serverLogMakeEntry(tmp);
-								free(tmp);
-							}
 						}
 					}
 				}
-				else if(!strcmp(mode,"first")){
-					if(dbi_result_has_next_row(lastResult)){
-						if(dbi_result_next_row(lastResult)){ 
-							Item = dbi_result_get_ulonglong(lastResult, "ID");
-							dbi_result_free(lastResult);
-							lastResult = NULL;
-							if(Item){
-								tmp = ustr(Item);
-								str_insertstr(&tmp, "item:///", 0);
-								newUID = SplitItem(parent->UID, tmp, 1);
-								free(tmp);
-								if(newUID == 0){
-									tmp = ustr(Item);
-									str_insertstr(&tmp, ": split failed on item:///", 0);
-									str_insertstr(&tmp, (name = GetMetaData(parent->UID, "Name", 0)), 0);
-									free(name);
-									str_insertstr(&tmp, "[database] dbPick-", 0);
-									serverLogMakeEntry(tmp);
-									free(tmp);
-								}
-							}
-						}
-					}
-				}
-				else if(!strcmp(mode,"all")){
-					// get target-time of parent for inheritance by items, and increment by each previous item's duration.
-					count = dbi_result_get_numrows(lastResult);
-					targetTime = GetMetaFloat(parent->UID, "TargetTime", NULL);
-					
-					// allocate id_array
-					if(id_array = (unsigned int *)calloc(count, sizeof(unsigned int))){
-						// fill id_array
-						i=0;
-						while(dbi_result_has_next_row(lastResult)){
-							if(dbi_result_next_row(lastResult)){
-								id_array[i] = dbi_result_get_ulonglong(lastResult, "ID");	
+			}else if(!strcmp(mode,"all")){ // no single row selected
+				// get target-time of parent for inheritance by items, and increment by each previous item's duration.
+				targetTime = GetMetaFloat(parent->UID, "TargetTime", NULL);
+				
+				// allocate id_array
+				if(id_array = (unsigned int *)calloc(count, sizeof(unsigned int))){
+					// fill id_array
+					i=0;
+					while(db_result_next_row(instance)){ 
+						if(sval = db_result_get_field_by_name(instance, "ID", NULL)){
+							id_array[i] = atoll(sval);
+							if(id_array[i])
 								i++;
-							}
 						}
-						count = i;
-						dbi_result_free(lastResult);
-						lastResult = NULL;
-								
-						for(i=0; i<count; i++){
-							if(Item = id_array[i]){
-								tmp = ustr(Item);
-								str_insertstr(&tmp, "item:///", 0);
-								last = 0;
-								if(i == count-1)
-									last = 1;
-								newUID = SplitItem(parent->UID, tmp, last);
-								free(tmp);
-								if(newUID == 0){
-									tmp = ustr(Item);
-									str_insertstr(&tmp, ": split failed on item:///", 0);
-									str_insertstr(&tmp, (name = GetMetaData(parent->UID, "Name", 0)), 0);
-									free(name);
-									str_insertstr(&tmp, "[database] dbPick-", 0);
-									serverLogMakeEntry(tmp);
-									free(tmp);
-								}else{								
-									// increase the parent target time by the new item's duration
-									if(targetTime){
-										targetTime = targetTime + GetMetaFloat(newUID, "Duration", NULL);
-										SetMetaData(parent->UID, "TargetTime", (tmp = fstr(targetTime, 1)));
-										free(tmp);
-									}								
-								}
-							}
-						}
-						free(id_array);
 					}
+					count = i;
+					for(i=0; i<count; i++){
+						if(Item = id_array[i]){
+							tmp = ustr(Item);
+							str_insertstr(&tmp, "item:///", 0);
+							last = 0;
+							if(i == count-1)
+								last = 1;
+							newUID = SplitItem(parent->UID, tmp, last);
+							free(tmp);
+							if(newUID == 0){
+								tmp = ustr(Item);
+								str_insertstr(&tmp, ": split failed on item:///", 0);
+								str_insertstr(&tmp, (name = GetMetaData(parent->UID, "Name", 0)), 0);
+								free(name);
+								str_insertstr(&tmp, "[database] dbPick-", 0);
+								serverLogMakeEntry(tmp);
+								free(tmp);
+							}else{								
+								// increase the parent target time by the new item's duration
+								if(targetTime){
+									targetTime = targetTime + GetMetaFloat(newUID, "Duration", NULL);
+									SetMetaData(parent->UID, "TargetTime", (tmp = fstr(targetTime, 1)));
+									free(tmp);
+								}								
+							}
+						}
+					}
+					free(id_array);
 				}
-				free(mode);
-			}else{
-				tmp = GetMetaData(parent->UID, "Name", 0);
-				str_insertstr(&tmp, "[database] dbPick-", 0);
-				str_appendstr(&tmp, ": no result.");
-				serverLogMakeEntry(tmp);
-				free(tmp);
 			}
+			free(mode);
 		}else{
 			tmp = GetMetaData(parent->UID, "Name", 0);
 			str_insertstr(&tmp, "[database] dbPick-", 0);
-			str_appendstr(&tmp, ": NULL result.");
+			str_appendstr(&tmp, ": timeout.");
 			serverLogMakeEntry(tmp);
 			free(tmp);
 		}
 	}else{
 		tmp = GetMetaData(parent->UID, "Name", 0);
 		str_insertstr(&tmp, "[database] dbPick-", 0);
-		str_appendstr(&tmp, ": timeout.");
+		str_appendstr(&tmp, ": No result.");
 		serverLogMakeEntry(tmp);
 		free(tmp);
 	}
 	// all done... clean up!
-
-	if(lastResult)
-		dbi_result_free(lastResult);
-				
-	if(conn && (conn == pthread_getspecific(gthread_dbi_conn)))
-		dbi_conn_error_handler(conn, NULL, NULL);
+	db_result_free(instance);
+	db_set_errtag(instance, NULL);
 }
 
 void CheckFolderResultReadable(char **urlStr){
@@ -1229,10 +1331,17 @@ void CheckFolderResultReadable(char **urlStr){
 	releaseMetaRecord(localUID);
 }
 
+int scandirSelect(const struct dirent *ent){
+	// eliminate all entries that are not regular files
+	if(ent->d_type == DT_REG)
+		return 1;
+	else
+		return 0;
+}
+
 void folderPickCleanUp(void *pass){
 	int index;
 	struct locals{
-		dbi_result dbResult;
 		struct dirent **entList;
 		int count;
 	} *ptr;
@@ -1245,22 +1354,12 @@ void folderPickCleanUp(void *pass){
 		free(ptr->entList);
 }
 
-int scandirSelect(const struct dirent *ent){
-	// eliminate all entries that are not regular files
-	if(ent->d_type == DT_REG)
-		return 1;
-	else
-		return 0;
-}
-
 char *traverseFolderListing(char **dir, uint32_t modified, unsigned short none, 
 				unsigned short seq, unsigned short rerun, unsigned short first, 
 											uint32_t randlim, unsigned short date){
 	struct stat statRec;
-	dbi_conn conn;
-	dbi_inst instance;
+	dbInstance *instance = NULL;
 	struct locals{
-		dbi_result dbResult;
 		struct dirent **entList;
 		int count;
 	} locBlock;
@@ -1274,11 +1373,11 @@ char *traverseFolderListing(char **dir, uint32_t modified, unsigned short none,
 	char *encStr = NULL;
 	char *sub_name = NULL;
 	char *tmp;
+	const char *sval;
 	const char *name; 
 	struct dbErr errRec;
 	
 	str_setstr(&result, "");
-	conn = NULL;
 	instance = NULL;
 	locBlock.count = -1;
 	pthread_cleanup_push((void (*)(void *))folderPickCleanUp, (void *)&locBlock);
@@ -1288,16 +1387,13 @@ char *traverseFolderListing(char **dir, uint32_t modified, unsigned short none,
 		goto cleanup;
 	if(tmp[index-1] != directoryToken)  // make sure there is a trailing slash in the path name. 
 		str_appendstr(dir, directoryTokenStr);
-	
-	instance = get_thread_dbi(&conn);
-	if(conn == NULL){
-		// no connection yet for this thread... 
-		if((conn = dbSetupConnection(instance, 1)) == NULL)	
-			goto cleanup; 
-	}		
-	
-	prefix = GetMetaData(0, "db_prefix", 0);	
+		
+	instance = db_get_and_connect();
+	if(!instance)
+		goto cleanup;
+	prefix = GetMetaData(0, "db_prefix", 0);
 	include = GetMetaData(0, "db_include_loc", 0);
+
 	if(strlen(include) > 0){
 		str_insertstr(&include, ",", 0);
 		str_insertstr(&include, (tmp = GetMetaData(0, "db_loc", 0)), 0);
@@ -1384,10 +1480,8 @@ char *traverseFolderListing(char **dir, uint32_t modified, unsigned short none,
 					}
 				}
 
-				if(rerun){     // re-run last played if true (non-zero)		
-					errRec.message = "FindLastFilePlayedFromDir ";
-					dbi_conn_error_handler(conn, HandleDBerror, (void *)(&errRec));	
-					locBlock.dbResult = NULL;
+				if(rerun){		// re-run last played if true (non-zero)
+					db_set_errtag(instance, "traverseFolderListingRerun");
 					// set directory as URL
 					tmp = uriEncodeKeepSlash(*dir);
 					str_setstr(&encStr, "file://");
@@ -1396,38 +1490,29 @@ char *traverseFolderListing(char **dir, uint32_t modified, unsigned short none,
 					size = strlen(encStr);
 					
 					// encode URL in db format
-					dbi_conn_quote_string(conn, &encStr);
-
+					db_quote_string(instance, &encStr);
 					// perform the sql query function: Get last ADDED file name in this directory (back eight hours)
-					locBlock.dbResult = dbi_conn_queryf(conn, "SELECT Time, Source AS Name FROM %slogs USE INDEX (%slogs_time) WHERE Location IN(%s) "
-									"AND (Added & 1) = 0 AND Time > UNIX_TIMESTAMP(NOW()) - 28800 AND LEFT(Source, %d) = %s AND SUBSTRING(Source, %d) NOT "
-									"LIKE '%%/%%' ORDER BY Time DESC LIMIT 1", prefix, prefix, include, size, encStr, size+1);
-					// get first record (should be the only record)
 					name = "";
-					if(locBlock.dbResult){
-						if(dbi_result_has_next_row(locBlock.dbResult)){
-							if(dbi_result_next_row(locBlock.dbResult)){
-								name = (const char*)dbi_result_get_string(locBlock.dbResult, "Name");
-								if(name == NULL)
-									name = "";
-							}
+					if(!db_queryf(instance, "SELECT Time, Source AS Name FROM %slogs USE INDEX (%slogs_time) WHERE Location IN(%s) "
+									"AND (Added & 1) = 0 AND Time > UNIX_TIMESTAMP(NOW()) - 28800 AND LEFT(Source, %d) = %s AND SUBSTRING(Source, %d) NOT "
+									"LIKE '%%/%%' ORDER BY Time DESC LIMIT 1", prefix, prefix, include, size, encStr, size+1)){
+						// get first record (should be the only record)
+						if(db_result_next_row(instance)){
+							name = db_result_get_field_by_name(instance, "Name", NULL);
+							if(name == NULL)
+								name = "";
 						}
 					}
 					if(strlen(name) == 0){
-						if(locBlock.dbResult)
-							dbi_result_free(locBlock.dbResult);
-						// perform the sql query function: Get last PLAYED file name in this directory
-						locBlock.dbResult = dbi_conn_queryf(conn, "SELECT Time, Source AS Name FROM %slogs USE INDEX (%slogs_time) WHERE Location IN(%s) "
+					// perform the sql query function: Get last PLAYED file name in this directory
+						if(!db_queryf(instance, "SELECT Time, Source AS Name FROM %slogs USE INDEX (%slogs_time) WHERE Location IN(%s) "
 										"AND (Added & 1) <> 1 AND LEFT(Source, %d) = %s AND SUBSTRING(Source, %d) NOT LIKE '%%/%%' "
-										"ORDER BY Time DESC LIMIT 1", prefix, prefix, include, size, encStr, size+1);
-						// get first record (should be the only record)
-						if(locBlock.dbResult){
-							if(dbi_result_has_next_row(locBlock.dbResult)){
-								if(dbi_result_next_row(locBlock.dbResult)){
-									name = (const char*)dbi_result_get_string(locBlock.dbResult, "Name");
-									if(name == NULL)
-										name = "";
-								}
+										"ORDER BY Time DESC LIMIT 1", prefix, prefix, include, size, encStr, size+1)){
+							// get first record (should be the only record)
+							if(db_result_next_row(instance)){
+								name = db_result_get_field_by_name(instance, "Name", NULL);
+								if(name == NULL)
+									name = "";
 							}
 						}
 					}
@@ -1441,9 +1526,9 @@ char *traverseFolderListing(char **dir, uint32_t modified, unsigned short none,
 						// decode url encoding of the last played/added file url
 						tmp = uriDecode(name + size);
 						if(tmp)
-							sub_name = tmp;	
+							sub_name = tmp;
 						else		
-							str_setstr(&sub_name, "");			
+							str_setstr(&sub_name, "");
 
 						if(strlen(sub_name)){
 							// check if this file is in the directory listing
@@ -1452,15 +1537,10 @@ char *traverseFolderListing(char **dir, uint32_t modified, unsigned short none,
 									break;
 							}
 							if(index == locBlock.count)
-								str_setstr(&sub_name, "");			
+								str_setstr(&sub_name, "");
 						}
 					}else
-						str_setstr(&sub_name, "");			
-
-					if(locBlock.dbResult){
-						dbi_result_free(locBlock.dbResult);
-						locBlock.dbResult = NULL;
-					}
+						str_setstr(&sub_name, "");
 					
 					// check if item is readable
 					if(strlen(sub_name)){
@@ -1480,27 +1560,20 @@ char *traverseFolderListing(char **dir, uint32_t modified, unsigned short none,
 						free(sub_name);
 						sub_name = NULL;
 					}
-					if(conn && (conn == pthread_getspecific(gthread_dbi_conn)))
-						dbi_conn_error_handler(conn, NULL, NULL);
 					if(strlen(result) > 0)
 						goto cleanup;
 				}
-				
-				if(seq){     // sequencial first if true (non-zero)		
-					errRec.message = "FindLastFilePlayedFromDir ";
-					dbi_conn_error_handler(conn, HandleDBerror, (void *)(&errRec));	
-					locBlock.dbResult = NULL;
-					
+
+				if(seq){			// sequencial first if true (non-zero)
 					// set directory as URL
 					tmp = uriEncodeKeepSlash(*dir);
 					str_setstr(&encStr, "file://");
 					str_appendstr(&encStr, tmp);
 					free(tmp);
 					size = strlen(encStr);
-					
+					db_set_errtag(instance, "traverseFolderListingSequencial");
 					// encode URL in db format
-					dbi_conn_quote_string(conn, &encStr);
-
+					db_quote_string(instance, &encStr);
 					// get end time of last item in list
 					int listSize;
 					listSize = queueCount();
@@ -1508,38 +1581,28 @@ char *traverseFolderListing(char **dir, uint32_t modified, unsigned short none,
 					if(listSize > 0){
 						// perform the sql query function: Get last ADDED file name in this directory 
 						// looking back over the most recent items in the log no further than the current list length
-
-						locBlock.dbResult = dbi_conn_queryf(conn, "SELECT Time, Name FROM (SELECT Time, Source AS Name FROM %slogs "
+						if(!db_queryf(instance, "SELECT Time, Name FROM (SELECT Time, Source AS Name FROM %slogs "
 										"USE INDEX (%slogs_time) WHERE Location IN(%s) AND (Added & 1) = 1 ORDER BY Time DESC LIMIT %d) As inqueue "
 										"WHERE LEFT(Name, %d) = %s AND SUBSTRING(Name, %d) NOT LIKE '%%/%%' ORDER BY Time DESC LIMIT 1", 
-										prefix, prefix, include, listSize, size, encStr, size+1);
-
-						// get first record (should be the only record)
-						if(locBlock.dbResult){
-							if(dbi_result_has_next_row(locBlock.dbResult)){
-								if(dbi_result_next_row(locBlock.dbResult)){
-									name = (const char*)dbi_result_get_string(locBlock.dbResult, "Name");
-									if(name == NULL)
-										name = "";
-								}
+										prefix, prefix, include, listSize, size, encStr, size+1)){
+													// get first record (should be the only record)
+							if(db_result_next_row(instance)){
+								name = db_result_get_field_by_name(instance, "Name", NULL);
+								if(name == NULL)
+									name = "";
 							}
 						}
 					}
 					if(strlen(name) == 0){
-						if(locBlock.dbResult)
-							dbi_result_free(locBlock.dbResult);
 						// perform the sql query function: Get last PLAYED file name in this directory
-						locBlock.dbResult = dbi_conn_queryf(conn, "SELECT Time, Source AS Name FROM %slogs USE INDEX (%slogs_time) WHERE Location IN(%s) "
+						if(!db_queryf(instance,  "SELECT Time, Source AS Name FROM %slogs USE INDEX (%slogs_time) WHERE Location IN(%s) "
 										"AND (Added & 1) <> 1 AND LEFT(Source, %d) = %s AND SUBSTRING(Source, %d) NOT LIKE '%%/%%' "
-										"ORDER BY Time DESC LIMIT 1", prefix, prefix, include, size, encStr, size+1);
-						// get first record (should be the only record)
-						if(locBlock.dbResult){
-							if(dbi_result_has_next_row(locBlock.dbResult)){
-								if(dbi_result_next_row(locBlock.dbResult)){
-									name = (const char*)dbi_result_get_string(locBlock.dbResult, "Name");
-									if(name == NULL)
-										name = "";
-								}
+										"ORDER BY Time DESC LIMIT 1", prefix, prefix, include, size, encStr, size+1)){
+							// get first record (should be the only record)
+							if(db_result_next_row(instance)){
+								name = db_result_get_field_by_name(instance, "Name", NULL);
+								if(name == NULL)
+									name = "";
 							}
 						}
 					}
@@ -1547,10 +1610,6 @@ char *traverseFolderListing(char **dir, uint32_t modified, unsigned short none,
 					if(encStr){ 
 						free(encStr);NULL;
 						encStr = NULL;
-					}
-					if(locBlock.dbResult){
-						dbi_result_free(locBlock.dbResult);
-						locBlock.dbResult = NULL;
 					}
 
 					if((int)strlen(name) > size){
@@ -1580,8 +1639,6 @@ char *traverseFolderListing(char **dir, uint32_t modified, unsigned short none,
 							}
 						}
 					}
-					if(conn && (conn == pthread_getspecific(gthread_dbi_conn)))
-						dbi_conn_error_handler(conn, NULL, NULL);
 					if(sub_name){
 						free(sub_name);
 						sub_name = NULL;
@@ -1589,7 +1646,7 @@ char *traverseFolderListing(char **dir, uint32_t modified, unsigned short none,
 					if(strlen(result) > 0)
 						goto cleanup;
 				}
-				
+
 				if(first){
 					// first readable alphebetical item, if any.
 					for(index = 0; index < locBlock.count; index++){
@@ -1609,7 +1666,7 @@ char *traverseFolderListing(char **dir, uint32_t modified, unsigned short none,
 					if(strlen(result) > 0)
 						goto cleanup;
 				}
-				
+
 				if(randlim){
 					// random if sequencial has failed or was false and random is non-zero
 					while(locBlock.count > 0){
@@ -1625,35 +1682,23 @@ char *traverseFolderListing(char **dir, uint32_t modified, unsigned short none,
 						CheckFolderResultReadable(&result);
 						if(strlen(result) > 0){
 							// check past play history, see if it qualifies
-
-							// connection may have changed... get latest
-							instance = get_thread_dbi(&conn);
-							if(conn){
-								errRec.message = "FindLastFilePlayedTime ";
-								dbi_conn_error_handler(conn, HandleDBerror, (void *)(&errRec));	
-								
-								// encode URL in db format
-								encStr = strdup(result);
-								dbi_conn_quote_string(conn, &encStr);
-								
-								// perform the sql query function: Get Time this file was last played
-								locBlock.dbResult = dbi_conn_queryf(conn, "SELECT Time AS Time FROM %slogs USE INDEX (%slogs_time) WHERE Location IN(%s) "
-											"AND Source = %s ORDER BY Time DESC LIMIT 1", prefix, prefix, include, encStr);
-								// free the c-string we allocated
-								if(encStr) 
-									free(encStr);
-								if(locBlock.dbResult){
-									// get first record (should be the only record)
-									if(dbi_result_has_next_row(locBlock.dbResult)){
-										if(dbi_result_next_row(locBlock.dbResult))
-											last = dbi_result_get_longlong(locBlock.dbResult, "Time");
-									}
-									dbi_result_free(locBlock.dbResult);
-									locBlock.dbResult = NULL;
+							db_set_errtag(instance, "traverseFolderListingRandomLimit");
+							// encode URL in db format
+							encStr = strdup(result);
+							db_quote_string(instance, &encStr);
+							// perform the sql query function: Get Time this file was last played
+							last = 0;
+							if(!db_queryf(instance,  "SELECT Time AS Time FROM %slogs USE INDEX (%slogs_time) WHERE Location IN(%s) "
+										"AND Source = %s ORDER BY Time DESC LIMIT 1", prefix, prefix, include, encStr)){
+								// get first record (should be the only record)
+								if(db_result_next_row(instance)){
+									if(sval = db_result_get_field_by_name(instance, "Time", NULL))
+										last = atoll(sval);
 								}
-								dbi_conn_error_handler(conn, NULL, NULL);
 							}
-
+							// free the c-string we allocated
+							if(encStr) 
+								free(encStr);
 							if(((time(NULL) - last) / 3600) < (signed int)randlim){
 								// played too recently
 								str_setstr(&result, "");
@@ -1687,6 +1732,8 @@ char *traverseFolderListing(char **dir, uint32_t modified, unsigned short none,
 
 cleanup:
 	// all done... clean up!
+	db_set_errtag(instance, NULL);
+	db_result_free(instance);
 	pthread_cleanup_pop(1);
 	if(prefix)
 		free(prefix);
@@ -1743,12 +1790,11 @@ void folderPick(taskRecord *parent){
 }
 
 uint32_t dbGetFillID(time_t *when){
-	dbi_inst instance = NULL;
-	dbi_conn conn = NULL;
-	dbi_result db_result;
+	dbInstance *instance = NULL;
 	char *sql = NULL;
 	char *prefix = NULL;
 	char *loc = NULL;
+	const char *tmp;
 	uint32_t result;
 	int hr, min;
 	struct tm tm_rec;
@@ -1757,19 +1803,14 @@ uint32_t dbGetFillID(time_t *when){
 	result = 0;
 	// fill time record
 	localtime_r(when, &tm_rec);
-	// set up database access
-	instance = get_thread_dbi(&conn);
-	if(conn == NULL){
-		// no connection yet for this thread... 
-		if((conn = dbSetupConnection(instance, 1)) == NULL)	
-			goto cleanup;
-	}		
 	
+	instance = db_get_and_connect();
+	if(!instance)
+		goto cleanup;
+	db_set_errtag(instance, "dbGetFillID");
 	prefix = GetMetaData(0, "db_prefix", 0);
 	loc = GetMetaData(0, "db_loc", 0);
 
-	errRec.message = "dbGetFillID ";
-	dbi_conn_error_handler(conn, HandleDBerror, (void *)(&errRec));	
 	// first we set a mysql connection session variable to the priority of the highest over-riding fill item
 	str_setstr(&sql,"SELECT @orPriority:= (((FLOOR([PFX]schedule.Fill / 60) + [PFX]hourmap.Map) > %d) "
 						"OR (((FLOOR([PFX]schedule.Fill / 60) + [PFX]hourmap.Map) = %d) AND "
@@ -1788,11 +1829,9 @@ uint32_t dbGetFillID(time_t *when){
 	str_ReplaceAll(&sql, "[PFX]", prefix);
 
 	// perform the sql query function, including only items with priority greater than or equal to the over-riding priority above
-    db_result = dbi_conn_queryf(conn, sql, tm_rec.tm_hour, tm_rec.tm_hour, tm_rec.tm_min, loc, loc, 
-								tm_rec.tm_mday, tm_rec.tm_wday+1, tm_rec.tm_mon+1, tm_rec.tm_hour, tm_rec.tm_hour, tm_rec.tm_min);
-	if(db_result == NULL)
+	if(db_queryf(instance, sql, tm_rec.tm_hour, tm_rec.tm_hour, tm_rec.tm_min, loc, loc, 
+								tm_rec.tm_mday, tm_rec.tm_wday+1, tm_rec.tm_mon+1, tm_rec.tm_hour, tm_rec.tm_hour, tm_rec.tm_min))
 		goto cleanup;
-	dbi_result_free(db_result);
 
 	str_setstr(&sql,"SELECT [PFX]schedule.Item, [PFX]hourmap.Map AS Hour, "
 						"[PFX]schedule.Minute, [PFX]schedule.Priority "
@@ -1810,31 +1849,30 @@ uint32_t dbGetFillID(time_t *when){
 	str_ReplaceAll(&sql, "[PFX]", prefix);
 
 	// perform the sql query function
-	db_result = dbi_conn_queryf(conn, sql, loc, loc, tm_rec.tm_mday, tm_rec.tm_wday+1, 
-									tm_rec.tm_mon+1, tm_rec.tm_hour, tm_rec.tm_hour, tm_rec.tm_min);
-		
-	if(db_result == NULL)
+	if(db_queryf(instance, sql, loc, loc, tm_rec.tm_mday, tm_rec.tm_wday+1, 
+									tm_rec.tm_mon+1, tm_rec.tm_hour, tm_rec.tm_hour, tm_rec.tm_min))
 		goto cleanup;
 	// get first record (should be the only record)
-	if(!dbi_result_has_next_row(db_result)){
-		dbi_result_free(db_result);
-		goto cleanup;
-	}
-	if(dbi_result_next_row(db_result)){ 
-		result = dbi_result_get_uint(db_result, "Item");
-		hr = dbi_result_get_int(db_result, "Hour");
-		min = dbi_result_get_int(db_result, "Minute");
+	if(db_result_next_row(instance)){ 
+		result = 0;
+		if(tmp = db_result_get_field_by_name(instance, "Item", NULL))
+			result = atoll(tmp);
+		hr = 0;
+		if(tmp = db_result_get_field_by_name(instance, "Hour", NULL))
+			hr = atoi(tmp);
+		min = 0;
+		if(tmp = db_result_get_field_by_name(instance, "Minute", NULL))
+			min = atoi(tmp);
 		// update when pointer to the unix time when the fill item was schedule to start
 		tm_rec.tm_hour = hr;
 		tm_rec.tm_min = min;
 		tm_rec.tm_sec = 0;
-		*when = mktime(&tm_rec);		
+		*when = mktime(&tm_rec);
 	}
-	dbi_result_free(db_result);
 
 cleanup:
-	if(conn)
-		dbi_conn_error_handler(conn, NULL, NULL);
+	db_result_free(instance);
+	db_set_errtag(instance, NULL);
 	if(prefix)
 		free(prefix);
 	if(loc)
@@ -1845,46 +1883,31 @@ cleanup:
 }
 
 char *dbGetItemName(uint32_t ID){
-	dbi_inst instance = NULL;
-	dbi_conn conn = NULL;
-	dbi_result db_result;
+	dbInstance *instance = NULL;
 	const char *Str;
 	char *prefix = NULL;
 	char *result = NULL;
 	struct dbErr errRec;
 	
 	str_setstr(&result, "");
-	instance = get_thread_dbi(&conn);
-	if(conn == NULL){
-		// no connection yet for this thread... 
-		if((conn = dbSetupConnection(instance, 1)) == NULL)	
-			goto cleanup;
-	}		
-	
+	instance = db_get_and_connect();
+	if(!instance)
+		goto cleanup;
+	db_set_errtag(instance, "dbGetItemName");
 	prefix = GetMetaData(0, "db_prefix", 0);
-
-	errRec.message = "dbGetItemName ";
-	dbi_conn_error_handler(conn, HandleDBerror, (void *)(&errRec));	
 	
 	// perform the sql query function
-	db_result = dbi_conn_queryf(conn, "SELECT Name FROM %stoc WHERE ID = %lu", prefix, ID);
-	if(db_result == NULL)
+	if(db_queryf(instance, "SELECT Name FROM %stoc WHERE ID = %lu", prefix, ID))
 		goto cleanup;
 	// get first record (should be the only record)
-	if(!dbi_result_has_next_row(db_result)){
-		dbi_result_free(db_result);
-		goto cleanup;
-	}
-	if(dbi_result_next_row(db_result)){ 
-		Str = (const char*)dbi_result_get_string(db_result, "Name");
-		if(Str)
+	if(db_result_next_row(instance)){ 
+		if(Str = db_result_get_field_by_name(instance, "Name", NULL))
 			str_setstr(&result, Str);
 	}
-	dbi_result_free(db_result);
 
 cleanup:
-	if(conn)
-		dbi_conn_error_handler(conn, NULL, NULL);
+	db_set_errtag(instance, NULL);
+	db_result_free(instance);
 	if(prefix)
 		free(prefix);
 	return result;
@@ -1941,39 +1964,40 @@ void dbMacroReplace(char **query){
 	free(include);
 }
 
-uint32_t dbGetNextScheduledItem(dbi_result *db_result, time_t *targetTime, short *priority, time_t from_t, time_t to_t, unsigned char highOnly){
+uint32_t dbGetNextScheduledItem(void **result, time_t *targetTime, short *priority, time_t from_t, time_t to_t, unsigned char highOnly){
+	dbInstance *instance = NULL;
 	char *sql = NULL;
 	char *tmp;
-	uint32_t result;
+	const char *sval;
+	uint32_t ID;
 	struct tm from_rec, to_rec;
-	short hr, min;
-	struct dbErr errRec;
-	dbi_conn conn = NULL;
-	dbi_inst instance;
+	short min, hr;
 	
+	if(!result)
+		return 0;
 	if(difftime(to_t, from_t) > 10800)
 		// greater than three hours bug trap???
 		return 0;
 	localtime_r(&from_t, &from_rec);
 	localtime_r(&to_t, &to_rec);
-	result = 0;
-	if(db_result == NULL)
-		return 0;
-	if(*db_result == NULL){
-		// new result requested
-		// set up database access
-		instance = get_thread_dbi(&conn);
-		if(conn == NULL){
-			// no connection yet for this thread... 
-			if((conn = dbSetupConnection(instance, 1)) == NULL){
-				goto cleanup;
-			}
-		}		
+	ID = 0;
+
+	// set up database access
+	instance = db_get_and_connect();
+	if(!instance)
+		goto cleanup;
 		
-		errRec.message = "dbGetNextScheduledItem ";
-		dbi_conn_error_handler(conn, HandleDBerror, (void *)(&errRec));	
-		
-		str_setstr(&sql, "SELECT [prefix]schedule.Item AS Item, [prefix]hourmap.Map AS Hour, MIN([prefix]schedule.Minute) AS Minute, ");
+	if(*result)
+		// continuation of next row from existing querry
+		db_result_atach(instance, *result);
+	else{
+		// new querry
+		db_set_errtag(instance, "dbGetNextScheduledItem");
+		// select all items scheduled for insert between the from and to times.  Group by Item ID, using the latest time
+		// and highest priority of any duplicate items are scheduled in that time range.
+		// NOTE (BUG): If from and to times are split across a day rollover, the latest item befor the roll over will be 
+		// selected for the case where multiple duplicate items are scheduled.
+		str_setstr(&sql, "SELECT [prefix]schedule.Item AS Item, MAX(([prefix]hourmap.Map * 60) + [prefix]schedule.Minute) AS Minutes, ");
 		str_appendstr(&sql, "MAX([prefix]schedule.Priority) AS Priority FROM ([prefix]schedule, [prefix]hourmap, [prefix]daymap) ");
 		str_appendstr(&sql, "LEFT JOIN [prefix]rest ON ([prefix]schedule.Item = [prefix]rest.Item AND [prefix]rest.Location = ");
 		str_appendstr(&sql, "[loc-id]) WHERE [prefix]rest.Added IS NULL AND ");
@@ -2074,57 +2098,54 @@ uint32_t dbGetNextScheduledItem(dbi_result *db_result, time_t *targetTime, short
 			free(tmp);
 			str_appendstr(&sql, ")))) ");
 		}	  
-		str_appendstr(&sql, "GROUP BY [prefix]schedule.Item ORDER BY Priority DESC");
+		str_appendstr(&sql, "GROUP BY [prefix]schedule.Item ORDER BY Priority DESC, Minutes ASC");
 		dbMacroReplace(&sql);
 		// perform the sql query function
-		*db_result = dbi_conn_queryf(conn, sql);
-		free(sql);
-		if(*db_result == NULL){
+		if(db_query(instance, sql))
 			goto cleanup;
+	}
+	// get next row from query result
+	if(db_result_next_row(instance)){
+		if(sval = db_result_get_field_by_name(instance, "Item", NULL))
+			ID = atol(sval);
+		if(sval = db_result_get_field_by_name(instance, "Priority", NULL))
+			*priority = atoi(sval);
+		else
+			*priority = 0;
+		min = 0;
+		if(sval = db_result_get_field_by_name(instance, "Minutes", NULL))
+			min = atoi(sval);
+		hr = min / 60;
+		if(hr < from_rec.tm_hour){
+			// must be after a day roll-over
+			to_rec.tm_hour = hr;
+			to_rec.tm_min = min % 60;
+			to_rec.tm_sec = 0;
+			*targetTime = mktime(&to_rec);
+		}else{
+			// all in the same day
+			from_rec.tm_hour = hr;
+			from_rec.tm_min = min % 60;
+			from_rec.tm_sec = 0;
+			*targetTime = mktime(&from_rec);
 		}
 	}
-	
-	// Return next row from query result
-	if(dbi_result_has_next_row(*db_result)){
-		if(dbi_result_next_row(*db_result)){
-			*priority = dbi_result_get_int(*db_result, "Priority");
-			hr = dbi_result_get_int(*db_result, "Hour");
-			min = dbi_result_get_int(*db_result, "Minute");
-			if(hr < from_rec.tm_hour){
-				// must be after a day roll-over
-				to_rec.tm_hour = hr;
-				to_rec.tm_min = min;
-				to_rec.tm_sec = 0;
-				*targetTime = mktime(&to_rec);
-			}else{
-				// all in the same day
-				from_rec.tm_hour = hr;
-				from_rec.tm_min = min;
-				from_rec.tm_sec = 0;
-				*targetTime = mktime(&from_rec);
-			}
-			if(conn)
-				dbi_conn_error_handler(conn, NULL, NULL);
-			return dbi_result_get_uint(*db_result, "Item");
-		}
-	}
-	
+
 cleanup:
-	// no more rows to return
-	if(*db_result)
-		dbi_result_free(*db_result);
-	if(conn)
-		dbi_conn_error_handler(conn, NULL, NULL);
-	return 0;
+	if(sql)
+		free(sql);
+	if(!ID){
+		db_set_errtag(instance, NULL);
+		db_result_free(instance);
+	}
+	*result = db_result_detach(instance);
+	return ID;
 }
 
 void dbSaveFilePos(uint32_t UID, float position){
-	dbi_inst instance = NULL;
-	dbi_conn conn = NULL;
-	dbi_result db_result;
+	dbInstance *instance = NULL;
 	uint32_t ID;
 	char *prefix, *tmp;
-	struct dbErr errRec;
 	
 	if(UID == 0)
 		return;
@@ -2132,85 +2153,67 @@ void dbSaveFilePos(uint32_t UID, float position){
 	if(ID == 0)
 		return;
 		
-	instance = get_thread_dbi(&conn);
-	if(conn == NULL){
-		// no connection yet for this thread... 
-		if((conn = dbSetupConnection(instance, 1)) == NULL)	
-			return;
-	}		
-	
+	instance = db_get_and_connect();
+	if(!instance)
+		return;
+	db_set_errtag(instance, "dbSaveFilePos");
 	prefix = GetMetaData(0, "db_prefix", 0);
-	errRec.message = "dbSaveFilePos ";
-	dbi_conn_error_handler(conn, HandleDBerror, (void *)(&errRec));	
 	
 	// perform the sql query function
-    db_result = dbi_conn_queryf(conn, "UPDATE %sfile SET Memory = %f WHERE ID = %lu", prefix, position, ID);
-	dbi_result_free(db_result);
-	dbi_conn_error_handler(conn, NULL, NULL);
+	db_queryf(instance,  "UPDATE %sfile SET Memory = %f WHERE ID = %lu", prefix, position, ID);
+	db_set_errtag(instance, NULL);
+	db_result_free(instance);
 	free(prefix);
 }
 
 char *dbGetReqestComment(time_t theTime){
-	dbi_inst instance = NULL;
-	dbi_conn conn = NULL;
-	dbi_result db_result;
+	dbInstance *instance = NULL;
 	const char *Str;
 	char *prefix = NULL;
 	char *loc = NULL;
 	char *result = NULL;
 	uint32_t count;
 	uint32_t row;
-	struct dbErr errRec;
 	
 	str_setstr(&result, "");
-	instance = get_thread_dbi(&conn);
-	if(conn == NULL){
-		// no connection yet for this thread... 
-		if((conn = dbSetupConnection(instance, 1)) == NULL)	
-			goto cleanup;
-	}		
-	
+	instance = db_get_and_connect();
+	if(!instance)
+		goto cleanup;
+	db_set_errtag(instance, "dbGetReqestComment");
 	prefix = GetMetaData(0, "db_prefix", 0);
 	loc = GetMetaData(0, "db_loc", 0);
-
-	errRec.message = "dbGetReqestComment ";
-	dbi_conn_error_handler(conn, HandleDBerror, (void *)(&errRec));	
 	
 	// perform the sql query function -- first look for comments posted after lastTime
-	db_result = dbi_conn_queryf(conn, "SELECT comment, ID FROM %srequest WHERE Item = 0 AND (Location = %s OR Location = 0) AND Time <= FROM_UNIXTIME(%ld) ORDER BY Time ASC LIMIT 1",
-								prefix, loc, theTime);
-	if(db_result != NULL){
+	if(!db_queryf(instance, "SELECT comment, ID FROM %srequest WHERE Item = 0 AND (Location = %s OR Location = 0) AND Time <= FROM_UNIXTIME(%ld) ORDER BY Time ASC LIMIT 1",
+								prefix, loc, theTime)){
 		// get first record (should be the only record)
-		if(dbi_result_has_next_row(db_result)){
-			if(dbi_result_next_row(db_result)){ 
-				Str = (const char*)dbi_result_get_string(db_result, "comment");
-				if(Str){
-					str_setstr(&result, Str);
-					// and delete it from the database since we are about to post it.
-					row = dbi_result_get_uint(db_result, "ID");
-					dbi_result_free(db_result);
-					db_result = dbi_conn_queryf(conn, "DELETE FROM %srequest WHERE ID = %lu", prefix, row);
+		if(db_result_next_row(instance)){ 
+			if(Str = db_result_get_field_by_name(instance, "comment", NULL)){
+				str_setstr(&result, Str);
+				// and delete it from the database since we are about to post it.
+				if(Str = db_result_get_field_by_name(instance, "ID", NULL)){
+					row = atoll(Str);
+					db_queryf(instance, "DELETE FROM %srequest WHERE ID = %lu", prefix, row);
 				}
 			}
 		}
-		dbi_result_free(db_result);
+		db_result_free(instance);
 	}
 	if(strlen(result))
 		goto cleanup;
 		
 	// no comments... get one of the comments out of our pool
-	db_result = dbi_conn_queryf(conn, "SELECT comment FROM %srequest WHERE Item = 0 AND (Location = %s OR Location = 0) AND Time > FROM_UNIXTIME(%lu)",
-								prefix, loc, theTime);
-	if(db_result != NULL){
-		if(count = dbi_result_get_numrows(db_result)){
+	if(!db_queryf(instance, "SELECT comment FROM %srequest WHERE Item = 0 AND (Location = %s OR Location = 0) AND Time > FROM_UNIXTIME(%lu)",
+								prefix, loc, theTime)){
+		if(count = db_result_get_result_rows(instance)){
+			count--;
 			row = (uint32_t)(count * RandomNumber());
-			if(dbi_result_seek_row(db_result, row + 1)){ 
-				Str = (const char*)dbi_result_get_string(db_result, "comment");
-				if(Str)
+			if(db_result_select_row(instance, row)){ 
+				if(Str = db_result_get_field_by_name(instance, "comment", NULL))
 					str_setstr(&result, Str);
 			}
 		}
-		dbi_result_free(db_result);
+		db_result_free(instance);
 	}
 
 cleanup:
@@ -2218,49 +2221,34 @@ cleanup:
 		free(prefix);
 	if(loc)
 		free(loc);
+	db_set_errtag(instance, NULL);
 
-	if(conn)
-		dbi_conn_error_handler(conn, NULL, NULL);
 	return result;
 }
 
 char *dbGetCurrentMSG(void){
-	dbi_inst instance = NULL;
-	dbi_conn conn = NULL;
-	dbi_result db_result;
+	dbInstance *instance = NULL;
 	const char *Str;
 	char *prefix = NULL;
 	char *loc = NULL;
 	char *result = NULL;
-	struct dbErr errRec;
 	
 	str_setstr(&result, "");
-	instance = get_thread_dbi(&conn);
-	if(conn == NULL){
-		// no connection yet for this thread... 
-		if((conn = dbSetupConnection(instance, 1)) == NULL)	
-			goto cleanup;
-	}		
-	
+	instance = db_get_and_connect();
+	if(!instance)
+		goto cleanup;
+	db_set_errtag(instance, "dbGetCurrentMSG");
 	prefix = GetMetaData(0, "db_prefix", 0);
 	loc = GetMetaData(0, "db_loc", 0);
-
-	errRec.message = "dbGetCurrentMSG ";
-	dbi_conn_error_handler(conn, HandleDBerror, (void *)(&errRec));	
 	
 	// perform the sql query function -- first look for comments posted after lastTime
-	db_result = dbi_conn_queryf(conn, "SELECT %smeta.Value AS MSG FROM %slogs, %smeta WHERE %slogs.Item = %smeta.ID AND %smeta.Parent = '%stoc' AND %smeta.Property = 'SCURL' AND %slogs.Location = %s AND (%slogs.Added & 1) <> 1 ORDER BY %slogs.Time DESC LIMIT 1",
-								prefix, prefix, prefix, prefix, prefix, prefix, prefix, prefix, prefix, loc, prefix, prefix);
-	if(db_result != NULL){
+	if(!db_queryf(instance, "SELECT %smeta.Value AS MSG FROM %slogs, %smeta WHERE %slogs.Item = %smeta.ID AND %smeta.Parent = '%stoc' AND %smeta.Property = 'SCURL' AND %slogs.Location = %s AND (%slogs.Added & 1) <> 1 ORDER BY %slogs.Time DESC LIMIT 1",
+								prefix, prefix, prefix, prefix, prefix, prefix, prefix, prefix, prefix, loc, prefix, prefix)){
 		// get first record (should be the only record)
-		if(dbi_result_has_next_row(db_result)){
-			if(dbi_result_next_row(db_result)){ 
-				Str = (const char*)dbi_result_get_string(db_result, "MSG");
-				if(Str)
-					str_setstr(&result, Str);
-			}
+		if(db_result_next_row(instance)){ 
+			if(Str = db_result_get_field_by_name(instance, "MSG", NULL))
+				str_setstr(&result, Str);
 		}
-		dbi_result_free(db_result);
 	}
 	
 cleanup:
@@ -2268,60 +2256,47 @@ cleanup:
 		free(prefix);
 	if(loc)
 		free(loc);
-		
-	if(conn)
-		dbi_conn_error_handler(conn, NULL, NULL);
+	db_result_free(instance);
+	db_set_errtag(instance, NULL);
 	return result;
 }
 
 uint32_t IDSearchArtistAlbumTitle(const char *Artist, const char *Album, const char *Title){
-	dbi_inst instance = NULL;
-	dbi_conn conn = NULL;
-	dbi_result result;
+	dbInstance *instance = NULL;
 	uint32_t recID;
 	char *prefix = NULL;
 	char *encArtist = NULL;
 	char *encAlbum = NULL;
 	char *encTitle = NULL;
-	struct dbErr errRec;
+	const char *sval;
 	
 	recID = 0;
-	instance = get_thread_dbi(&conn);
-	if(conn == NULL){
-		// no connection yet for this thread... 
-		if((conn = dbSetupConnection(instance, 1)) == NULL)	
-			goto cleanup;
-	}		
-	
+	instance = db_get_and_connect();
+	if(!instance)
+		goto cleanup;
+	db_set_errtag(instance, "IDSearchArtistAlbumTitle");
 	prefix = GetMetaData(0, "db_prefix", 0);
-
-	errRec.message = "IDSearchArtistAlbumTitle ";
-	dbi_conn_error_handler(conn, HandleDBerror, (void *)(&errRec));	
 	
 	str_setstr(&encArtist, Artist);
-	dbi_conn_quote_string(conn, &encArtist);
+	db_quote_string(instance, &encArtist);
 
 	str_setstr(&encAlbum, Album);
-	dbi_conn_quote_string(conn, &encAlbum);
+	db_quote_string(instance, &encAlbum);
 
 	str_setstr(&encTitle, Title);
-	dbi_conn_quote_string(conn, &encTitle);
+	db_quote_string(instance, &encTitle);
 
 	// perform the sql query function
-	result = dbi_conn_queryf(conn, "SELECT %stoc.ID FROM %stoc, %sfile, %sartist, %salbum WHERE %sArtist.ID = %sfile.artist "
+	if(db_queryf(instance, "SELECT %stoc.ID FROM %stoc, %sfile, %sartist, %salbum WHERE %sArtist.ID = %sfile.artist "
 			"AND %salbum.ID = %sfile.album AND %stoc.Name = %s AND %sartist.Name = %s AND %salbum.Name = %s LIMIT 1", 
-			prefix, prefix, prefix, prefix, prefix, prefix, prefix, prefix, prefix, prefix, encTitle, prefix, encArtist, prefix, encAlbum);
-	if(result == NULL)
+			prefix, prefix, prefix, prefix, prefix, prefix, prefix, prefix, prefix, prefix, encTitle, prefix, encArtist, prefix, encAlbum))
 		goto cleanup;
 	// get first record (should be the only record)
-	if(!dbi_result_has_next_row(result)){
-		dbi_result_free(result);
-		goto cleanup;
+	if(db_result_next_row(instance)){ 
+		if(sval =  db_result_get_field_by_name(instance, "ID", NULL))
+		recID = atoll(sval);
 	}
-	if(dbi_result_next_row(result)){ 
-		recID = dbi_result_get_uint(result, "ID");
-	}
-		
+	
 cleanup:
 	// free char strings
 	if(prefix)
@@ -2332,8 +2307,8 @@ cleanup:
 		free(encAlbum);
 	if(encTitle)
 		free(encTitle);
-	if(conn)
-		dbi_conn_error_handler(conn, NULL, NULL);
+	db_result_free(instance);
+	db_set_errtag(instance, NULL);
 	return recID;
 }
 
@@ -2486,52 +2461,52 @@ char *FindFromMeta(uint32_t UID){
 	return result;
 }
 
-void GetdbTaskMetaData(uint32_t UID, uint32_t recID, dbi_conn conn){
-	dbi_result result;
+void GetdbTaskMetaData(uint32_t UID, uint32_t recID){
+	dbInstance *instance = NULL;
 	const char *Key, *Val;
 	char *tmp;
 	char *prefix;
 	int size;
 	struct dbErr errRec;
 	
-	errRec.message = "GetdbTaskMetaData ";
-	dbi_conn_error_handler(conn, HandleDBerror, (void *)(&errRec));	
-		
-	prefix = GetMetaData(0, "db_prefix", 0);
-			
-	// perform the sql query function
-	result = dbi_conn_queryf(conn, "SELECT * FROM %stask WHERE ID = %lu", prefix, recID);
-	if(result == NULL){
+	instance = db_get_and_connect();
+	if(!instance){
 		SetMetaData(UID, "Missing", "1");
-		dbi_conn_error_handler(conn, NULL, NULL);
+		return;
+	}
+	db_set_errtag(instance, "GetdbTaskMetaData");
+	prefix = GetMetaData(0, "db_prefix", 0);
+
+	// perform the sql query function
+	if(db_queryf(instance, "SELECT * FROM %stask WHERE ID = %lu", prefix, recID)){
+		SetMetaData(UID, "Missing", "1");
+		db_set_errtag(instance, NULL);
 		free(prefix);
 		return;
 	}
-	if(!dbi_result_has_next_row(result))
+	if(!db_result_get_result_rows(instance))
 		SetMetaData(UID, "Missing", "1");
-	while(dbi_result_has_next_row(result)){
-		if(dbi_result_next_row(result)){ 
-			Key = dbi_result_get_string(result, "Property");
-			Val = dbi_result_get_string(result, "Value");
-			if(Key && Val){
-				if(!strcmp(Key,"Query")){
-					// URL type escape (%nn) the query string.
-					tmp = uriEncode(Val);
-					SetMetaData(UID, Key, tmp);
-					free(tmp);
-				}else{
-					SetMetaData(UID, Key, Val);
-				}
+	while(db_result_next_row(instance)){
+		Key = db_result_get_field_by_name(instance, "Property", NULL);
+		Val = db_result_get_field_by_name(instance, "Value", NULL);
+		if(Key && Val){
+			if(!strcmp(Key,"Query")){
+				// URL type escape (%nn) the query string.
+				tmp = uriEncode(Val);
+				SetMetaData(UID, Key, tmp);
+				free(tmp);
+			}else{
+				SetMetaData(UID, Key, Val);
 			}
 		}
 	}
 	free(prefix);
-	dbi_result_free(result);
-	dbi_conn_error_handler(conn, NULL, NULL);
+	db_result_free(instance);
+	db_set_errtag(instance, NULL);
 }
 
-int GetdbFileMetaData(uint32_t UID, uint32_t recID, dbi_conn conn, unsigned char markMissing){
-	dbi_result result;
+int GetdbFileMetaData(uint32_t UID, uint32_t recID, unsigned char markMissing){
+	dbInstance *instance = NULL;
 	char *prefix;
 	char *pre;
 	char *rem;
@@ -2554,131 +2529,124 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, dbi_conn conn, unsigned char
 	int stat = -1;
 	size_t plen = 0;
 	size_t pos;
-	struct dbErr errRec; 
 	glob_t globbuf;
 
-	errRec.message = "GetdbFileMetaData ";
-	dbi_conn_error_handler(conn, HandleDBerror, (void *)(&errRec));	
-	
+	instance = db_get_and_connect();
+	if(!instance)
+		goto cleanup;
+	db_set_errtag(instance, "GetdbFileMetaData");
 	prefix = GetMetaData(0, "db_prefix", 0);
 	
 	// perform the sql query function
-	result = dbi_conn_queryf(conn, "SELECT * FROM %sfile WHERE ID = %lu", prefix, recID);
-	if(result == NULL){
+	if(db_queryf(instance, "SELECT * FROM %sfile WHERE ID = %lu", prefix, recID))
 		goto cleanup;
-	}
 	// get first record (should be the only record)
-	if(!dbi_result_has_next_row(result)){
-		dbi_result_free(result);
+	if(!db_result_next_row(instance))
 		goto cleanup;
-	}
-	if(dbi_result_next_row(result)) { 
-		ctmp = dbi_result_get_string(result, "URL");
-        if(ctmp) 
+	else{ 
+		if(ctmp = db_result_get_field_by_name(instance, "URL", NULL))
 			SetMetaData(UID, "URL", ctmp);		
 		
-		ctmp = dbi_result_get_string(result, "Hash");
-		if(ctmp){
+		if(ctmp = db_result_get_field_by_name(instance, "Hash", NULL)){
 			SetMetaData(UID, "Hash", ctmp);
 			hash = strdup(ctmp);
 		}
 		
-		artID = dbi_result_get_uint(result, "Artist");
-		snprintf(buf, sizeof buf, "%u", (unsigned int)artID);
-		SetMetaData(UID, "ArtistID", buf);
+		if(ctmp = db_result_get_field_by_name(instance, "Artist", NULL)){
+			if(atoll(ctmp))
+				SetMetaData(UID, "ArtistID", ctmp);
+		}
 		
-		albID = dbi_result_get_uint(result, "Album");
-		snprintf(buf, sizeof buf, "%u", (unsigned int)albID);
-		SetMetaData(UID, "AlbumID", buf);
+		if(ctmp = db_result_get_field_by_name(instance, "Album", NULL)){
+			if(atoll(ctmp))
+				SetMetaData(UID, "AlbumID", ctmp);
+		}
 		
-		Float = dbi_result_get_float(result, "Volume");
+		Float = 0.0;
+		if(ctmp = db_result_get_field_by_name(instance, "Volume", NULL))
+			Float = atof(ctmp);
 		snprintf(buf, sizeof buf, "%0.2f", Float);
 		SetMetaData(UID, "Volume", buf);
 		
-		Float = dbi_result_get_float(result, "SegIn");
-		snprintf(buf, sizeof buf, "%0.1f", Float);
+		Float = 0.0;
+		if(ctmp = db_result_get_field_by_name(instance, "SegIn", NULL))
+			Float = atof(ctmp);
+		snprintf(buf, sizeof buf, "%0.2f", Float);
 		SetMetaData(UID, "SegIn", buf);
 		
-		Float = dbi_result_get_float(result, "SegOut");
-		snprintf(buf, sizeof buf, "%0.1f", Float);
+		Float = 0.0;
+		if(ctmp = db_result_get_field_by_name(instance, "SegOut", NULL))
+			Float = atof(ctmp);
+		snprintf(buf, sizeof buf, "%0.2f", Float);
 		SetMetaData(UID, "SegOut", buf);
 		
-		Float = dbi_result_get_float(result, "FadeOut");
+		Float = 0.0;
+		if(ctmp = db_result_get_field_by_name(instance, "FadeOut", NULL))
+			Float = atof(ctmp);
 		snprintf(buf, sizeof buf, "%0.1f", Float);
 		SetMetaData(UID, "FadeOut", buf);
 		
-		Float = dbi_result_get_float(result, "Intro");
+		Float = 0.0;
+		if(ctmp = db_result_get_field_by_name(instance, "Intro", NULL))
+			Float = atof(ctmp);
 		snprintf(buf, sizeof buf, "%0.1f", Float);
 		SetMetaData(UID, "Intro", buf);
 		
-		Float = dbi_result_get_float(result, "Memory");
-		snprintf(buf, sizeof buf, "%0.1f", Float);
-		SetMetaData(UID, "Memory", buf);
+		if(ctmp = db_result_get_field_by_name(instance, "Memory", NULL)){
+			if(atof(ctmp))
+				SetMetaData(UID, "Memory", ctmp);
+		}
 		
-		ctmp = dbi_result_get_string(result, "OutCue");
-		if(ctmp) 
+		if(ctmp = db_result_get_field_by_name(instance, "OutCue", NULL))
 			SetMetaData(UID, "OutCue", ctmp);
 		
-		uInt = dbi_result_get_uint(result, "Track");
-		snprintf(buf, sizeof buf, "%u", (unsigned int)uInt);
-		SetMetaData(UID, "Track", buf);
-
-		missing = dbi_result_get_uchar(result, "Missing");
+		uInt = 0;
+		if(ctmp = db_result_get_field_by_name(instance, "Track", NULL))
+			uInt = atoi(ctmp);
+		if(uInt){
+			snprintf(buf, sizeof buf, "%u", (unsigned int)uInt);
+			SetMetaData(UID, "Track", buf);
+		}
+		
+		missing = 0;
+		if(ctmp = db_result_get_field_by_name(instance, "Missing", NULL))
+			missing = atof(ctmp);
 		snprintf(buf, sizeof buf, "%d", missing);
 		SetMetaData(UID, "Missing", buf);
-
-		ctmp = dbi_result_get_string(result, "Path");
+		
+		ctmp = db_result_get_field_by_name(instance, "Path", NULL);
 		if(ctmp && strlen(ctmp)){
 			SetMetaData(UID, "Path", ctmp);
 			pathStr = strdup(ctmp);
-		
-			ctmp = dbi_result_get_string(result, "Prefix");
-			if(ctmp) 
+			if(ctmp = db_result_get_field_by_name(instance, "Prefix", NULL))
 				SetMetaData(UID, "Prefix", ctmp);
-			
-			dbi_result_free(result);
 		}else{
 			// fall back to old rev <= 3 Mount list
-			ctmp = dbi_result_get_string(result, "Mount");
-			if(ctmp){ 
+			if(ctmp = db_result_get_field_by_name(instance, "Mount", NULL)){
 				SetMetaData(UID, "Mount", ctmp);
-				dbi_result_free(result);
 
 				tmp = GetMetaData(UID, "Mount", 0);
 				mountName = str_NthField(tmp, "/", str_CountFields(tmp, "/"));
 				free(tmp);
 			}
 		}
-				
+
 		// get Artist Name
-		result = dbi_conn_queryf(conn, "SELECT Name FROM %sartist WHERE ID = %lu", prefix, artID);
-		// get first record (should be the only record)
-		if(result){
-			if(dbi_result_has_next_row(result)){
-				if(dbi_result_next_row(result)) { 
-					ctmp = dbi_result_get_string(result, "Name");
-					if(ctmp)
-						SetMetaData(UID, "Artist", ctmp);
-				}
+		if(!db_queryf(instance, "SELECT Name FROM %sartist WHERE ID = %lu", prefix, artID)){
+			// get first record (should be the only record)
+			if(db_result_next_row(instance)){
+				if(ctmp = db_result_get_field_by_name(instance, "Name", NULL))
+					SetMetaData(UID, "Artist", ctmp);
 			}
-			dbi_result_free(result);		
 		}
 		// get Album Name
-		result = dbi_conn_queryf(conn, "SELECT Name FROM %salbum WHERE ID = %lu", prefix, albID);
-		if(result){
+		if(!db_queryf(instance, "SELECT Name FROM %salbum WHERE ID = %lu", prefix, albID)){
 			// get first record (should be the only record)
-			if(dbi_result_has_next_row(result)){
-				if(dbi_result_next_row(result)) { 
-					ctmp = dbi_result_get_string(result, "Name");
-					if(ctmp)
-						SetMetaData(UID, "Album", ctmp);
-				}
+			if(db_result_next_row(instance)){
+				if(ctmp = db_result_get_field_by_name(instance, "Name", NULL))
+					SetMetaData(UID, "Album", ctmp);
 			}
-			dbi_result_free(result);
 		}
-	}else{
-		dbi_result_free(result);
-		goto cleanup;
 	}
 	
 	// check file related properties in db against the file itself... find file if needed.
@@ -2839,8 +2807,8 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, dbi_conn conn, unsigned char
 		}
 		
 		if(GetMetaInt(UID, "Missing", NULL))
-		   // was flag as missing, but it's not really missing... nothing else is different
-		   changed = 1;		
+			// was flag as missing, but it's not really missing... nothing else is different
+			changed = 1;		
 		
 		// unset missing metadata flag
 		SetMetaData(UID, "Missing", "0");	
@@ -2853,25 +2821,21 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, dbi_conn conn, unsigned char
 			// status has changed... update database
 			if(missing){
 				// mark record as missing
-				result = dbi_conn_queryf(conn, "UPDATE %sfile SET Missing = 1 WHERE ID = %lu", prefix, recID);
-				if(result)
-					dbi_result_free(result);
+				db_queryf(instance, "UPDATE %sfile SET Missing = 1 WHERE ID = %lu", prefix, recID);
 			}else{
 				stat = 1;
 				// unmark record as missing and update file location, etc.
 				pre = GetMetaData(UID, "Prefix", 0);
-				dbi_conn_quote_string(conn, &pre);
+				db_quote_string(instance, &pre);
 				rem = GetMetaData(UID, "Path", 0);
-				dbi_conn_quote_string(conn, &rem);
+				db_quote_string(instance, &rem);
 				newURL = GetMetaData(UID, "URL", 0);
-				dbi_conn_quote_string(conn, &newURL);
+				db_quote_string(instance, &newURL);
 				// do the update
-				result = dbi_conn_queryf(conn, 
+				db_queryf(instance, 
 					"UPDATE %sfile SET Missing = 0, Hash = '%s', Path = %s,  Prefix = %s, URL = %s WHERE ID = %lu", 
 					 prefix, tmp=GetMetaData(UID, "Hash", 0), rem, pre, newURL, recID);
 				free(tmp);
-				if(result)
-					dbi_result_free(result);
 				free(rem);
 				free(pre);
 				free(newURL);
@@ -2879,7 +2843,8 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, dbi_conn conn, unsigned char
 		}
 	}
 cleanup:
-	dbi_conn_error_handler(conn, NULL, NULL);
+	db_set_errtag(instance, NULL);
+	db_result_free(instance);
 	free(prefix);
 	if(mountName)
 		free(mountName);
@@ -2895,9 +2860,7 @@ cleanup:
 }
 
 void GetItemMetaData(uint32_t UID, const char *url){
-	dbi_inst instance = NULL;
-	dbi_conn conn = NULL;
-	dbi_result result;
+	dbInstance *instance = NULL;
 	const char *Str;
 	char *prefix = NULL;
 	char *path;
@@ -2911,22 +2874,15 @@ void GetItemMetaData(uint32_t UID, const char *url){
 	uint32_t recID;
 	int size;
 	uint32_t idx;
-	struct dbErr errRec;
 	
 	Type[0] = 0;
 	
-	instance = get_thread_dbi(&conn);
-	if(conn == NULL){
-		// no connection yet for this thread... 
-		if((conn = dbSetupConnection(instance, 1)) == NULL){
-			goto error;
-		}
-	}		
-
+	instance = db_get_and_connect();
+	if(!instance)
+		goto error;
+	db_set_errtag(instance, "GetItemMetaData");
 	prefix = GetMetaData(0, "db_prefix", 0);
-	errRec.message = "GetItemMetaData ";
-	dbi_conn_error_handler(conn, HandleDBerror, (void *)(&errRec));	
-
+	
 	// get db record id from URL
 	if((tmp = str_NthField(url, "://", 1)) == NULL){
 		goto error;
@@ -2937,8 +2893,8 @@ void GetItemMetaData(uint32_t UID, const char *url){
 		else
 			path = uriDecode(tmp);
 		free(tmp);
-	}		
-
+	}
+	
 	recID = atol(path);
 	snprintf(buf, sizeof buf, "%u", (unsigned int)recID);
 	free(path);
@@ -2949,16 +2905,11 @@ void GetItemMetaData(uint32_t UID, const char *url){
 	}
 	
 	// perform the sql query function
-    result = dbi_conn_queryf(conn, "SELECT * FROM %stoc WHERE ID = %lu", prefix, recID);
-	if(result == NULL)
+	if(db_queryf(instance, "SELECT * FROM %stoc WHERE ID = %lu", prefix, recID))
 		goto error;
 	// get first record (should be the only record)
-	if(!dbi_result_has_next_row(result)){
-		dbi_result_free(result);
-		goto error;
-	}
-	if(dbi_result_next_row(result)){ 
-		Str = dbi_result_get_string(result, "Type");
+	if(db_result_next_row(instance)){ 
+		Str = db_result_get_field_by_name(instance, "Type", NULL);
 		if(Str == NULL)
 			Str = "";
 		// make lowercase
@@ -2969,18 +2920,16 @@ void GetItemMetaData(uint32_t UID, const char *url){
 		}
 		Type[idx] = 0;
 		SetMetaData(UID, "Type", Type);
-
-		Str = dbi_result_get_string(result, "Name");
+		
+		Str = db_result_get_field_by_name(instance, "Name", NULL);
 		if(Str == NULL)
 			Str = "[Missing Name]";
 		SetMetaData(UID, "Name", Str);
 		
-		Str = dbi_result_get_string(result, "Tag");
-		if(Str)	
+		if(Str = db_result_get_field_by_name(instance, "Tag", NULL))
 			SetMetaData(UID, "Tag", Str);
 		
-		Str = dbi_result_get_string(result, "Script");
-		if(Str){
+		if(Str = db_result_get_field_by_name(instance, "Script", NULL)){
 			//check if it's a file URI reference
 			if(strncmp(Str, "file://", 7) == 0){
 				if(tmp = str_NthField(Str, "://", 1)){
@@ -3006,21 +2955,20 @@ void GetItemMetaData(uint32_t UID, const char *url){
 			SetMetaData(UID, "Script", tmp);
 			free(tmp);
 		}
-			
-		Float = dbi_result_get_float(result, "Duration");
+		Float = 0.0;
+		if(Str = db_result_get_field_by_name(instance, "Duration", NULL))
+			Float = atof(Str);
 		snprintf(buf, sizeof buf, "%.2f", Float);
 		SetMetaData(UID, "Duration", buf);
- 
-		verylong = dbi_result_get_longlong(result, "Added");
-		snprintf(buf, sizeof buf, "%ld", verylong);
-		SetMetaData(UID, "Added", buf);
-
-	}else{
-		dbi_result_free(result);
+		
+		if(Str = db_result_get_field_by_name(instance, "Added", NULL)){
+			verylong = atoll(Str);
+			snprintf(buf, sizeof buf, "%ld", verylong);
+			SetMetaData(UID, "Added", buf);
+		}
+	}else
 		goto error;
-	}
-	dbi_result_free(result);
-
+	
 	// get database fingerprint
 	unsigned int fp = getFingerprint();
 	if(fp){
@@ -3029,32 +2977,28 @@ void GetItemMetaData(uint32_t UID, const char *url){
 	}
 	
 	// perform the sql query function for custom properties
-	result = dbi_conn_queryf(conn, "SELECT * FROM %smeta WHERE Parent = '%stoc' AND ID = %lu", prefix, prefix, recID);
-	if(result){
-		while(dbi_result_has_next_row(result)){
-			if(dbi_result_next_row(result)){ 
-				const char *prop, *value;
-				prop = dbi_result_get_string(result, "Property");
-				value = dbi_result_get_string(result, "Value");
-				if(prop && strlen(prop) && value && strlen(value))
-					SetMetaData(UID, prop, value);
-			}else
-				break;
+	if(!db_queryf(instance, "SELECT * FROM %smeta WHERE Parent = '%stoc' AND ID = %lu", prefix, prefix, recID)){
+		while(db_result_next_row(instance)){
+			const char *prop, *value;
+			prop = db_result_get_field_by_name(instance, "Property", NULL);
+			value = db_result_get_field_by_name(instance, "Value", NULL);
+			if(prop && strlen(prop) && value && strlen(value))
+				SetMetaData(UID, prop, value);
 		}
-		dbi_result_free(result);		
 	}
-	dbi_conn_error_handler(conn, NULL, NULL);
-
+	db_set_errtag(instance, NULL);
+	db_result_free(instance);
+	
 	if(!strcmp(Type,"file")){
 		// get additional meta data related to file references stored in the db
-		GetdbFileMetaData(UID, recID, conn, GetMetaInt(0, "db_mark_missing", NULL));
+		GetdbFileMetaData(UID, recID, GetMetaInt(0, "db_mark_missing", NULL));
 		if(prefix)
 			free(prefix);
 		return;
 	}
 	if(!strcmp(Type,"task")){
 		// get additional meta data related to task references stored in the db
-		GetdbTaskMetaData(UID, recID, conn);
+		GetdbTaskMetaData(UID, recID);
 		if(prefix)
 			free(prefix);
 		return;
@@ -3067,67 +3011,53 @@ void GetItemMetaData(uint32_t UID, const char *url){
 	}else{
 		SetMetaData(UID, "Type", "");
 	}
-error:	
-	if(conn && (conn == pthread_getspecific(gthread_dbi_conn)))
-		dbi_conn_error_handler(conn, NULL, NULL);
+error:
+	db_set_errtag(instance, NULL);
+	db_result_free(instance);
 	SetMetaData(UID, "Missing", "1");
 	if(prefix)
 		free(prefix);
 }
 
 uint32_t IDSearchMarkedFile(const char *path, const char *Hash){
-	dbi_inst instance = NULL;
-	dbi_conn conn = NULL;
-	dbi_result result = NULL;
+	dbInstance *instance = NULL;
 	uint32_t recID;
 	char *prefix = NULL;
 	char *encPath = NULL;
-	struct dbErr errRec;
+	const char *str;
 	
 	recID = 0;
-	instance = get_thread_dbi(&conn);
-	if(conn == NULL){
-		// no connection yet for this thread... 
-		if((conn = dbSetupConnection(instance, 1)) == NULL)	
-			goto cleanup;
-	}		
+	instance = db_get_and_connect();
+	if(!instance)
+		goto cleanup;
+	db_set_errtag(instance, "IDSearchMarkedFile");
+	prefix = GetMetaData(0, "db_prefix", 0);
 	
-	prefix = GetMetaData(0, "db_prefix", 0);	
-
-	errRec.message = "IDSearchMarkedFile ";
-	dbi_conn_error_handler(conn, HandleDBerror, (void *)(&errRec));	
-		
 	str_setstr(&encPath, path);
-	dbi_conn_quote_string(conn, &encPath);
+	db_quote_string(instance, &encPath);
 
 	// perform the sql query function
-	result = dbi_conn_queryf(conn, "SELECT ID FROM %sfile WHERE Hash = '%s' AND SUBSTRING_INDEX(Path, '/', 1) = SUBSTRING_INDEX(%s, '/', 1)", prefix, Hash, encPath);
-	free(encPath);
-	if(result == NULL)
+	if(db_queryf(instance, "SELECT ID FROM %sfile WHERE Hash = '%s' AND SUBSTRING_INDEX(Path, '/', 1) = SUBSTRING_INDEX(%s, '/', 1)", prefix, Hash, encPath))
 		goto cleanup;
 	// get first record (**should** be the only record)
-	if(!dbi_result_has_next_row(result)){
-		dbi_result_free(result);
-		goto cleanup;
+	if(db_result_next_row(instance)){ 
+		if(str = db_result_get_field_by_name(instance, "ID", NULL))
+			recID = atol(str);
 	}
-	if(dbi_result_next_row(result)){ 
-		recID = dbi_result_get_uint(result, "ID");
-	}
-		
+	
 cleanup:
-	if(conn)
-		dbi_conn_error_handler(conn, NULL, NULL);
+	if(encPath);
+		free(encPath);
+	db_set_errtag(instance, NULL);
 	if(prefix)
 		free(prefix);
 	return recID;
 }
 
 void dbFileSync(ctl_session *session, unsigned char silent){
-	dbi_inst instance = NULL;
-	dbi_conn conn = NULL;
-	dbi_result db_result;
+	dbInstance *instance = NULL;
 	char *prefix;
-	const char *URL, *Path;
+	const char *URL, *Path, *cstr;
 	char *MSG, *tmp;
 	char *Str = NULL;
 	uint32_t count, missing, fixed, error;
@@ -3136,64 +3066,52 @@ void dbFileSync(ctl_session *session, unsigned char silent){
 	char buf[4096]; // send data buffer 
 	int sendCount;
 	int tx_length;
-	int	result;
-	struct dbErr errRec;
+	int result;
 	
 	count = 0;
 	missing = 0;
 	fixed = 0;
 	error = 0;
-	instance = get_thread_dbi(&conn);
-	if(conn == NULL){
-		// no connection yet for this thread... 
-		if((conn = dbSetupConnection(instance, 1)) == NULL)	
-			return;
-	}		
-	
+	instance = db_get_and_connect();
+	if(!instance)
+		return;
+	db_set_errtag(instance, "dbFileSync");
 	prefix = GetMetaData(0, "db_prefix", 0);
-
-	errRec.message = "dbFileSync ";
-	dbi_conn_error_handler(conn, HandleDBerror, (void *)(&errRec));	
 	
 	// perform the sql query function
-	db_result = dbi_conn_queryf(conn, "SELECT ID, URL, Path FROM %sfile ORDER BY URL", prefix);
-	if(db_result){
+	if(!db_queryf(instance, "SELECT ID, URL, Path FROM %sfile ORDER BY URL", prefix)){
 		sendCount = 1;
-		count = dbi_result_get_numrows(db_result);
-		while(dbi_result_has_next_row(db_result) && (sendCount > 0)){ 
-			if(dbi_result_next_row(db_result)){
-				recID = dbi_result_get_uint(db_result, "ID");
-				Path = dbi_result_get_string(db_result, "Path");
-				URL = dbi_result_get_string(db_result, "URL");
-				if(URL == NULL)
-					URL = "[Missing URL]";
-				result = -1;
-				if(recID){
-					// create an empty meta data record to hold results
-					localUID = createMetaRecord("", NULL);
-					// getting meta data with markMissing = true will update file info in the database
-					result = GetdbFileMetaData(localUID, recID, conn, 1);
-					// done with the metadata record... 
-					releaseMetaRecord(localUID);
-				}
-				if(result == -2){
-					MSG = "Missing";
-					missing++;
-				}
-				if(result == -1){
-					MSG = "Error";
-					error++;
-				}
-				if(result == 0)
-					MSG = "OK";
-				if(result == 1){
-					MSG = "Fixed";
-					fixed++;
-				}
-			}else{
-				Str = "[Database row error]";
+		count = db_result_get_result_rows(instance);
+		while(db_result_next_row(instance) && (sendCount > 0)){ 
+			recID = 0;
+			if(cstr = db_result_get_field_by_name(instance, "ID", NULL))
+				recID = atol(cstr);
+			Path = db_result_get_field_by_name(instance, "Path", NULL);
+			URL = db_result_get_field_by_name(instance, "URL", NULL);
+			if(URL == NULL)
+				URL = "[Missing URL]";
+			result = -1;
+			if(recID){
+				// create an empty meta data record to hold results
+				localUID = createMetaRecord("", NULL);
+				// getting meta data with markMissing = true will update file info in the database
+				result = GetdbFileMetaData(localUID, recID, 1);
+				// done with the metadata record... 
+				releaseMetaRecord(localUID);
+			}
+			if(result == -2){
+				MSG = "Missing";
+				missing++;
+			}
+			if(result == -1){
 				MSG = "Error";
 				error++;
+			}
+			if(result == 0)
+				MSG = "OK";
+			if(result == 1){
+				MSG = "Fixed";
+				fixed++;
 			}
 			if(Path && strlen(Path)){
 				str_setstr(&Str, Path);
@@ -3205,7 +3123,7 @@ void dbFileSync(ctl_session *session, unsigned char silent){
 			sendCount = my_send(session, buf, tx_length, silent);
 			count--;
 		}
-		count = dbi_result_get_numrows(db_result);
+		count = db_result_get_result_rows(instance);
 	}
 	tx_length = snprintf(buf, sizeof buf, "\nChecked=%u\nMissing=%u\nError=%u\nFixed=%u\n", (unsigned int)count, (unsigned int)missing, (unsigned int)error, (unsigned int)fixed);
 	my_send(session, buf, tx_length, silent);
@@ -3219,14 +3137,15 @@ void dbFileSync(ctl_session *session, unsigned char silent){
 	serverLogMakeEntry(MSG);
 	free(MSG);
 
-	dbi_result_free(db_result);
-	dbi_conn_error_handler(conn, NULL, NULL);
+	db_result_free(instance);
+	db_set_errtag(instance, NULL);
 	free(prefix);
 	if(Str)
 		free(Str);
 }
 
-int dbHashSearchFileHeiarchy(ctl_session *session, unsigned char silent, const char *searchPath, dbi_conn conn, uint32_t mS_pace){
+int dbHashSearchFileHeiarchy(ctl_session *session, unsigned char silent, const char *searchPath, uint32_t mS_pace){
+	dbInstance *instance = NULL;
 	char buf[4096]; // send data buffer 
 	int tx_length;
 	const char *pathArray[2] = {searchPath, 0};
@@ -3235,28 +3154,36 @@ int dbHashSearchFileHeiarchy(ctl_session *session, unsigned char silent, const c
 	char *tmp, *enc;
 	char *vol;
 	char *hash;
+	const char *sval;
 	char *newurl = NULL;
 	unsigned int recID;
 	struct timespec timeout;
 	FTS *fts_session;
 	FTSENT *fts_entry;	
-	dbi_result db_result, db_update;
 	unsigned int localUID;
 	char *newURL = NULL;
-		
+	
 	vol = strdup(searchPath);
 	if(tmp = getFilePrefixPoint(&vol)){
+		instance = db_get_and_connect();
+		if(!instance){
+			free(vol);
+			return 0;
+		}
+		db_set_errtag(instance, "dbFileSearch");
+		
 		// allocate, copy and encode the strings in the db's format
 		str_setstr(&tmp, vol);
 		free(vol);
 		vol = str_NthField(tmp, "/", 0);
 		free(tmp);
-		dbi_conn_quote_string(conn, &vol);
+		db_quote_string(instance, &vol);
 		if(!strlen(vol)){
 			tx_length = snprintf(buf, sizeof buf, " Path not in prefix list\n");
 			my_send(session, buf, tx_length, silent);	
 			free(vol);
-			return 0;			
+			db_set_errtag(instance, NULL);
+			return 0;
 		}
 	}else{
 		tx_length = snprintf(buf, sizeof buf, " Path not in prefix list\n");
@@ -3274,7 +3201,7 @@ int dbHashSearchFileHeiarchy(ctl_session *session, unsigned char silent, const c
 		tx_length = snprintf(buf, sizeof buf, " Searching...\n");
 		my_send(session, buf, tx_length, silent);
 		tmp = NULL;
-		str_setstr(&tmp, "database] dbFileSearch-searching for moved files: ");
+		str_setstr(&tmp, "[database] dbFileSearch-searching for moved files: ");
 		str_appendstr(&tmp, searchPath);
 		serverLogMakeEntry(tmp);
 		free(tmp);
@@ -3288,35 +3215,36 @@ int dbHashSearchFileHeiarchy(ctl_session *session, unsigned char silent, const c
 			if(fts_entry->fts_info == FTS_F){
 				if(hash = GetFileHash(fts_entry->fts_path)){
 					// perform the sql query function
-					if(db_result = dbi_conn_queryf(conn, 
+					if(!db_queryf(instance, 
 							"SELECT ID FROM %sfile WHERE Hash = '%s' AND SUBSTRING_INDEX(Path, '/', 1) = %s", prefix, hash, vol)){
-						while(dbi_result_has_next_row(db_result)){ 
-							if(dbi_result_next_row(db_result)){								
-								recID = dbi_result_get_uint(db_result, "ID");
+						while(db_result_next_row(instance)){ 
+							recID = 0;
+							if(sval = db_result_get_field_by_name(instance, "ID", NULL))
+								recID = atol(sval);
+							if(recID){
 								tx_length = snprintf(buf, sizeof buf, "\t\t%u", recID);
 								my_send(session, buf, tx_length, silent);
 								// see if the record is for a missing file
 								// create an empty meta data record to hold results
 								localUID = createMetaRecord("", NULL);
-								GetdbFileMetaData(localUID, recID, conn, 0);
+								GetdbFileMetaData(localUID, recID, 0);
 								if(GetMetaInt(localUID, "Missing", NULL)){
 									// update the URL, path, prefix and unmark as missing
 									tmp = uriEncodeKeepSlash(fts_entry->fts_path);
 									str_setstr(&newurl, "file://");
 									str_appendstr(&newurl, tmp);
 									free(tmp);
-									dbi_conn_quote_string(conn, &newURL);
+									db_quote_string(instance, &newURL);
 									path = NULL;
 									str_setstr(&path, fts_entry->fts_path);
 									if(tmp = getFilePrefixPoint(&path)){
-										dbi_conn_quote_string(conn, &tmp);
-										dbi_conn_quote_string(conn, &path);
-										db_update = dbi_conn_queryf(conn, "UPDATE %sfile SET Missing = 0, URL = %s Path = %s, Prefix = %s WHERE ID = %lu", 
+										db_quote_string(instance, &tmp);
+										db_quote_string(instance, &path);
+										db_queryf(instance, "UPDATE %sfile SET Missing = 0, URL = %s Path = %s, Prefix = %s WHERE ID = %lu", 
 												prefix, newURL, path, tmp, recID);
 										free(tmp);
 										free(path);
-										if(db_update){
-											dbi_result_free(db_update);
+										if(db_result_get_rows_affected(instance)){
 											tx_length = snprintf(buf, sizeof buf, " Fixed\n");
 											my_send(session, buf, tx_length, silent);
 											tmp = NULL;
@@ -3342,7 +3270,6 @@ int dbHashSearchFileHeiarchy(ctl_session *session, unsigned char silent, const c
 								releaseMetaRecord(localUID);
 							}
 						}
-						dbi_result_free(db_result);
 					}
 					free(hash);
 				}
@@ -3353,19 +3280,21 @@ int dbHashSearchFileHeiarchy(ctl_session *session, unsigned char silent, const c
 		}
 		free(vol);
 		free(prefix);
+		db_set_errtag(instance, NULL);
+		db_result_free(instance);
 		return 1;
 	}
 	tx_length = snprintf(buf, sizeof buf, " Invalid\n");
 	my_send(session, buf, tx_length, silent);	
 	free(vol);
 	free(prefix);
+	db_set_errtag(instance, NULL);
+	db_result_free(instance);
 	return 0;
 }
 
 void dbFileSearch(ctl_session *session, unsigned char silent, const char *Path, uint32_t pace){
-	dbi_inst instance = NULL;
-	dbi_conn conn = NULL;
-	dbi_result result;
+	dbInstance *instance = NULL;
 	char *prefix;
 	char *tmp;
 	char *path = NULL;
@@ -3373,78 +3302,68 @@ void dbFileSearch(ctl_session *session, unsigned char silent, const char *Path, 
 	int tx_length, i, p, listSize;
 	char *prefixList;
 	const char *mountName;
-	struct dbErr errRec;
 	glob_t globbuf;
 	
-	instance = get_thread_dbi(&conn);
-	if(conn == NULL){
-		// no connection yet for this thread... 
-		if((conn = dbSetupConnection(instance, 1)) == NULL){
-			return;
-		}
-	}		
-		
-	errRec.message = "dbFileSearch ";
-	dbi_conn_error_handler(conn, HandleDBerror, (void *)(&errRec));	
+	instance = db_get_and_connect();
+	if(!instance)
+		return;
+	db_set_errtag(instance, "dbFileSearch");
 	
-	result = NULL;
 	if((Path == NULL) || (strlen(Path) == 0)){	
 		// no specific file path specified
 		// get database default mount search path list
 		prefix = GetMetaData(0, "db_prefix", 0);
 
 		// get mount names
-		result = dbi_conn_queryf(conn, "SELECT Distinct SUBSTRING_INDEX(Path, '/', 1) AS MountName FROM %sfile", prefix);
-		free(prefix);
-		if(result == NULL){
+		if(db_queryf(instance, "SELECT Distinct SUBSTRING_INDEX(Path, '/', 1) AS MountName FROM %sfile", prefix)){
+			free(prefix);
+			db_set_errtag(instance, NULL);
 			return;
 		}
-		while(dbi_result_has_next_row(result)){ 
-			if(dbi_result_next_row(result)){
-				if((mountName = dbi_result_get_string(result, "MountName")) && (strlen(mountName) > 1)){
-					// for each mount, pre-pend each of the search paths, and traverse all files
-					// with in looking for files with Hash codes that match in the dtatabse and are missing.
-					p = 0;
-					i = 0;
-					prefixList = GetMetaData(0, "file_prefixes", 0);
-					listSize = str_CountFields(prefixList, ",") + 1;
-					while(p < listSize){
-						// Use glob function to find existing paths to the mount
-						tmp = str_NthField(prefixList, ",", p);
-						if(tmp){
-							if(strlen(tmp)){
-								str_setstr(&path, tmp);
-								str_appendstr(&path, mountName);
-								i = 0;
-								if(!glob(path, GLOB_NOSORT, NULL, &globbuf)){
-									while(i < globbuf.gl_pathc){
-										// found a path in new glob list
-										tx_length = snprintf(buf, sizeof buf, "Search Location %s: ", globbuf.gl_pathv[i]);
-										my_send(session, buf, tx_length, silent);
-										dbHashSearchFileHeiarchy(session, silent, globbuf.gl_pathv[i], conn, pace);
-										i++;
-									}
+		free(prefix);
+		while(db_result_next_row(instance)){ 
+			if((mountName = db_result_get_field_by_name(instance, "MountName", NULL)) && (strlen(mountName) > 1)){
+				// for each mount, pre-pend each of the search paths, and traverse all files
+				// with in looking for files with Hash codes that match in the dtatabse and are missing.
+				p = 0;
+				i = 0;
+				prefixList = GetMetaData(0, "file_prefixes", 0);
+				listSize = str_CountFields(prefixList, ",") + 1;
+				while(p < listSize){
+					// Use glob function to find existing paths to the mount
+					tmp = str_NthField(prefixList, ",", p);
+					if(tmp){
+						if(strlen(tmp)){
+							str_setstr(&path, tmp);
+							str_appendstr(&path, mountName);
+							i = 0;
+							if(!glob(path, GLOB_NOSORT, NULL, &globbuf)){
+								while(i < globbuf.gl_pathc){
+									// found a path in new glob list
+									tx_length = snprintf(buf, sizeof buf, "Search Location %s: ", globbuf.gl_pathv[i]);
+									my_send(session, buf, tx_length, silent);
+									dbHashSearchFileHeiarchy(session, silent, globbuf.gl_pathv[i], pace);
+									i++;
 								}
-								globfree(&globbuf);
 							}
-							free(tmp);
-							p++;
-						}else
-							break;
-					}
-					free(prefixList);
+							globfree(&globbuf);
+						}
+						free(tmp);
+						p++;
+					}else
+						break;
 				}
+				free(prefixList);
 			}
 		}
-		if(result)
-			dbi_result_free(result);
 		if(path)
 			free(path);
 	}else{	
 		// search path has been specified
 		tx_length = snprintf(buf, sizeof buf, "Search Location %s: ", Path);
 		my_send(session, buf, tx_length, silent);
-		dbHashSearchFileHeiarchy(session, silent, Path, conn, pace);
+		dbHashSearchFileHeiarchy(session, silent, Path, pace);
 	}
-	dbi_conn_error_handler(conn, NULL, NULL);
+	db_set_errtag(instance, NULL);
+	db_result_free(instance);
 }

@@ -169,6 +169,23 @@ unsigned int str_CountFields(char *string, const char *token){
 	return result;
 }
 
+void str_strip_chr(char **string, const char find){
+	char *str;
+	
+	while(str = strchr(*string, find)){
+		str_cutstr(string, str - *string, 1);
+	}
+}
+
+char *str_firstnonspace(char *string){
+	while(*string){
+		if(!isspace(*string))
+			return string;
+		string++;	
+	}
+	return NULL;
+}
+
 char *str_NthField(const char *string, const char *token, unsigned int field){
 	unsigned int tsize;
 	char *result, *tmp;
