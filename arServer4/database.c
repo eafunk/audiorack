@@ -104,7 +104,6 @@ void db_instance_free(void *value){
 				break;
 		}
 		free(value);
-fprintf(stderr, "free dbInst, cnt=%ld\n", --instCnt);
 	}
 	pthread_setspecific(gthread_db_inst, NULL);
 }
@@ -127,7 +126,6 @@ unsigned char db_get_thread_instance(dbInstance **inst){
 		// create instance
 		db = calloc(1, sizeof(dbInstance));
 		pthread_setspecific(gthread_db_inst, db);
-fprintf(stderr, "alloc dbInst, cnt=%ld\n", ++instCnt);
 	}
 	if(*inst = db){
 		// check connection status according to db type
@@ -328,10 +326,6 @@ void db_result_atach(dbInstance *db, void *res){
 
 unsigned char db_query(dbInstance *db, const char *querryStr){
 	// returns 0 if no error.
-time_t now;
-time(&now);
-fprintf(stderr, "\n%s: %s  query=%s\n", ctime(&now), db->errRec.tag, querryStr);
-
 	switch(db->type){
 		case dbtype_mysql:
 
@@ -1185,12 +1179,12 @@ void dbPick(taskRecord *parent){
 		db_result_atach(instance, lastResult);
 		if(!parent->cancelThread){
 			mode = GetMetaData(parent->UID, "Mode", 0);
-			count = db_result_get_result_rows(instance) - 1;
+			count = db_result_get_result_rows(instance);
 			row = -1;
 			if(!strcmp(mode,"random"))
-				row = (unsigned long)(count * RandomNumber());
+				row = (unsigned long)((count-1) * RandomNumber());
 			else if(!strcmp(mode,"weighted"))
-				row = (unsigned long)(count * GaussianNumber());
+				row = (unsigned long)((count-1) * GaussianNumber());
 			else if(!strcmp(mode,"first"))
 				row = 0;
 				
@@ -2552,13 +2546,15 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, unsigned char markMissing){
 			hash = strdup(ctmp);
 		}
 		
+		artID = 0;
 		if(ctmp = db_result_get_field_by_name(instance, "Artist", NULL)){
-			if(atoll(ctmp))
+			if(artID = atoll(ctmp))
 				SetMetaData(UID, "ArtistID", ctmp);
 		}
 		
+		albID = 0;
 		if(ctmp = db_result_get_field_by_name(instance, "Album", NULL)){
-			if(atoll(ctmp))
+			if(albID = atol(ctmp))
 				SetMetaData(UID, "AlbumID", ctmp);
 		}
 		
