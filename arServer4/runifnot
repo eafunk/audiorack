@@ -1,0 +1,14 @@
+#!/bin/sh
+# shell script that will run a command and parameters IF IT IS NOT ALREAD RUNNING
+# first parameter is the path to a lock file to prevent concurrent execution
+# subsequent parameters form the command to execute
+
+pidfile=$1
+if [ -f $1 ]; then
+        exit
+fi
+echo $$ > $1               
+shift
+eval "$@"
+rm $pidfile
+

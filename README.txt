@@ -65,7 +65,7 @@ command after you have started arServer4 running and you connect to it's
 TCP control socket and issue the "help" command.  The best starting 
 point is again the old AudioRack3 documentation, keeping in mind that 
 arServer4 is largely an newer implementation of the old arserver3 
-referenced in the AUdioRack3 documentation.
+referenced in the AudioRack3 documentation.
 
 In order to handle differences in how various operating systems mounts 
 disks, either physical or network shares, changes have been made to the 
@@ -102,16 +102,18 @@ installed on your system to build the project as well. This usually
 implies the developer version of these packages must be intsalled:
 
 gstreamer1		including all good, bad and ugly plugins, bad may 
-					require manual install.
+			require manual install.
 					
 gstreamer-pbutils
 
 jackd 			version 2, and any support libraries/programs for 
-					you to set up and manageaudio on your system.
+			you to set up and manage audio on your system. I
+			recommend you have the Carla program installed to 
+			manage audio processing with jack.
 
 arServer4, in addition, depends on the following libraries:
 
-libdbd-mysql
+libmysqlclient
 
 *** BUILDING ***
 
@@ -155,7 +157,6 @@ without a running through a secondary "keep-alive/watchdog" process.
 
 To see all the command line options for arServer:
 /opt/audiorack/bin/arServer4 ?
-
 
 Once running, you can connect to the TCP control socket to issue commands
 and get responses from arServer4.  The default TCP socket is on port 9550.

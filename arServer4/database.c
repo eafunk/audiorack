@@ -240,6 +240,7 @@ unsigned char db_connection_setup(dbInstance *db, char useNamedDB){
 				db->fields = NULL;
 				db->num_fields = 0;
 				db_set_errtag(db, NULL);
+				free(tmp);
 				return 1;
 			}else{
 				HandleDBerror(db);
@@ -1761,26 +1762,28 @@ void folderPick(taskRecord *parent){
 
 	pick = traverseFolderListing(&dir, mod, nomod, seq, rerun, first, rand, date);
 	free(dir);
-	if(pick && strlen(pick)){
-		
-		// make file url from pick path
-		encode = uriEncodeKeepSlash(pick);
-		str_insertstr(&encode, "file://", 0);
-		// add to playlist in pick placeholder position
-		newUID = SplitItem(parent->UID, encode, 1);
-		if(newUID){
-			if(segout){
-				float aFloat;
-				aFloat = GetMetaFloat(newUID, "Duration", NULL);
-				aFloat = aFloat - segout;
-				if(aFloat < 0.0)
-					aFloat = 0.0;
-				SetMetaData(newUID, "SegOut", (tmp = fstr(aFloat, 2)));
-				free(tmp);
+	if(pick){
+		if(strlen(pick)){
+			// make file url from pick path
+			encode = uriEncodeKeepSlash(pick);
+			str_insertstr(&encode, "file://", 0);
+			// add to playlist in pick placeholder position
+			newUID = SplitItem(parent->UID, encode, 1);
+			if(newUID){
+				if(segout){
+					float aFloat;
+					aFloat = GetMetaFloat(newUID, "Duration", NULL);
+					aFloat = aFloat - segout;
+					if(aFloat < 0.0)
+						aFloat = 0.0;
+					SetMetaData(newUID, "SegOut", (tmp = fstr(aFloat, 2)));
+					free(tmp);
+				}
 			}
+			free(encode);
 		}
-		free(encode);
-	}				
+		free(pick);
+	}
 }
 
 uint32_t dbGetFillID(time_t *when){
