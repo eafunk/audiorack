@@ -1329,7 +1329,7 @@ void *controlQueueInWatcher(void *refCon){
 											entryRec->UID = 0;
 											
 											programLogMakeEntry(entryRec);
-											cJSON_Delete(tags);	
+											cJSON_Delete(tags);
 										}
 									}
 									free(tmp);
@@ -1429,6 +1429,7 @@ void *controlQueueInWatcher(void *refCon){
 									free(sval);
 
 								}
+								cJSON_Delete(parent);
 							}
 
 						}
