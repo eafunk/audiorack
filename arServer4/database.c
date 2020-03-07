@@ -310,7 +310,7 @@ void *db_result_detach(dbInstance *db){
 	return res;
 }
 
-void db_result_atach(dbInstance *db, void *res){
+void db_result_attach(dbInstance *db, void *res){
 	// An existing reult will be freed befor reattaching the passed reult
 	if(db->result)
 		db_result_free(db);
@@ -1162,7 +1162,7 @@ void dbPick(taskRecord *parent){
 			if(count > 0){
 				if(result = db_result_detach(instance)){
 					if(lastResult){
-						db_result_atach(instance, lastResult);
+						db_result_attach(instance, lastResult);
 						db_result_free(instance);
 					}
 					lastResult = result;
@@ -1177,7 +1177,7 @@ void dbPick(taskRecord *parent){
 	if(single)
 		free(single);
 	if(lastResult){
-		db_result_atach(instance, lastResult);
+		db_result_attach(instance, lastResult);
 		if(!parent->cancelThread){
 			mode = GetMetaData(parent->UID, "Mode", 0);
 			count = db_result_get_result_rows(instance);
@@ -1315,7 +1315,7 @@ void CheckFolderResultReadable(char **urlStr){
 	}
 
 	// replaces the input url string with an empty string if the item the url references is not readable
-	localUID = createMetaRecord(*urlStr, NULL);
+	localUID = createMetaRecord(*urlStr, NULL, 1);
 	
 	// fill the metadata record
 	GetFileMetaData(localUID, *urlStr);
@@ -1986,7 +1986,7 @@ uint32_t dbGetNextScheduledItem(void **result, time_t *targetTime, short *priori
 		
 	if(*result)
 		// continuation of next row from existing querry
-		db_result_atach(instance, *result);
+		db_result_attach(instance, *result);
 	else{
 		// new querry
 		db_set_errtag(instance, "dbGetNextScheduledItem");
@@ -2326,7 +2326,7 @@ char *FindFromMeta(uint32_t UID){
 		if(!strcmp((tmp = GetMetaData(UID, "Type", 0)), "file")){
 			free(tmp);
 			// check if the database entry maps back to valid file
-			localUID = createMetaRecord(result, NULL);
+			localUID = createMetaRecord(result, NULL, 1);
 			// fill the metadata record
 			GetURLMetaData(localUID, result);
 			if(GetMetaInt(localUID, "Missing", NULL) == 0){
@@ -2347,7 +2347,7 @@ char *FindFromMeta(uint32_t UID){
 	free(result);
 	result = GetMetaData(UID, "URL", 0);
 	if(strlen(result)){
-		localUID = createMetaRecord(result, NULL);
+		localUID = createMetaRecord(result, NULL, 1);
 		// fill the metadata record
 		GetURLMetaData(localUID, result);
 		if(GetMetaInt(localUID, "Missing", NULL) == 0){
@@ -2370,7 +2370,7 @@ char *FindFromMeta(uint32_t UID){
 			if(tmp = strrchr(fname, '/')){
 				str_appendstr(&result, tmp);
 				// and try again
-				localUID = createMetaRecord(result, NULL);
+				localUID = createMetaRecord(result, NULL, 1);
 				// fill the metadata record
 				GetURLMetaData(localUID, result);
 				if(GetMetaInt(localUID, "Missing", NULL) == 0){
@@ -2401,7 +2401,7 @@ char *FindFromMeta(uint32_t UID){
 					snprintf(buf, sizeof buf, "item:///%u", (unsigned int)id);
 					free(result);
 					result = strdup(buf); 
-					localUID = createMetaRecord(result, NULL);
+					localUID = createMetaRecord(result, NULL, 1);
 					// fill the metadata record
 					GetURLMetaData(localUID, result);
 					if(GetMetaInt(localUID, "Missing", NULL) == 0){
@@ -2434,7 +2434,7 @@ char *FindFromMeta(uint32_t UID){
 					snprintf(buf, sizeof buf, "item:///%u", (unsigned int)id);
 					free(result);
 					result = strdup(buf); 
-					localUID = createMetaRecord(result, NULL);
+					localUID = createMetaRecord(result, NULL, 1);
 					// fill the metadata record
 					GetURLMetaData(localUID, result);
 					if(GetMetaInt(localUID, "Missing", NULL) == 0){
@@ -2830,10 +2830,12 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, unsigned char markMissing){
 				db_quote_string(instance, &rem);
 				newURL = GetMetaData(UID, "URL", 0);
 				db_quote_string(instance, &newURL);
+				tmp = GetMetaData(UID, "Hash", 0);
+				db_quote_string(instance, &tmp);
 				// do the update
 				db_queryf(instance, 
-					"UPDATE %sfile SET Missing = 0, Hash = '%s', Path = %s,  Prefix = %s, URL = %s WHERE ID = %lu", 
-					 prefix, tmp=GetMetaData(UID, "Hash", 0), rem, pre, newURL, recID);
+					"UPDATE %sfile SET Missing = 0, Hash = %s, Path = %s,  Prefix = %s, URL = %s WHERE ID = %lu", 
+					 prefix, tmp, rem, pre, newURL, recID);
 				free(tmp);
 				free(rem);
 				free(pre);
@@ -3055,6 +3057,7 @@ cleanup:
 
 void dbFileSync(ctl_session *session, unsigned char silent){
 	dbInstance *instance = NULL;
+	void *curres;
 	char *prefix;
 	const char *URL, *Path, *cstr;
 	char *MSG, *tmp;
@@ -3092,11 +3095,13 @@ void dbFileSync(ctl_session *session, unsigned char silent){
 			result = -1;
 			if(recID){
 				// create an empty meta data record to hold results
-				localUID = createMetaRecord("", NULL);
+				localUID = createMetaRecord("", NULL, 1);
+				curres = db_result_detach(instance);
 				// getting meta data with markMissing = true will update file info in the database
 				result = GetdbFileMetaData(localUID, recID, 1);
-				// done with the metadata record... 
+				// done with the metadata record...
 				releaseMetaRecord(localUID);
+				db_result_attach(instance, curres);
 			}
 			if(result == -2){
 				MSG = "Missing";
@@ -3128,7 +3133,7 @@ void dbFileSync(ctl_session *session, unsigned char silent){
 	my_send(session, buf, tx_length, silent);
 	tx_length = snprintf(buf, sizeof buf, "Checked=%u, Missing=%u, Error=%u, Fixed=%u", (unsigned int)count, (unsigned int)missing, (unsigned int)error, (unsigned int)fixed);
 	MSG = NULL;
-	str_setstr(&MSG, "[database] dbSync-");
+	str_setstr(&MSG, "[database] dbSync-'");
 	str_appendstr(&MSG, (tmp = GetMetaData(0, "db_name", 0)));
 	free(tmp);
 	str_appendstr(&MSG, "': ");
@@ -3145,6 +3150,7 @@ void dbFileSync(ctl_session *session, unsigned char silent){
 
 int dbHashSearchFileHeiarchy(ctl_session *session, unsigned char silent, const char *searchPath, uint32_t mS_pace){
 	dbInstance *instance = NULL;
+	void *dbresult;
 	char buf[4096]; // send data buffer 
 	int tx_length;
 	const char *pathArray[2] = {searchPath, 0};
@@ -3160,7 +3166,6 @@ int dbHashSearchFileHeiarchy(ctl_session *session, unsigned char silent, const c
 	FTS *fts_session;
 	FTSENT *fts_entry;	
 	unsigned int localUID;
-	char *newURL = NULL;
 	
 	vol = strdup(searchPath);
 	if(tmp = getFilePrefixPoint(&vol)){
@@ -3225,22 +3230,25 @@ int dbHashSearchFileHeiarchy(ctl_session *session, unsigned char silent, const c
 								my_send(session, buf, tx_length, silent);
 								// see if the record is for a missing file
 								// create an empty meta data record to hold results
-								localUID = createMetaRecord("", NULL);
+								dbresult = db_result_detach(instance);
+								localUID = createMetaRecord("", NULL, 1);
 								GetdbFileMetaData(localUID, recID, 0);
+								db_result_attach(instance, dbresult);
 								if(GetMetaInt(localUID, "Missing", NULL)){
 									// update the URL, path, prefix and unmark as missing
 									tmp = uriEncodeKeepSlash(fts_entry->fts_path);
 									str_setstr(&newurl, "file://");
 									str_appendstr(&newurl, tmp);
 									free(tmp);
-									db_quote_string(instance, &newURL);
+									db_quote_string(instance, &newurl);
 									path = NULL;
 									str_setstr(&path, fts_entry->fts_path);
 									if(tmp = getFilePrefixPoint(&path)){
 										db_quote_string(instance, &tmp);
 										db_quote_string(instance, &path);
-										db_queryf(instance, "UPDATE %sfile SET Missing = 0, URL = %s Path = %s, Prefix = %s WHERE ID = %lu", 
-												prefix, newURL, path, tmp, recID);
+										dbresult = db_result_detach(instance);
+										db_queryf(instance, "UPDATE %sfile SET Missing = 0, URL = %s, Path = %s, Prefix = %s WHERE ID = %lu", 
+												prefix, newurl, path, tmp, recID);
 										free(tmp);
 										free(path);
 										if(db_result_get_rows_affected(instance)){
@@ -3252,13 +3260,14 @@ int dbHashSearchFileHeiarchy(ctl_session *session, unsigned char silent, const c
 											serverLogMakeEntry(tmp);
 											free(tmp);
 										}
+										db_result_attach(instance, dbresult);
 									}else{
 										str_setstr(&tmp, "[database] dbFileSearch-Fix failed for found missing file: ");
 										str_appendstr(&tmp, fts_entry->fts_path);
 										serverLogMakeEntry(tmp);
 										free(tmp);
 									}
-									free(newURL);
+									free(newurl);
 									newurl = NULL;
 									
 								}else{
@@ -3294,6 +3303,7 @@ int dbHashSearchFileHeiarchy(ctl_session *session, unsigned char silent, const c
 
 void dbFileSearch(ctl_session *session, unsigned char silent, const char *Path, uint32_t pace){
 	dbInstance *instance = NULL;
+	void *dbresult;
 	char *prefix;
 	char *tmp;
 	char *path = NULL;
@@ -3341,7 +3351,9 @@ void dbFileSearch(ctl_session *session, unsigned char silent, const char *Path, 
 									// found a path in new glob list
 									tx_length = snprintf(buf, sizeof buf, "Search Location %s: ", globbuf.gl_pathv[i]);
 									my_send(session, buf, tx_length, silent);
+									dbresult = db_result_detach(instance);
 									dbHashSearchFileHeiarchy(session, silent, globbuf.gl_pathv[i], pace);
+									db_result_attach(instance, dbresult);
 									i++;
 								}
 							}

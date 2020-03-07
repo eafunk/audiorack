@@ -44,6 +44,7 @@ typedef struct {
 	char type;		
 	void *child;
 	void (*freeChild)(void *);	//function pointer to free the child
+	unsigned char silent;		// set to non-zero to supress notices on change
 	uint32_t rev;
 } uidRecord;
 

@@ -3294,7 +3294,7 @@ unsigned char handle_urlmeta(ctl_session *session){
 	// first parameter, url is in save_pointer
 	if(!session->silent && session->save_pointer){
 		// create a meta data record to hold results
-		localUID = createMetaRecord(session->save_pointer, NULL);
+		localUID = createMetaRecord(session->save_pointer, NULL, 1);
 		// fill the metadata record
 		GetURLMetaData(localUID, session->save_pointer);
 		if(count = GetMetaKeysAndValues(localUID, &keys, &values)){
@@ -3427,7 +3427,7 @@ unsigned char handle_playnow(ctl_session *session){
 				val = strtok_r(NULL, " ", &session->save_pointer);
 				if(val){
 					if(newUID == 0){
-						newUID = createMetaRecord(url, NULL);
+						newUID = createMetaRecord(url, NULL, 0);
 						GetURLMetaData(newUID, url);
 					}
 					SetMetaData(newUID, key, val);
@@ -4503,7 +4503,7 @@ unsigned char handle_newrec(ctl_session *session){
     int tx_length;
    	uint32_t newUID;
 	
-	if(newUID = createMetaRecord(NULL, NULL)){
+	if(newUID = createMetaRecord(NULL, NULL, 0)){
 		SetMetaData(newUID, "Type", "encoder");
 		SetMetaData(newUID, "Status", "0");
 		SetMetaData(newUID, "Pipeline", "");

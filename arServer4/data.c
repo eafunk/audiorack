@@ -70,7 +70,7 @@ void createSettingsRecord(const char *version){
 	pthread_rwlock_unlock(&dataLock);
 }  
     
-uint32_t createMetaRecord(const char *url, uint32_t *reqID){
+uint32_t createMetaRecord(const char *url, uint32_t *reqID, unsigned char silent){
 	uint32_t theID;
 	static uint32_t lastID = 0;
 	uidRecord *rec = NULL;
@@ -92,32 +92,38 @@ uint32_t createMetaRecord(const char *url, uint32_t *reqID){
 		lastID = theID;
 	}
 	rec->rev = 0;	// new record, revision zero
+	rec->silent = silent;
 	if(url)
 		setValueForKey((keyValueRecord *)&rec->child, "URL", url);	
 	pthread_rwlock_unlock(&dataLock);
-
-	notifyData	data;
-	data.reference = htonl(theID);
-	data.senderID = 0;
-	data.value.iVal = 0;
-	notifyMakeEntry(nType_mstat, &data, sizeof(data));
+	if(!silent){
+		notifyData	data;
+		data.reference = htonl(theID);
+		data.senderID = 0;
+		data.value.iVal = 0;
+		notifyMakeEntry(nType_mstat, &data, sizeof(data));
+	}
 						
-    return theID;   
+   return theID;   
 }
 
 void releaseMetaRecord(uint32_t uid){
 	/* freed and removed from list when reference count is zero */
 	uidRecord *rec;
+	unsigned char silent;
 
 	pthread_rwlock_wrlock(&dataLock);
     // find UID record
 	if(rec = (uidRecord *)findNode((LinkedListEntry *)&metaList, uid, NULL, NULL)){
+		silent = rec->silent;
 		if(releaseUIDRecord((uidRecord *)&metaList, rec)){
-			notifyData	data;
-			data.reference = htonl(uid);
-			data.senderID = 0;
-			data.value.iVal = 0;
-			notifyMakeEntry(nType_del, &data, sizeof(data));
+			if(!silent){
+				notifyData	data;
+				data.reference = htonl(uid);
+				data.senderID = 0;
+				data.value.iVal = 0;
+				notifyMakeEntry(nType_del, &data, sizeof(data));
+			}
 		}
 	}
 	pthread_rwlock_unlock(&dataLock);
@@ -147,7 +153,7 @@ unsigned char MetaDoesKeyExist(uint32_t uid, const char *key){
 	pthread_rwlock_unlock(&dataLock);
 
 	if(value)
-		return 1;			
+		return 1;
 	return 0;
 }
 
@@ -228,7 +234,7 @@ unsigned char SetMetaData(uint32_t uid, const char *key, const char *value){
 	pthread_rwlock_unlock(&dataLock);
 
 	if(rec){
-		if(uid == 0){	
+		if(uid == 0){
 			// update local vars associated with certain settings values
 			if(strcmp(key, "def_bus") == 0){
 				def_busses = atoi(value);

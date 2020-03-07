@@ -927,7 +927,7 @@ uint32_t LoadJackPlayer(int pNum, const char *url_str, uint32_t UID){
 	result = 0;
     instance = &mixEngine->ins[pNum];
 	if(UID == 0){
-		locUID = createMetaRecord(url_str, NULL);
+		locUID = createMetaRecord(url_str, NULL, 0);
 	}else{ 
 		locUID = UID;
 		retainMetaRecord(UID);
@@ -1012,9 +1012,9 @@ uint32_t LoadInputPlayer(int pNum, const char *url_str, uint32_t UID){
 
 	busses = 0;
 	result = 0;
-    instance = &mixEngine->ins[pNum];
+	instance = &mixEngine->ins[pNum];
 	if(UID == 0){
-		locUID = createMetaRecord(url_str, NULL);
+		locUID = createMetaRecord(url_str, NULL, 0);
 	}else{ 
 		locUID = UID;
 		retainMetaRecord(UID);
@@ -1050,7 +1050,7 @@ uint32_t LoadInputPlayer(int pNum, const char *url_str, uint32_t UID){
 				SetMetaData(locUID, "MixMinusList", mmList);
 			}
 		}
-		pthread_rwlock_unlock(&inputLock);	
+		pthread_rwlock_unlock(&inputLock);
 		if(rec && portList){
 			in_port = instance->in_jPorts;
 			cmax = mixEngine->chanCount;
@@ -1080,6 +1080,9 @@ uint32_t LoadInputPlayer(int pNum, const char *url_str, uint32_t UID){
 			free(portList);
 	}
 	/* NOTE: mmList connections are handled by the calling function: LoadPlayer() */
+	isConnected = 1;	// force all load attempts to at least be sucessful in the loading state
+							// so that if a jack source it should connect to becomes available later
+							// it can finish loading.
 	if(isConnected){
 		instance->persist = persistConnected;
 		instance->busses = busses;
@@ -1125,7 +1128,7 @@ uint32_t LoadURLPlayer(int pNum, const char *url_str, uint32_t UID){
     instance = &mixEngine->ins[pNum];
 
 	if(UID == 0){
-		locUID = createMetaRecord(url_str, NULL);
+		locUID = createMetaRecord(url_str, NULL, 0);
 		GetURLMetaData(locUID, url_str);
 	}else{ 
 		locUID = UID;
@@ -1266,7 +1269,7 @@ uint32_t LoadDBItemPlayer(int *pNum, const char *url_str, uint32_t UID){
 	// get metadata for URL
 	// create a meta data record to hold results
 	if(UID == 0){
-		localUID = createMetaRecord(url_str, NULL);
+		localUID = createMetaRecord(url_str, NULL, 0);
 		// fill the metadata record
 		GetURLMetaData(localUID, url_str);
 	}else{
@@ -1520,7 +1523,7 @@ void dbPLOpen(uint32_t UID){
 		return;
 	pass.plMeta = 0;
 	pass.fp = NULL;
-	pass.localUID = createMetaRecord("", NULL);
+	pass.localUID = createMetaRecord("", NULL, 1);
 
 	pthread_cleanup_push((void (*)(void *))plOpenCleanUp, (void *)&pass);
 
@@ -1566,7 +1569,7 @@ void dbPLOpen(uint32_t UID){
 		pass.localUID = 0;
 		// set up for the next time through
 		pthread_testcancel();
-		pass.localUID = createMetaRecord("", NULL);
+		pass.localUID = createMetaRecord("", NULL, 1);
 		index++;
 	}
 	pthread_cleanup_pop(1);
@@ -1609,7 +1612,7 @@ void fplFilePLOpen(struct locals *locBlock, uint32_t plUID){
 	free(tmp);
 	free(itemURL);
 
-	locBlock->localUID = createMetaRecord("", NULL);
+	locBlock->localUID = createMetaRecord("", NULL, 1);
 
 	while(!fplPLGetNextMeta(locBlock->fp, locBlock->localUID)){
 		pthread_testcancel();
@@ -1661,7 +1664,7 @@ void fplFilePLOpen(struct locals *locBlock, uint32_t plUID){
 		locBlock->localUID = 0;
 		// set up for the next time through
 		pthread_testcancel();
-		locBlock->localUID = createMetaRecord("", NULL);
+		locBlock->localUID = createMetaRecord("", NULL, 1);
 	}
 }
 
@@ -1692,7 +1695,7 @@ void plsFilePLOpen(struct locals *locBlock, uint32_t plUID, char *filePath){
 		free(tmp);
 		return;
 	}
-	locBlock->localUID = createMetaRecord("", NULL);
+	locBlock->localUID = createMetaRecord("", NULL, 1);
 	while(!plsPLGetNextMeta(locBlock->fp, locBlock->localUID, filePath)){
 		pthread_testcancel();
 		tmp = GetMetaData(plUID, "URL", 0);
@@ -1738,7 +1741,7 @@ void plsFilePLOpen(struct locals *locBlock, uint32_t plUID, char *filePath){
 		locBlock->localUID = 0;
 		// set up for the next time through
 		pthread_testcancel();
-		locBlock->localUID = createMetaRecord("", NULL);
+		locBlock->localUID = createMetaRecord("", NULL, 1);
 	}
 }
 
@@ -1768,7 +1771,7 @@ void m3uFilePLOpen(struct locals *locBlock, uint32_t plUID, char *filePath){
 		free(tmp);
 		return;
 	}
-	locBlock->localUID = createMetaRecord("", NULL);
+	locBlock->localUID = createMetaRecord("", NULL, 1);
 	while(!m3uPLGetNextMeta(locBlock->fp, locBlock->localUID, filePath)){
 		pthread_testcancel();
 		tmp = GetMetaData(plUID, "URL", 0);
@@ -1812,7 +1815,7 @@ void m3uFilePLOpen(struct locals *locBlock, uint32_t plUID, char *filePath){
 		locBlock->localUID = 0;
 		// set up for the next time through
 		pthread_testcancel();
-		locBlock->localUID = createMetaRecord("", NULL);
+		locBlock->localUID = createMetaRecord("", NULL, 1);
 	}
 }
 
@@ -2062,7 +2065,7 @@ float associatedPLNext(FILE *fp, float curPlayPos){
 	nextTime = 0.0;
 	do{
 		curFilePos = ftell(fp);
-		localUID = createMetaRecord("", NULL);
+		localUID = createMetaRecord("", NULL, 1);
 		if((fplPLGetNextMeta(fp, localUID)) == 0){
 			// get offset time for next item
 			nextTime = GetMetaFloat(localUID, "Offset", NULL);
@@ -2086,7 +2089,7 @@ unsigned char associatedPLLog(FILE *fp, uint32_t parent, unsigned int busses, un
 	if(!(busses & 2L)){			
 		// not in cue
 		if(entryRec = calloc(1, sizeof(ProgramLogRecord))){
-			localUID = createMetaRecord("", NULL);
+			localUID = createMetaRecord("", NULL, 1);
 			if(!fplPLGetNextMeta(fp, localUID)){
 				// get offset time for next item
 				if(!idOK){
@@ -2169,7 +2172,7 @@ char associatedPLOpen(const char *url, FILE **fp){
 			goto cleanup;
 		
 		// get playlist metadata
-		plMeta = createMetaRecord(url, NULL);
+		plMeta = createMetaRecord(url, NULL, 1);
 		if(fplPLGetNextMeta(*fp, plMeta))
 			goto cleanup;
 

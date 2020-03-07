@@ -32,7 +32,7 @@ echo [message string]
 prints a message to back out the sending control port.
 
 dblist 
-prints a list of the (libdbi) database drivers installed on this machine.
+prints a list of the database driver libraries and driver versions used by this program.
 
 dbsync 
 Scans through the files in the current database, updating Hash and mount information for each file URL. This function is useful for updating the database in some cases when directed by the version upgrade directions. 
@@ -184,7 +184,7 @@ Returns the current list of persistent jack connections, including connections t
 
 setmm [input-name string] [jack port list]
 sets a list of jack destination ports to which monitor mix-minus connection will be made when the specified input is loaded, between 
-the corrisponding mmIn source of the input the input was loaded into and ports in the list.  When the player is unloaded, these connections will be
+the corrisponding mmIn source of the input the input was loaded into, and ports in the list.  When the player is unloaded, these connections will be
 disconnected.  This is intended to implement a monitor-mix-minux.  For example, an input named Telephone, coming from a telephone hybid, can have an jack audio 
 destination connected to the arServer MixBus0 channels (monitor bus).  The Telephone input would then have it's mix-minus list set the the same destination
 channel list.  When the Telephone is loaded into a player, the corrisponding mix-minus output from the player is connected to the destination.  The player 

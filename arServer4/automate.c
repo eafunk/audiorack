@@ -106,7 +106,7 @@ uint32_t AddItem(int pos, char *URLstr, char *adder, uint32_t adderUID){
 	char buf[32];
 	
 	// create/get metadata for URL	
-	newID = createMetaRecord(URLstr, NULL);
+	newID = createMetaRecord(URLstr, NULL, 0);
 	// fill the metadata record
 	GetURLMetaData(newID, URLstr);
 	
@@ -245,7 +245,7 @@ uint32_t SplitItem(uint32_t parent, char *URLstr, unsigned char last){
 	float idur, pdur;
 	
 	// create/get metadata for URL	
-	newID = createMetaRecord(URLstr, NULL);
+	newID = createMetaRecord(URLstr, NULL, 0);
 	// fill the metadata record
 	GetURLMetaData(newID, URLstr);			
 
@@ -1001,7 +1001,7 @@ void PlayListFiller(uint32_t *lastFillID, int *listPos){
 		str_appendstr(&url, tmp);
 		free(tmp);
 		
-		localUID = createMetaRecord(url, NULL);
+		localUID = createMetaRecord(url, NULL, 0);
 		// fill the metadata record
 		GetURLMetaData(localUID, url);
 
@@ -1024,7 +1024,7 @@ void PlayListFiller(uint32_t *lastFillID, int *listPos){
 				// NOTE: First item (0) is intro
 				*listPos = 0;
 			}
-			itemUID = createMetaRecord("", NULL);			
+			itemUID = createMetaRecord("", NULL, 0);
 			if(err = dbPLGetNextMeta(*listPos, ID, itemUID)){
 				// reached the end of the list... loop back to start.
 				// NOTE: First item (0) is intro, second item (1) is start of loop point in list.

@@ -219,6 +219,7 @@ void *jackChangeWatcher(void *refCon){
 					}
 					pthread_rwlock_unlock(&connLock);
 					if(isSource){
+//!!! handle mm_ports too.
 						/* search mixer input channel list for port name */
 						inrec = mixEngine->ins;
 						cmax = mixEngine->chanCount;
@@ -234,7 +235,7 @@ void *jackChangeWatcher(void *refCon){
 												if(!strcmp(pname, name)){
 													pthread_mutex_lock(&mixEngine->jackMutex);
 													if(!jack_port_connected_to(*pptr, name))
-														jack_connect(mixEngine->client, jack_port_name(*pptr), pname);
+														jack_connect(mixEngine->client, name, jack_port_name(*pptr));
 													pthread_mutex_unlock(&mixEngine->jackMutex);
 												}
 												free(pname);
@@ -619,7 +620,7 @@ void *playerChangeWatcher(void *refCon){
 					}
 				}
 				str_insertstr(&url, "jack:///", 0);
-				instance->UID = createMetaRecord(url, NULL);
+				instance->UID = createMetaRecord(url, NULL, 0);
 				SetMetaData(instance->UID, "Type", "jack");
 				if(name){
 					SetMetaData(instance->UID, "Name", name);
@@ -1389,7 +1390,7 @@ void *controlQueueInWatcher(void *refCon){
 										if((item = cJSON_GetObjectItem(parent, "Name")) && (item->valuestring) && (item = parent->child)){
 											uint32_t newUID, tmpUID;
 											tmpUID = packet->peer; 
-											newUID = createMetaRecord(NULL, &tmpUID);
+											newUID = createMetaRecord(NULL, &tmpUID, 0);
 											if(newUID != tmpUID){
 												/* persistant recorder's previous UID is not available anymore
 												 * a new metadata record has been created with a different ID.

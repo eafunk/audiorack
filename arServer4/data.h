@@ -58,7 +58,7 @@ connRecord *connList;
 
 void initDataLists(void);
 void freeDataLists(void);
-uint32_t createMetaRecord(const char *url, uint32_t *reqID);
+uint32_t createMetaRecord(const char *url, uint32_t *reqID, unsigned char silent);
 void createSettingsRecord(const char *version);
 void releaseMetaRecord(uint32_t uid);
 void retainMetaRecord(uint32_t uid);
