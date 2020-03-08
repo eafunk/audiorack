@@ -1744,7 +1744,7 @@ void folderPick(taskRecord *parent){
 	uint32_t newUID;
 	float segout;
 	char *tmp;
-	char *pick, *encode;
+	char *pick;
 	char *dir;
 	char *target;
 	char *priority;
@@ -1764,11 +1764,8 @@ void folderPick(taskRecord *parent){
 	free(dir);
 	if(pick){
 		if(strlen(pick)){
-			// make file url from pick path
-			encode = uriEncodeKeepSlash(pick);
-			str_insertstr(&encode, "file://", 0);
 			// add to playlist in pick placeholder position
-			newUID = SplitItem(parent->UID, encode, 1);
+			newUID = SplitItem(parent->UID, pick, 1);
 			if(newUID){
 				if(segout){
 					float aFloat;
@@ -1780,7 +1777,6 @@ void folderPick(taskRecord *parent){
 					free(tmp);
 				}
 			}
-			free(encode);
 		}
 		free(pick);
 	}

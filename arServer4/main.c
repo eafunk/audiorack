@@ -38,7 +38,7 @@
 #define maxSessions 20
 
 /* program wide globals */
-const char *versionStr="4.0.1c";
+const char *versionStr="4.0.1e";
 mixEngineRecPtr mixEngine;
 unsigned char run;
 unsigned char quit;

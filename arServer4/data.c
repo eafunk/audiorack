@@ -265,12 +265,13 @@ unsigned char SetMetaData(uint32_t uid, const char *key, const char *value){
 				clearCachedFingerprint();
 			}
 		}
-		notifyData	data;
-		data.reference = htonl(uid);
-		data.senderID = 0;
-		data.value.iVal = 0;
-		notifyMakeEntry(nType_mstat, &data, sizeof(data));
-						
+		if(!rec->silent){
+			notifyData	data;
+			data.reference = htonl(uid);
+			data.senderID = 0;
+			data.value.iVal = 0;
+			notifyMakeEntry(nType_mstat, &data, sizeof(data));
+		}
 		return 1;
 	}
 	return 0;
@@ -290,13 +291,13 @@ unsigned char UpdateMetaData(uint32_t uid, const char *key, const char *value){
 			setValueForKey((keyValueRecord *)&rec->child, key, value);
 			rec->rev++;
 			pthread_rwlock_unlock(&dataLock);
-
-			notifyData	data;
-			data.reference = htonl(uid);
-			data.senderID = 0;
-			data.value.iVal = 0;
-			notifyMakeEntry(nType_mstat, &data, sizeof(data));
-			
+			if(!rec->silent){
+				notifyData	data;
+				data.reference = htonl(uid);
+				data.senderID = 0;
+				data.value.iVal = 0;
+				notifyMakeEntry(nType_mstat, &data, sizeof(data));
+			}
 			return 1;
 		}
 		pthread_rwlock_unlock(&dataLock);
@@ -326,11 +327,13 @@ unsigned char DelMetaData(uint32_t uid, const char *key){
 	}
 	pthread_rwlock_unlock(&dataLock);
 	if(kvp){
-		notifyData	data;
-		data.reference = htonl(uid);
-		data.senderID = 0;
-		data.value.iVal = 0;
-		notifyMakeEntry(nType_mstat, &data, sizeof(data));
+		if(!rec->silent){
+			notifyData	data;
+			data.reference = htonl(uid);
+			data.senderID = 0;
+			data.value.iVal = 0;
+			notifyMakeEntry(nType_mstat, &data, sizeof(data));
+		}
 		return 1;
 	}
 	return 0;
