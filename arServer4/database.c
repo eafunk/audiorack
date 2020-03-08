@@ -1349,16 +1349,16 @@ void folderPickCleanUp(void *pass){
 		free(ptr->entList);
 }
 
-char *traverseFolderListing(char **dir, uint32_t modified, unsigned short none, 
-				unsigned short seq, unsigned short rerun, unsigned short first, 
-											uint32_t randlim, unsigned short date){
+char *traverseFolderListing(char **dir, char *pre, uint32_t modified,  
+				unsigned short none, unsigned short seq, unsigned short rerun,  
+					unsigned short first, uint32_t randlim, unsigned short date){
 	struct stat statRec;
 	dbInstance *instance = NULL;
 	struct locals{
 		struct dirent **entList;
 		int count;
 	} locBlock;
-	int size, index, i;
+	int size, index, i, p;
 	int remove;
 	time_t cutoff, last;
 	char *prefix = NULL;
@@ -1382,23 +1382,116 @@ char *traverseFolderListing(char **dir, uint32_t modified, unsigned short none,
 		goto cleanup;
 	if(tmp[index-1] != directoryToken)  // make sure there is a trailing slash in the path name. 
 		str_appendstr(dir, directoryTokenStr);
-		
+	
 	instance = db_get_and_connect();
 	if(!instance)
 		goto cleanup;
 	prefix = GetMetaData(0, "db_prefix", 0);
 	include = GetMetaData(0, "db_include_loc", 0);
-
+	
 	if(strlen(include) > 0){
 		str_insertstr(&include, ",", 0);
 		str_insertstr(&include, (tmp = GetMetaData(0, "db_loc", 0)), 0);
 		free(tmp);
 	}else
 		include = GetMetaData(0, "db_loc", 0);
+	
+	/* handle relative paths when there is a prefix specified */
+	if(strlen(pre)){
+		/* escaping all *,?,[ chars found in pathStr to prevent paths
+		 * with these chars from being interpereted by the glob function
+		 * below as wild-card matches.*/
+		char *dirStr = NULL;
+		char *prefixList;
+		uint32_t listSize;
+		unsigned char missing;
+		struct stat path_stat;
+		glob_t globbuf;
+		
+		prefixList = GetMetaData(0, "file_prefixes", 0);
+		listSize = str_CountFields(prefixList, ",") + 1;
+	
+		str_setstr(&dirStr, *dir);
+		str_setstr(&path, pre); // path = pre + dir strings
+		str_appendstr(&path, *dir);
+		str_ReplaceAll(&dirStr, "*", "\\*");
+		str_ReplaceAll(&dirStr, "?", "\\?");
+		str_ReplaceAll(&dirStr, "[", "\\[");
+		
+		// path is Full Path, pathStr is the path sufix, with out lesding /.
+		// path = /longer/path/to/mount/some/file,
+		// dirStr = mount/some/file
+		globbuf.gl_offs = 0;
+		globbuf.gl_pathc = 0;
+		i = 0;
+		p = 0;
+		missing = 1;
+		do{
+			/* see if path points to a valid directory */
+			if(!stat(path, &path_stat) && S_ISDIR(path_stat.st_mode)){
+				// yes! We are done.
+				missing = 0;
+				break;
+			}
+			// try to create another path with next prefix or next glob items
+			do{
+				if(i < globbuf.gl_pathc){
+					// next path in glob list
+					str_setstr(&path, globbuf.gl_pathv[i]);
+					i++;
+					break;
+				}else{
+					tmp = str_NthField(prefixList, ",", p);
+					if(tmp && strlen(dirStr)){
+						str_setstr(&path, tmp);
+						str_appendstr(&path, dirStr);
+						i = 0;
+						if(globbuf.gl_pathc){
+							globfree(&globbuf);
+							globbuf.gl_pathc = 0;
+						}
+						if(!glob(path, GLOB_NOSORT, NULL, &globbuf)){
+							if(globbuf.gl_pathc){
+								// found a path in new glob list
+								str_setstr(&path, globbuf.gl_pathv[0]);
+								i++;
+								p++;
+								free(tmp);
+								break;
+							}
+						}
+						free(tmp);
+						p++;
+					}else{
+						// no more prefixes
+						p = listSize+1;
+						if(tmp)
+							free(tmp);
+					}
+				}
+			}while(p < listSize);
+			
+		}while(missing && (p <= listSize));
+		if(globbuf.gl_pathc)
+			globfree(&globbuf);
+		free(prefixList);
+		free(dirStr);
+		if(missing){
+			// failed to find a directory 
+			free(path);
+			goto cleanup;
+		}else{
+			// found a directory
+			if(*dir)
+				free(*dir);
+			*dir = path;
+			path = NULL;
+		}
+	}
 
 	if(modified == 0)
 		none = 1;
-		
+	
 	while(modified || none){
 		// deallocate previous dir result, if any
 		for(index = 0; index < locBlock.count; index++)
@@ -1440,7 +1533,7 @@ char *traverseFolderListing(char **dir, uint32_t modified, unsigned short none,
 					path = NULL;
 				}
 			}
-	
+			
 			if(locBlock.count > 0){
 				if(date){
 					// try to find a file with a name of YYYY-MM-DD i.e. 2006-7-13 (no leading zeros)
@@ -1524,7 +1617,7 @@ char *traverseFolderListing(char **dir, uint32_t modified, unsigned short none,
 							sub_name = tmp;
 						else		
 							str_setstr(&sub_name, "");
-
+						
 						if(strlen(sub_name)){
 							// check if this file is in the directory listing
 							for(index = 0; index < locBlock.count; index++){
@@ -1558,7 +1651,7 @@ char *traverseFolderListing(char **dir, uint32_t modified, unsigned short none,
 					if(strlen(result) > 0)
 						goto cleanup;
 				}
-
+				
 				if(seq){			// sequencial first if true (non-zero)
 					// set directory as URL
 					tmp = uriEncodeKeepSlash(*dir);
@@ -1606,15 +1699,15 @@ char *traverseFolderListing(char **dir, uint32_t modified, unsigned short none,
 						free(encStr);NULL;
 						encStr = NULL;
 					}
-
+					
 					if((int)strlen(name) > size){
 						// decode url encoding of the last played/added file url
 						tmp = uriDecode(name + size);
 						if(tmp)
 							sub_name = tmp;	
 						else		
-							str_setstr(&sub_name, "");			
-
+							str_setstr(&sub_name, "");
+						
 						if(strlen(sub_name)){
 							// find next item, if any
 							for(index = 0; index < locBlock.count; index++){
@@ -1641,7 +1734,7 @@ char *traverseFolderListing(char **dir, uint32_t modified, unsigned short none,
 					if(strlen(result) > 0)
 						goto cleanup;
 				}
-
+				
 				if(first){
 					// first readable alphebetical item, if any.
 					for(index = 0; index < locBlock.count; index++){
@@ -1661,7 +1754,7 @@ char *traverseFolderListing(char **dir, uint32_t modified, unsigned short none,
 					if(strlen(result) > 0)
 						goto cleanup;
 				}
-
+				
 				if(randlim){
 					// random if sequencial has failed or was false and random is non-zero
 					while(locBlock.count > 0){
@@ -1714,7 +1807,7 @@ char *traverseFolderListing(char **dir, uint32_t modified, unsigned short none,
 						}
 					}
 				}
-			}			
+			}
 		}
 		if(modified){
 			// try again if none is true
@@ -1724,7 +1817,7 @@ char *traverseFolderListing(char **dir, uint32_t modified, unsigned short none,
 			none = 0;
 		}
 	}
-
+	
 cleanup:
 	// all done... clean up!
 	db_set_errtag(instance, NULL);
@@ -1746,10 +1839,12 @@ void folderPick(taskRecord *parent){
 	char *tmp;
 	char *pick;
 	char *dir;
+	char *prefix;
 	char *target;
 	char *priority;
 	
 	dir = GetMetaData(parent->UID, "Folder", 0);
+	prefix = GetMetaData(parent->UID, "Prefix", 0);
 	mod = GetMetaInt(parent->UID, "Modified", NULL);
 	nomod = GetMetaInt(parent->UID, "NoModLimit", NULL);
 	seq = GetMetaInt(parent->UID, "Sequencial", NULL);
@@ -1760,8 +1855,9 @@ void folderPick(taskRecord *parent){
 	free(tmp);
 	segout = GetMetaFloat(parent->UID, "def_segout", NULL);
 
-	pick = traverseFolderListing(&dir, mod, nomod, seq, rerun, first, rand, date);
+	pick = traverseFolderListing(&dir, prefix, mod, nomod, seq, rerun, first, rand, date);
 	free(dir);
+	free(prefix);
 	if(pick){
 		if(strlen(pick)){
 			// add to playlist in pick placeholder position
@@ -2700,7 +2796,7 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, unsigned char markMissing){
 	str_ReplaceAll(&pathStr, "?", "\\?");
 	str_ReplaceAll(&pathStr, "[", "\\[");
 		
-	// path is Full Path, pathStr is the relative path, if any		
+	// path is Full Path, pathStr is the relative path, if any
 	// i.e. path = /longer/path/to/mount/some/file
 	// and  pathStr = mount/some/file
 	globbuf.gl_offs = 0;
@@ -2716,7 +2812,7 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, unsigned char markMissing){
 			changed = 1;
 		}
 		// try to create another path with next prefix or next glob items
-		do{	
+		do{
 			if(i < globbuf.gl_pathc){
 				// next path in glob list
 				str_setstr(&path, globbuf.gl_pathv[i]);

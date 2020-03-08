@@ -706,7 +706,7 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 						free(tmp);
 						return;
 					} 
-					// -3 or less, leave it alone		
+					// -3 or less, leave it alone
 				}else{
 					// exit after loading - times are invalid now.
 					free(tmp);
@@ -1197,9 +1197,6 @@ void QueManagerTask(unsigned char *stop){
 		NextListItem(status_standby, (queueRecord *)&queueList, &firstp, &sbtime, 0.0, &isPlaying);
 		pthread_rwlock_unlock(&queueLock);
 
-		// perform automation functions: inserts, fills, re-orders
-		AutomatorTask();
-
 		if(!plRunning){
 			if((autoState == auto_unatt) || ((autoState == auto_live) && 
 					((GetMetaInt(0, "auto_live_flags", NULL) & live_stop) == 0))){
@@ -1273,6 +1270,9 @@ void QueManagerTask(unsigned char *stop){
 				lastState = 0;
 			}
 		}
+		
+		// perform automation functions: inserts, fills, re-orders
+		AutomatorTask();
 		
 		// check for timed-out tasks
 		pthread_rwlock_rdlock(&taskLock);
