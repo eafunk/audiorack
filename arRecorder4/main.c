@@ -562,7 +562,6 @@ static int jack_process(jack_nframes_t nframes, void *arg){
 	float SampSqrd, pk, avr, vol;
 	vuData *vu;
 	jack_default_audio_sample_t *samp;
-	unsigned int disconnected;
 	jack_default_audio_sample_t *dest, *src;
 	jack_ringbuffer_data_t rbData[2];
 	jack_ringbuffer_data_t *rbdPtr;
@@ -689,15 +688,11 @@ static int jack_process(jack_nframes_t nframes, void *arg){
 		data->start = 0;	
 	}
 	
-	disconnected = 0;
 	sampWrite = 0;
 	/* handle scaling and vu metering of audio in port(s) data */
 	port = data->audioIn_jPorts;
 	vol = data->vol;
 	for(i=0; i<data->chCount; i++){
-		/* noted disconnection of an output ports */
-		if(data->connected && !jack_port_connected(port[i]))
-			disconnected++;
 		/* get JACK port sample buffer */
 		samp = data->jbufs[i] = jack_port_get_buffer(port[i], nframes);
 		
@@ -780,15 +775,6 @@ static int jack_process(jack_nframes_t nframes, void *arg){
 			// flag audio dropout error
 			data->status = data->status | rec_err_keepup;
 	}
-
-	/* if not persistent and all jack audio ports are disconnected, 
-	 * set close request flag to finish the gstreamer piepline, and 
-	 * eventually trigger a full program shutdown. */
-	if(!data->persist && (disconnected >= data->chCount)){
-		data->closeReq = TRUE;
-		pthread_cond_broadcast(&data->pushSemaphore);
-	}
-
 	/* notify midi in status change execution thread of requests */	
 	if(change_flag){
 		data->settingsChanged = TRUE;
@@ -1117,6 +1103,7 @@ void mainloop(int next_arg, char *argv[], int apl_arg, unsigned char persist, lo
 	size_t rbsize;
 	int durFilePos;
 	GstState state, pending;
+	unsigned int disconnected;
 
 	mlock(&data, sizeof(CustomData));
 	data.state = 0;
@@ -1359,8 +1346,23 @@ void mainloop(int next_arg, char *argv[], int apl_arg, unsigned char persist, lo
 				sleep(1);	// wait for End-of-media message to be sent	
 				data.terminate = TRUE;
 			}
-		}			
-						
+			/* if not persistent and all jack audio ports are disconnected, 
+			* set close request flag to finish the gstreamer piepline, and 
+			* eventually trigger a full program shutdown. */
+			if((!data.persist) && (!data.closeWaiting)){
+				/* check if our input ports are still connected */
+				disconnected = 0;
+				port = data.audioIn_jPorts;
+				for(i=0; i<data.chCount; i++){
+					/* noted disconnection of an input ports */
+					if(data.connected && !jack_port_connected(port[i]))
+						disconnected++;
+				}
+				if(disconnected >= data.chCount)
+					data.closeReq = TRUE;
+			}
+		}
+		
 	}while(!data.terminate);
   
 finish:

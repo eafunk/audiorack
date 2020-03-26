@@ -1500,12 +1500,17 @@ char *traverseFolderListing(char **dir, char *pre, uint32_t modified,
 			free(locBlock.entList);
 		// get dir listing
 		if((locBlock.count = scandir(*dir, &locBlock.entList, scandirSelect, alphasort)) > 0){
-			
-			// if modified time is set, purge list of itmes older than modified time
-			if(modified){
+			// If modified time is set, purge list of itmes older than modified time
+			if(modified)
 				cutoff = time(NULL) - (modified * 3600); // convert to now - hours in seconds
-				index = 0;
-				while(index < locBlock.count){
+			// And always remove . files (hidden files) from the list
+			index = 0;
+			while(index < locBlock.count){
+				remove = 0;
+				if(locBlock.entList[index]->d_name[0] == '.')
+					// hidden file
+					remove = 1;
+				else if(modified){
 					str_setstr(&path, *dir);
 					str_appendstr(&path, locBlock.entList[index]->d_name);
 					remove = stat(path, &statRec);
@@ -1515,23 +1520,23 @@ char *traverseFolderListing(char **dir, char *pre, uint32_t modified,
 							remove = 1;
 						}
 					}
-					if(remove){
-						// shift the list down and try again
-						i = index;
-						free(locBlock.entList[i]);
-						while(i < locBlock.count-1){
-							locBlock.entList[i] = locBlock.entList[i+1];
-							i++;
-						}
-						locBlock.count--;
-					}else{
-						index++;
+				}
+				if(remove){
+					// shift the list down and try again
+					i = index;
+					free(locBlock.entList[i]);
+					while(i < locBlock.count-1){
+						locBlock.entList[i] = locBlock.entList[i+1];
+						i++;
 					}
+					locBlock.count--;
+				}else{
+					index++;
 				}
-				if(path){
-					free(path);
-					path = NULL;
-				}
+			}
+			if(path){
+				free(path);
+				path = NULL;
 			}
 			
 			if(locBlock.count > 0){

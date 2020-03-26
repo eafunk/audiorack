@@ -160,7 +160,6 @@ int jack_process(jack_nframes_t nframes, void *arg){
 	CustomData *data = (CustomData *)arg;
 	jack_port_t **port;
 	unsigned int i;
-	unsigned int disconnected;
 	jack_default_audio_sample_t *dest, *src;
 	jack_ringbuffer_data_t rbData[2];
 	jack_ringbuffer_data_t *rbdPtr;
@@ -258,15 +257,10 @@ int jack_process(jack_nframes_t nframes, void *arg){
 		}
 	}
 	
-	disconnected = 0;
 	sampsRead = 0;
-	
 	/* handle filling audio output ports with ringbuffer data */
 	port = data->audioOut_jPorts;
 	for(i=0; i<data->chCount; i++){
-		/* noted disconnection of an output ports */
-		if(data->connected && !jack_port_connected(port[i]))
-			disconnected++;
 		/* get JACK port sample buffer */
 		data->jbufs[i] = jack_port_get_buffer(port[i], nframes);
 	}
@@ -298,10 +292,6 @@ int jack_process(jack_nframes_t nframes, void *arg){
 			memset(dest, 0, sizeof(jack_default_audio_sample_t) * nframes);
 		}
 	}
-
-	/* if all audio ports are disconnected, set terminate flag to shutdown this program */
-	if(disconnected >= data->chCount)
-		data->terminate = 1;
 	
 	/* notify midi in status change execution thread of requests */	
 	if(change_flag)
@@ -584,7 +574,7 @@ void* changeRequestWatcher(void *refCon){
 		pthread_mutex_unlock(&data->changedMutex);		
 	}while(!data->terminate);
 	
-    return NULL;
+	return NULL;
 }
 
 void mainloop(char *argv[], char isPipeline){
@@ -600,6 +590,7 @@ void mainloop(char *argv[], char isPipeline){
 	jack_status_t status;
 	const char *server = NULL;
 	jack_port_t **port;
+	unsigned int disconnected;
 	unsigned int i;
 	size_t rbsize;
 
@@ -738,9 +729,9 @@ void mainloop(char *argv[], char isPipeline){
 	
 	/* create midi in command handling thread, etc */
 	pthread_mutex_init(&data.changedMutex, NULL);  
-    pthread_cond_init(&data.changedSemaphore, NULL);
-    pthread_create(&data.changedThread, NULL, &changeRequestWatcher, &data);
-    
+	pthread_cond_init(&data.changedSemaphore, NULL);
+	pthread_create(&data.changedThread, NULL, &changeRequestWatcher, &data);
+
 	/* get the message bus from the pipline */
 	bus = gst_pipeline_get_bus(GST_PIPELINE(data.src));
 	
@@ -788,6 +779,17 @@ void mainloop(char *argv[], char isPipeline){
 				g_print("Position %" GST_TIME_FORMAT " / %" GST_TIME_FORMAT "\r",
 						GST_TIME_ARGS(current), GST_TIME_ARGS(data.duration));
 			}
+			/* check if our input ports are still connected */
+			disconnected = 0;
+			port = data.audioOut_jPorts;
+			for(i=0; i<data.chCount; i++){
+				/* noted disconnection of an input ports */
+				if(data.connected && !jack_port_connected(port[i]))
+					disconnected++;
+			}
+			/* if all audio ports are disconnected, set terminate flag to shutdown this program */
+			if(disconnected >= data.chCount)
+				data.terminate = 1;
 		}
 	}while(!data.terminate);
   
@@ -823,7 +825,7 @@ finish:
 	}
 
 	pthread_mutex_destroy(&data.changedMutex);
-    pthread_cond_destroy(&data.changedSemaphore);
+	pthread_cond_destroy(&data.changedSemaphore);
 	munlock(&data, sizeof(CustomData));
 	gst_deinit();
 }
