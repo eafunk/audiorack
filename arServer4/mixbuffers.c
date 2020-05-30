@@ -128,7 +128,7 @@ mixbuffer_t *mixbuffer_create(size_t sizeSamples, unsigned int chanCount,
 
 void mixbuffer_read(mixbuffer_t *mb, size_t sampCnt, 
 					unsigned int offset, jack_default_audio_sample_t *dest, 
-					unsigned int chan, unsigned int bus){
+					unsigned int chan, unsigned int bus, unsigned char suminto){
 	
 	size_t i, i_end, i_start, head, tail;
 	unsigned int b;
@@ -144,16 +144,39 @@ void mixbuffer_read(mixbuffer_t *mb, size_t sampCnt,
 	if(i == i_end){
 		/* single segment: i_start to i_end */
 		ptrA += i_start;
-		memcpy(dest, ptrA, sampCnt * sizeof(jack_default_audio_sample_t));
+		if(suminto){
+			for(i=0; i<sampCnt; i++){
+				*dest += *ptrA;
+				ptrA++;
+				dest++;
+			}
+		}else
+			memcpy(dest, ptrA, sampCnt * sizeof(jack_default_audio_sample_t));
 	}else{
 		/* wrap around: two part copy */
 		/* i_start through mb_rec->bufIndexMask */
 		head = mb->bufIndexMask - i_start;
 		ptrB = ptrA + i_start;
-		memcpy(dest, ptrB, head * sizeof(jack_default_audio_sample_t));
-		/* 0 to i_end */
-		tail = sampCnt - head;
-		memcpy(dest, ptrA, tail * sizeof(jack_default_audio_sample_t));
+		if(suminto){
+			for(i=0; i<head; i++){
+				*dest += *ptrB;
+				ptrB++;
+				dest++;
+			}
+			/* 0 to i_end */
+			tail = sampCnt - head;
+			for(i=0; i<tail; i++){
+				*dest += *ptrA;
+				ptrA++;
+				dest++;
+			}
+		}else{
+			memcpy(dest, ptrB, head * sizeof(jack_default_audio_sample_t));
+			/* 0 to i_end */
+			dest = dest + head;
+			tail = sampCnt - head;
+			memcpy(dest, ptrA, tail * sizeof(jack_default_audio_sample_t));
+		}
 	}
 }
 

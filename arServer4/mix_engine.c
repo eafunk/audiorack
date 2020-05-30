@@ -118,6 +118,8 @@ void setInChanToDefault(inChannel *chrec){
 	chrec->isConnected = 0;
 	chrec->vol = def_vol;		// default scalar gain
 	chrec->busses = def_busses;	// default bus settings
+	chrec->feedBus = 0;
+	chrec->feedVol = 1.0;
 	chrec->bal = def_bal;		// default balance value
 	chrec->posack = 0;
 	chrec->segNext = 0;
@@ -161,7 +163,7 @@ int process(jack_nframes_t nframes, void *arg){
 	inChannel *inchrec;
 	outChannel *outchrec;
 	vuData *vu;
-	unsigned int activeBus;
+	uint32_t activeBus, tbBits;
 	jack_midi_event_t in_event;
 	jack_nframes_t event_count;
 	unsigned char* midi_data;
@@ -171,8 +173,9 @@ int process(jack_nframes_t nframes, void *arg){
 	valuetype *val;
 	unsigned int groupGain, least;
 	unsigned char wakeChanged;
-	float curSegLevel;	
+	float curSegLevel;
 	unsigned char handled = 0;
+	uint32_t feedBits;
 	
 	wakeChanged = 0;
 	activeBus = 0;
@@ -247,14 +250,15 @@ int process(jack_nframes_t nframes, void *arg){
 		wakeChanged = 0;
 	}
 	
-	/* TODO:
-	 * control: Talkback
-	 */
-	 	
-	/* Mix each mixer input to it's assigned mixbus ring-buffers */
+	/* re-assign control buffer for output control packets */
 	midi_buffer = jack_port_get_buffer(mixEngineRef->ctlOutPort, nframes);
 	jack_midi_clear_buffer(midi_buffer);
 	
+	/* Talkback Control bits update */
+	tbBits = (uint32_t)mixEngineRef->reqTalkBackBits << 29;
+	activeBus = tbBits;  // activeBus bit may be modified as we loop through channels, tbBit will not.
+	 
+	/* Mix each input to it's assigned mixbus ring-buffers */
 	inchrec = mixEngineRef->ins;
 	icount = mixEngineRef->inCount;
 	for(i=0; i<icount; i++){
@@ -288,14 +292,21 @@ int process(jack_nframes_t nframes, void *arg){
 				inchrec->status = inchrec->status | status_cueing;
 			if((inchrec->busses & 2L) && ((inchrec->reqBusses & 2L) == 0)){
 				inchrec->status = inchrec->status & ~status_cueing;
+				
 				// if playing, stop
 				if(inchrec->status & status_playing)
 					inchrec->requested = inchrec->requested | change_stop;
 			}
-			// keep top 8 bits of busses, these are mute group flags
+			// change only bottom 3 bytes
 			inchrec->busses = (inchrec->busses & 0xff000000) | (inchrec->reqBusses & 0x00ffffff);
 			inchrec->changed = inchrec->changed | change_bus;
 			inchrec->requested = inchrec->requested & ~change_bus;
+		}
+		if(inchrec->requested & change_mutes){
+			// change only top 8 bits of busses
+			inchrec->busses = (inchrec->busses & 0x00ffffff) | (inchrec->reqBusses & 0xff000000);
+			inchrec->changed = inchrec->changed | change_mutes;
+			inchrec->requested = inchrec->requested & ~change_mutes;
 		}
 		if(inchrec->requested & change_pos){
 			if(inchrec->status & status_standby){
@@ -356,37 +367,36 @@ int process(jack_nframes_t nframes, void *arg){
 				inchrec->requested = inchrec->requested & ~change_stop;
 			}
 		}
-		if(inchrec->requested & change_tb){
+		if(inchrec->requested & change_feedbus){
 			if(inchrec->status & status_standby){
-				/* !!! TODO  */
-				inchrec->changed = inchrec->changed | change_tb;
+				inchrec->feedBus = inchrec->reqFeedBus;
+				inchrec->changed = inchrec->changed | change_feedbus;
 			}
-			inchrec->requested = inchrec->requested & ~change_tb;
+			inchrec->requested = inchrec->requested & ~change_feedbus;
 		}
-		if(inchrec->requested & change_untb){
+		if(inchrec->requested & change_feedvol){
 			if(inchrec->status & status_standby){
-				/* !!! TODO  */
-				inchrec->changed = inchrec->changed | change_untb;
+				inchrec->feedVol = inchrec->reqFeedVol;
+				inchrec->changed = inchrec->changed | change_feedvol;
 			}
-			inchrec->requested = inchrec->requested & ~change_untb;
+			inchrec->requested = inchrec->requested & ~change_feedvol;
 		}
 		
 		/* handle volume and fading */
+		vol = inchrec->vol;
 		if(inchrec->fadeTime && (inchrec->fadeTime < time(NULL))){
 			inchrec->fadePos = inchrec->pos;
 			inchrec->fadeTime = 0;
 		}
 		
-		vol = inchrec->vol;
-
 		if(inchrec->fadePos && (inchrec->pos >= inchrec->fadePos)){
 			inchrec->levelSeg = 0.0;
 			inchrec->posSeg = inchrec->fadePos;  // segout on fade too
-			vol = vol - (frameTime * 0.333333);		// 3 sec. fade from unity gain			
+			vol = vol - (frameTime * 0.333333);		// 3 sec. fade from unity gain
 			if(vol < 0.0)
 				vol = 0.0;
 			inchrec->changed = inchrec->changed | change_vol;
-			if(vol < 0.0001){						// faded to below -80 dB
+			if(vol < 0.0001){	// faded to below -80 dB
 				inchrec->status = inchrec->status | status_finished;
 				vol = 0.0;
 				inchrec->fadePos = 0.0;
@@ -395,6 +405,37 @@ int process(jack_nframes_t nframes, void *arg){
 				inchrec->requested = inchrec->requested | change_stop;
 			}
 			inchrec->vol = vol;
+		}
+		
+		busbits = inchrec->busses;
+		if(tbBits & busbits){
+			// talkback is on for a TB channel that is input has enabled, route to cue
+			busbits = 2;
+			if((inchrec->sourceType == sourceTypeLive) && (inchrec->status & status_standby) && !(inchrec->status & status_loading)){
+				// live sources activeate talkback to cue bus even when not playing
+				activeBus = activeBus | 0x00000002;
+				inchrec->status = inchrec->status | status_talkback;
+			}
+		}else{
+			if(inchrec->status & status_talkback)
+				// no longer in talkback... clear status_talkback
+				inchrec->status = inchrec->status & ~status_talkback;
+			if(busbits & 2){
+				/* when in cue, disable mixing into all other buses */
+				busbits = 2;
+				if((inchrec->sourceType == sourceTypeLive) && (inchrec->status & status_standby) && !(inchrec->status & status_loading)){
+					// live sources activeate cue mute bus even when not playing
+					activeBus = activeBus | 0x01000002;
+					inchrec->status = inchrec->status | status_cueing;
+				}
+				
+			}else if(inchrec->status & ~status_cueing)
+				// no longer cueing
+				inchrec->status = inchrec->status & ~status_cueing;
+		}
+		
+		if(inchrec->status & status_playing){
+			activeBus = activeBus | (busbits & 0x0fffffff);	// ignore top TalkBack bits, but include mute group bits
 		}
 		
 		if(inchrec->sourceType == sourceTypeLive){
@@ -406,6 +447,7 @@ int process(jack_nframes_t nframes, void *arg){
 				/* channel is muted */
 				vol = 0.0;
 		}
+		
 		if(vol){
 			leftVol = vol * sqrt(1.0 - inchrec->bal);
 			rightVol = vol * sqrt(1.0 + inchrec->bal);
@@ -420,22 +462,25 @@ int process(jack_nframes_t nframes, void *arg){
 				inchrec->changed = inchrec->changed | change_unloaded;
 			}
 		}
-				
-		busbits = inchrec->busses;
-		if(busbits & 2){
-			/* when in cue, disable mixing into all other buses */
-			busbits = 2;
-			if((inchrec->sourceType == sourceTypeLive) && (inchrec->status & status_standby) && !(inchrec->status & status_loading))	
-				// live sources activeate cue mute bus even when not playing
-				activeBus = activeBus | 2;
-		}
 		
-		if(inchrec->status & status_playing)
-			activeBus = activeBus | busbits;
-			
+		inchrec->tmpFeedBus = 0;
+		feedBits = inchrec->feedBus & 0xE1000000;
+		if(feedBits & mixEngineRef->activeBus)
+			// override the selected feedbus to cue when TB or Cue override bits
+			// are enabled AND the accociated bus has play activity
+			feedBits = 2;
+		else
+			// otherwise, use the specified mix bus number + 1 for the feed source
+			feedBits = 0x0000001f & inchrec->feedBus;
+		inchrec->tmpFeedBus = feedBits;
+		
 		curSegLevel = 0;
-		for(c=0; c<ccount; c++){
-			/* channel c of input number i */
+		for(c=0; c<ccount; c++){ 	// channel c of input number i
+			/* clear mixminus/premix outputs */
+			out = jack_port_get_buffer(*out_port, nframes);
+			memset(out, 0, nframes * sizeof(jack_default_audio_sample_t));
+			
+			/* get input buffer */
 			in = samp = jack_port_get_buffer(*in_port, nframes);
 			// volume and balance scaling
 			pk = 0.0;
@@ -477,41 +522,31 @@ int process(jack_nframes_t nframes, void *arg){
 			for(b=0; b<bcount; b++){
 				/* bus b, channel c arranged as a linear array of alternating 
 				 * channels grouped by bus, index = 2*b+c */
-				 
 				if(i == 0)
-					/* zero all the channel mix buffers for the first mixer input */
-					mixbuffer_sum(mixEngineRef->mixbuses, nframes, 
-														NULL, c, b, 1);
-				
-				/* if the corrisponding mix bus bit is set for the
-				 * input channel, add input samples into the mix buffer */ 
-				if(b == 0)
-					// mix-minus only for bus 0
-					out = jack_port_get_buffer(*out_port, nframes);
-				if((1 << b) & busbits){
-					mixbuffer_sum(mixEngineRef->mixbuses, nframes, 
-														in, c, b, 0);
-					if(b == 0){							
+					/* zero ALL the channel mix buffers for the first mixer input */
+					mixbuffer_sum(mixEngineRef->mixbuses, nframes, NULL, c, b, 1);
+					
+				/* if bus is enabled, mix samples into it's buffer */
+				if((1 << b) & busbits){ // note: only one busbit bit should be set, if any
+					mixbuffer_sum(mixEngineRef->mixbuses, nframes, in, c, b, 0);
+					if((b + 1) == feedBits){
 						/* invert and copy pre-mixed samples to the corrisponding 
-						 * mixminus/premix outputs */
+						 * mixminus/feed output */
 						samp = in;
 						for(s = 0; s < nframes; s++){
 							*out = -(*samp);
 							samp++;
 							out++;
 						}
-						out_port++;	
-					}		
-				}else if(b == 0){
-					/* clear mixminus/premix outputs */	
-					memset(out, 0, 	nframes * sizeof(jack_default_audio_sample_t));	
-					out_port++;
+					}
 				}
+				
 				if(i == (icount-1)){
 					/* readback of summed bus VU meters goes here */
 				}
 			}
 			in_port++;
+			out_port++;
 		}			
 
 		if(inchrec->isConnected){
@@ -570,14 +605,37 @@ int process(jack_nframes_t nframes, void *arg){
 			inchrec->changed = inchrec->changed | change_stat;
 		}
 		/* check if we changed the associated changed flags */
-		if(inchrec->changed)
+		if(inchrec->changed){
 			wakeChanged = 1;
-				
-		inchrec++;	
+		}
+		inchrec++;
 	}
 
-	/* distribute mix buffers to assigned output groups 
-	 * and dedicated mix-bus outputs */
+	/* distrubute mix buffers to assigned input mix-minus outputs */
+	inchrec = mixEngineRef->ins;
+	for(i=0; i<icount; i++){
+		/* input number i */
+		if(inchrec->tmpFeedBus && (inchrec->tmpFeedBus <= bcount)){
+			out_port = inchrec->mm_jPorts;
+			vol = inchrec->feedVol;
+			for(c=0; c<ccount; c++){ 	// channel c of input number i
+				/* channel c of output number i */
+				samp = jack_port_get_buffer(*out_port, nframes);
+				/* add samples from assigned mixbus ring buffer */
+				mixbuffer_read(mixEngineRef->mixbuses, nframes, 
+										0, samp, c, inchrec->tmpFeedBus-1, 1);
+				/* scale the sample for the set mix-minus volume */
+				for(s = 0; s < nframes; s++){
+					*samp = *samp * vol;
+					samp++;
+				}
+				out_port++;
+			}
+		}
+		inchrec++;
+	}
+	
+	/* distribute mix buffers to assigned output groups */
 	icount = mixEngineRef->outCount;
 	outchrec = mixEngineRef->outs;
 	for(i=0; i<icount; i++){
@@ -603,28 +661,28 @@ int process(jack_nframes_t nframes, void *arg){
 		if((b = outchrec->bus) >= bcount)
 			b = 0;
 
-			// set output device volume to lowest active mute group gain * current device volume
+			// set output device volume to lowest active mute group/TB channel gain * current device volume
 			least = 0xff;
-			if(activeBus & (1L << 1)){
+			if(activeBus & (0x11000000)){
 				// cue mute enabled
 				least = outchrec->muteLevels & 0xff; // truncate to lower byte
 			}
-			if(activeBus & (1L << 24)){
+			if(activeBus & (0x22000000)){
 				// mute group A enabled
 				groupGain = (outchrec->muteLevels >> 8); //second byte
 				groupGain = (groupGain & 0xff); // truncate to lower byte
 				if(groupGain < least)
 					least = groupGain;
 			}
-			if(activeBus & (1L << 25)){
+			if(activeBus & (0x44000000)){
 				// mute group B enabled
 				groupGain = (outchrec->muteLevels >> 16); //third byte
 				groupGain = (groupGain & 0xff); // truncate to lower byte
 				if(groupGain < least)
 					least = groupGain;
 			}
-			if(activeBus & (1L << 26)){
-				// mute group B enabled
+			if(activeBus & (0x88000000)){
+				// mute group C enabled
 				groupGain = (outchrec->muteLevels >> 24); //fourth byte
 				groupGain = (groupGain & 0xff); // truncate to lower byte
 				if(groupGain < least)
@@ -640,7 +698,7 @@ int process(jack_nframes_t nframes, void *arg){
 
 			/* get samples from assigned mixbus ring buffer */
 			mixbuffer_read(mixEngineRef->mixbuses, nframes, 
-											delay, out, c, b);
+											delay, out, c, b, 0);
 											
 			if(vol < 1.0){	
 				/* scale the sample for the output group volume */
@@ -661,7 +719,7 @@ int process(jack_nframes_t nframes, void *arg){
 		outchrec++;	
 	}
 	
-	/* and copy mix buffers to accociated mix outputs */
+	/* and copy mix buffers to corrisponding mix outputs */
 	bcount = mixEngineRef->busCount;
 	out_port = mixEngineRef->mixbuses->busout_jPorts;
 	for(b=0; b<bcount; b++){
@@ -670,7 +728,7 @@ int process(jack_nframes_t nframes, void *arg){
 			out = samp = jack_port_get_buffer(*out_port, nframes);
 			/* get samples from assigned mixbus ring buffer */
 			mixbuffer_read(mixEngineRef->mixbuses, nframes, 
-											0, out, c, b);
+											0, out, c, b, 0);
 			pk = 0.0;
 			avr = 0.0;
 			for(s = 0; s < nframes; s++){
@@ -701,6 +759,7 @@ int process(jack_nframes_t nframes, void *arg){
 			out_port++;
 		}
 	}
+	
 	// update the mix-engine record of the active mute buses
 	if(activeBus != mixEngineRef->activeBus){
 		mixEngineRef->activeBus = activeBus;
@@ -917,8 +976,9 @@ void shutdownMixer(mixEngineRecPtr mixEngineRef){
 	
 	if(mixEngineRef == NULL)
 		return;
-		
-	jack_deactivate(mixEngineRef->client);
+	
+	if(mixEngineRef->client)
+		jack_deactivate(mixEngineRef->client);
 	/* free mix buss ring buffers */
 	if(mixEngineRef->mixbuses)
 		mixbuffer_free(mixEngineRef->mixbuses);
@@ -986,7 +1046,8 @@ void shutdownMixer(mixEngineRecPtr mixEngineRef){
 	pthread_cond_destroy(&mixEngineRef->cbQueueSemaphore);
 
 	pthread_spin_destroy(&mixEngineRef->cbQueue.spinlock);
-	jack_client_close(mixEngineRef->client);
+	if(mixEngineRef->client)
+		jack_client_close(mixEngineRef->client);
 
 	pthread_mutex_destroy(&mixEngineRef->jackMutex);  
 

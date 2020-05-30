@@ -74,6 +74,8 @@ typedef struct {
 	uint32_t controls;
 	char *portList;
 	char *mmList;
+	float mmVol;
+	uint32_t mmBus;
 } inputRecord;
 
 typedef struct {

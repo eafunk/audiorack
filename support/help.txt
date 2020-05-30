@@ -112,8 +112,8 @@ returns the current peak and avarage VU meter readings for each output channel
 setin [input-name string] [bus hex] [available-controls hex] [jack port list]
 creates or updates a line input definition using the jack port list to map connections from the specified Jack Audio source ports
 to corrisponding input channels on the AR mixer when this input is loaded into a player. The mixer input bus assignment are also specified. 
-Bus number bits 0 through 23 are stereo mixer output bus enables, bits 24 through 26 are mute group A, B and C enables. Mute group is 
-enables/disabled at play/stop.
+Bus number bits 0 through 23 are stereo mixer output bus enables, bits 25 through 27 are mute group A, B and C enables. Mute group is 
+enables/disabled at play/stop. Bits 29 through 31 are talkback 0, 1, and 2 enables, which also active Mutes A, B, or C.
 
 available-controls is used to notifies clients what controls the input supports setting a bit indicates that the corresponding control is supported:
 0-volume, 1-position, 2-skip ahead, 3-skip back, 4-fade, 5-feed.
@@ -123,6 +123,20 @@ The jack port list format is by example:
 ... which connects the input's first channel to client source port1 AND port2, then connects the input's second channel to client port3 AND port4.  
 Multiple ports per channel are optional, specified with the + delimiter. The & delimiter incrementing the list to the next input channel connection.
 Input connections are persistent - arServer will attempt to reconnect if the client goes away and comes back while a player is loaded with an input.
+
+setmm [input-name string] [bus integer] [volume float] [jack port list]
+sets a bus, volume and list of jack destination ports to which mix-minus connections will be made when the specified input is loaded, between 
+the corrisponding mix-minus output of the mixer input the input-name was loaded into, and ports in the list.  When the player 
+is unloaded, these connections will be disconnected.  This is intended to implement a mix-minux feed.
+For example, an input named Telephone, coming from a telephone hybid, can have an associated return feed for audio to the caller.
+When Telephone is loaded into a player, you would want the associaed return feed connected to the arServer monitor bus, but without
+the audio from the Telephone itself.  Each mixer input has mix-minus outputs, which can be assigned to any mix bus, and which
+automatically removes any audio from the input itelf, to accomplish this. When the Telephone is loaded into a player, the corrisponding 
+mix-minus output from the player is connected to the jack destination specified here.
+Note: See mmbus and mmvol commands for more details on bus and volume settings.
+
+getmm [input-name string]
+returns the mix-minus bus assignment, volume, and jack port list of the associated input monitor bus.
 
 delin [name string]
 deletes specified line input definition.
@@ -182,31 +196,12 @@ between sourec and destinations.
 jconlist
 Returns the current list of persistent jack connections, including connections that might be waiting to reconnect when a jack client comes back on-line.  This list is manipulated with the jackconn and jackdisc commands.
 
-setmm [input-name string] [jack port list]
-sets a list of jack destination ports to which monitor mix-minus connection will be made when the specified input is loaded, between 
-the corrisponding mmIn source of the input the input was loaded into, and ports in the list.  When the player is unloaded, these connections will be
-disconnected.  This is intended to implement a monitor-mix-minux.  For example, an input named Telephone, coming from a telephone hybid, can have an jack audio 
-destination connected to the arServer MixBus0 channels (monitor bus).  The Telephone input would then have it's mix-minus list set the the same destination
-channel list.  When the Telephone is loaded into a player, the corrisponding mix-minus output from the player is connected to the destination.  The player 
-mix-minus output is a phase inverted copy of the monitor mix contribution from that player's input.  The end result is that the output destination will contain
-all the monitor bus audio WITHOUT the audio from the telephone, allowing that destination to be used as a "feed" to the caller on the other end of the telephone.
-NOTE:  This only works when the Bus0 channels (monitor) are used as the feed source.  Output groups can not be used as the monitor feed, even when set to the
-monitor bus, due to output group delay and volume settings messing up the mix-minus audio cancelation for non-zero delay and non-unity gain. See setin command
-for jack port list format. Providing an empty list clears the existing list, if any.
 
-getmm
-returns the monitor mix-minus jack port list of the associated input monitor bus.
-
-(x)setdm [source channel integer] [destination ID integer] [device string (UID)]
-Sets the direct monitoring destination for the specified source channel of an audio input device to the given destination ID, or 0 to disable. The source is the device's input channel number and the destination is an available dm destination obtained via the 'listdm' command.
-
-(x)getdm [device string (UID)]
-returns a per channel list of the direct monitoring destination ID and Name (if any) set for the given audio device.
-
-(x)listdm [source channel integer] [device string (UID)]
-returns a list of possible direct monitoring destinations (if any) for the specified source channel of a given audio input device. A text description (if available) and a destination ID (integer) for use with other dm commands, will be returned.
-
-Note: If an output device supports dm, arserver can control the dm volume and panning to mirror arserver channel mixer settings.
+tbon [0..2]
+tboff [0..2]
+Enables or disables the specified talkback channel.  An enabled talkback channel will route all currently loaded inputs with the corrisponding talkback
+channel bit enabled for the input's bus assignments, to the cue bus, and enable the corrisponding mute-group A, B, or C for talkback channel 0, 1, or 2.
+Note: bus assignment bits 29, 30 and 31 corrispond to talkback channel 0, 1, and 2 enables for the input.
 
 *** Player Commands ***
 
@@ -255,12 +250,40 @@ sets the specified player's balance (-1.0 = L, 1.0 = R)
 Note: pNum may be substituted with a $ to make use of the last pNum used/generated by the session.
 
 bus [pNum integer] [bus hex]
-sets the specified player's output bus (set bit enables the corresponding output)
+sets the specified player's output bus (set bit enables assignment to corresponding mix bus, bits 0..23)
+Note: Top byte is ignored. See mutes command for top byte setting.
+Note: pNum may be substituted with a $ to make use of the last pNum used/generated by the session.
+Note: When a player is loaded, the item's def_bus metadata property, the system-wide def_bus settings, 
+or the default value of to 0x00000005, is used to set both the bus assignments (lower three bytes) and 
+the mute and talkback groups (upper byte).
+
+showbus [pNum integer]
+Show the specified player's full bus assignment bits, as a hex string, including the mute and talkback bits.
+
+showmutes
+Show the current activation status of the mute and talkback groups.
+
+mutes [pNum integer] [mutes hex]
+sets the specified player's mute and talkback group membership. Set bit enables assignment to corresponding
+group: Bit 25, 26, 27 for Mute A, B, and C; Bit 29, 30, 31 for Talkback group 1, 2, 3.
+Note: lower three bytes are ignored.
+Note: pNum may be substituted with a $ to make use of the last pNum used/generated by the session.
+Note: When a player is loaded, the item's def_bus metadata property, the system-wide def_bus settings, 
+or the default value of to 0x00000005, is used to set both the bus assignments (lower three bytes) and 
+the mute and talkback groups (upper byte).
+
+mmbus [pNum integer] [bus integer]
+sets the mix bus to be sent to the specified player's mix-minus output. Audio from the player itself, if any,
+will be automatically subtracted out from this output, thus the mix-minus designation.  Useful for 
+telephone/remote feeds. 
+Note: Lower byte corisponds to the desired bus assignment should be set +1, or zero for no bus. When set, 
+the top bits 31, 30, 29 and 24 indicated that bus specified in the lower byte should be ignored and instead 
+the cue bus should be fed to this output when Talkback channel 2, 1, or 0 or cue is active. This allows a 
+cue or talkback audio to be fed instead when cue or a talkback is active only.
 Note: pNum may be substituted with a $ to make use of the last pNum used/generated by the session.
 
-(x)feed [pNum integer] [bus integer] [(optional)volume float]
-sets the specified player's 'feed bus' (audio sent back to the source) and feed volume (1.0 = unity gain, scalar) to the specified mixer output bus number: 0=mon, 1=cue, 2=main, 3=alt (iax phone line players only).
-Note: pNum may be substituted with a $ to make use of the last pNum used/generated by the session.
+mmvol [pNum integer] [volume float]
+sets the specified player's mix-minus output level gain. (1.0 = unity gain, scalar)
 
 fade [pNum integer] [time float]
 sets the time position to start fading out the specified player number

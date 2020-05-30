@@ -1044,11 +1044,19 @@ uint32_t LoadInputPlayer(int pNum, const char *url_str, uint32_t UID){
 			busses = rec->busses;
 			controls = rec->controls;
 			portList = strdup(rec->portList);
-			SetMetaData(locUID, "portList", portList);
+			if(rec->mmBus){
+				tmp = ustr(rec->mmBus);
+				SetMetaData(locUID, "MixMinusBus", tmp);
+				free(tmp);
+				tmp = fstr(3, rec->mmVol);
+				SetMetaData(locUID, "MixMinusVol", tmp);
+				free(tmp);
+			}
 			if(rec->mmList){
 				mmList = strdup(rec->mmList);
 				SetMetaData(locUID, "MixMinusList", mmList);
 			}
+			SetMetaData(locUID, "portList", portList);
 		}
 		pthread_rwlock_unlock(&inputLock);
 		if(rec && portList){
@@ -1334,9 +1342,11 @@ uint32_t LoadPlayer(int *pNum, const char *url_str, uint32_t UID, unsigned char 
 	int i, maxp, p, c, cmax;
 	uint32_t idx;
 	inChannel *instance;
-    uint32_t result;
-    char *portName, *chanList, *mmList;
+	uint32_t result;
+	char *portName, *chanList, *mmList;
 	jack_port_t **port;
+	char isEmpty;
+	float fval;
 	
 	result = 0;
 	p = -1;
@@ -1436,7 +1446,13 @@ uint32_t LoadPlayer(int *pNum, const char *url_str, uint32_t UID, unsigned char 
 			data.reference = htonl(UID);
 			data.value.iVal = 0;
 			notifyMakeEntry(nType_bus, &data, sizeof(data));
-		
+
+			fval = GetMetaFloat(UID, "MixMinusVol", &isEmpty);
+			if(isEmpty)
+				fval = 1.0;
+			instance->feedVol = fval;
+			instance->feedBus = GetMetaInt(UID, "MixMinusBus", NULL);
+			
 			mmList = GetMetaData(UID, "MixMinusList", 0);
 			if(!strlen(mmList))
 				free(mmList);

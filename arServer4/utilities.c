@@ -107,7 +107,7 @@ void str_appendchr(char **string, char chr){
 		size--; 
 		*(*string + size) = 0;
 		size--;
-		*(*string + size) = chr;		
+		*(*string + size) = chr;
 	}	
 }
 
@@ -713,17 +713,19 @@ inputRecord *setValuesForInput(inputRecord *root, const char *Name, uint32_t bus
 			}
 		}
 		prev = current; 
-	} 
-    /* key not found in list... create a new entry for it */
-    newRec = calloc(1, sizeof(inputRecord));
-    newRec->refCnt = 1;
-    newRec->Name = strdup(Name);
-    newRec->NameHash = nameHash;
-    newRec->controls = controls;
-    newRec->busses = busses;
-    newRec->portList = strdup(portList);
+	}
+	/* key not found in list... create a new entry for it */
+	newRec = calloc(1, sizeof(inputRecord));
+	newRec->refCnt = 1;
+	newRec->Name = strdup(Name);
+	newRec->NameHash = nameHash;
+	newRec->controls = controls;
+	newRec->busses = busses;
+	newRec->mmBus = 0;
+	newRec->mmVol = 1.0;
+	newRec->portList = strdup(portList);
 	/* link at end of list */
-    prev = root;
+	prev = root;
 	while((current = prev->next) != NULL)
 		prev = current; 
 	newRec->next = NULL;

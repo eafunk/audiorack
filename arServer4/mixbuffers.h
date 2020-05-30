@@ -59,7 +59,7 @@ mixbuffer_t *mixbuffer_create(size_t sizeSamples,
 
 void mixbuffer_read(mixbuffer_t *mb, size_t sampCnt, 
 					unsigned int offset, jack_default_audio_sample_t *dest, 
-					unsigned int chan, unsigned int bus);
+					unsigned int chan, unsigned int bus, unsigned char suminto);
 
 void mixbuffer_sum(mixbuffer_t *mb, size_t sampCnt, 
 					jack_default_audio_sample_t *source, 

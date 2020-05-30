@@ -49,6 +49,9 @@ extern "C"
 #define 	nType_pos		0x0a	// player position change
 #define 	nType_del		0x0b	// item deleted
 #define 	nType_dly		0x0c	// delay setting changed - sync with current delay setting
+
+// the following are no longer used in audiorack4 
+
 #define 	nType_fxparam	0x0d	// AudioUnit effects processing parameter changed - notifyFXParam struct sent
 #define 	nType_fxchain	0x0e	// Audio effects processing chain change - use fxslots to get info, 
 									//	iVal = bus number

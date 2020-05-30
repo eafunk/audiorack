@@ -72,13 +72,17 @@ typedef struct{
 	float reqVol;
 	float reqBal;
 	float reqPos;
-	unsigned int reqBusses;
+	uint32_t reqBusses;
+	uint32_t reqFeedBus;
+	float reqFeedVol;
 		
 	/* current values, set by render thread */
 	float vol;
 	double pos;			// high res. for small sample chunks
 	float bal;
-	unsigned int busses;
+	uint32_t busses;		// bits corispond to enabled bus numbers
+	uint32_t feedBus;			// feed mix-minus bus number assignment + 1; zero for no feed bus
+	float feedVol;
 	unsigned int segNext;	// inNum+1; 0 for no next segue player
 	float levelSeg;			// squared average VU level seg holdoff threshold
 	float posSeg;
@@ -92,6 +96,7 @@ typedef struct{
 	
 	uint32_t status;	// status bits set or cleard by any thread
 	unsigned char mutesGroup;
+	uint32_t tmpFeedBus;	
 } inChannel;
 
 typedef struct {
@@ -140,7 +145,8 @@ typedef struct{
 	pthread_mutex_t changedMutex;
 	pthread_cond_t changedSemaphore;
 	uint32_t activeBus;
-    
+	unsigned char reqTalkBackBits;	// bits 2, 1, 0 enable Talkback to cue via corrisponding mute groups C, B, A.
+
 /* NOTE: outGrpLock is for read/write locking output group name, nameHash, 
  * and portList string values of the mix engine "outs" list. This is not 
  * used for locking any other vaues in these records. */
@@ -151,37 +157,37 @@ typedef mixEngineRec* mixEngineRecPtr;
 
 enum{
  	status_empty 		=0L,
-	status_loading 		=(1L << 0),
+	status_loading 	=(1L << 0),
 	status_standby		=(1L << 1),
 	status_playing		=(1L << 2),
 	status_hasPlayed	=(1L << 3),
-	status_finished		=(1L << 4),
+	status_finished	=(1L << 4),
 	status_logged		=(1L << 5),
 	status_waiting		=(1L << 6),
 	status_cueing		=(1L << 7),
 	status_running		=(1L << 8),
 	status_remove		=(1L << 9),
 	status_delete		=(1L << 10),
-	status_talkback		=(1L << 11),
+	status_talkback	=(1L << 11),
 	status_deleteWhenDone =(1L << 12)
 };
 
 enum{
-	change_stat		=(1L << 0),
-	change_vol 		=(1L << 1),	
-	change_pos		=(1L << 2),
-	change_bal 		=(1L << 3),	
-	change_bus 		=(1L << 4),	
-	change_delay	=(1L << 5),	
-	change_play		=(1L << 6),
-	change_stop		=(1L << 7),
-	change_tb		=(1L << 8),
-	change_untb		=(1L << 9),
+	change_stat			=(1L << 0),
+	change_vol			=(1L << 1),	
+	change_pos			=(1L << 2),
+	change_bal			=(1L << 3),	
+	change_bus			=(1L << 4),	
+	change_delay		=(1L << 5),	
+	change_play			=(1L << 6),
+	change_stop			=(1L << 7),
+	change_feedbus		=(1L << 8),
+	change_feedvol		=(1L << 9),
 	change_aplEvent	=(1L << 10),
-	change_loaded	=(1L << 11),
+	change_loaded		=(1L << 11),
 	change_unloaded	=(1L << 12),
-	change_type		=(1L << 13)
-
+	change_type			=(1L << 13),
+	change_mutes		=(1L << 14)
 };
 
 #define status_render (status_cueing | status_playing | status_talkback)

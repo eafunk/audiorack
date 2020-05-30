@@ -83,7 +83,7 @@ enum{
 	ctl_feed	=(1L << 5)
 };
 
-// rec status bits: b0-12 status, b16-31 are error code, if any 
+// rec status bits: b0-14 status, b16-31 are error code, if any 
 enum{
  	rec_uninit			=0L,
 	rec_ready			=(1L << 0),		

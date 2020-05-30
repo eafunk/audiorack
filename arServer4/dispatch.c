@@ -174,6 +174,7 @@ void *jackChangeWatcher(void *refCon){
 		while(IDptr = getCBQitem(&mixEngine->cbQueue)){
 			if(*IDptr == (unsigned)(-1)){
 				/* jackd has quit or crashed.  We need to shutdown. */
+				mixEngine->client = NULL;
 				quit = 1;
 			}else if(*IDptr == (unsigned)(-2)){
 				// Check if any of our inputs
@@ -219,7 +220,6 @@ void *jackChangeWatcher(void *refCon){
 					}
 					pthread_rwlock_unlock(&connLock);
 					if(isSource){
-//!!! handle mm_ports too.
 						/* search mixer input channel list for port name */
 						inrec = mixEngine->ins;
 						cmax = mixEngine->chanCount;
@@ -247,6 +247,15 @@ void *jackChangeWatcher(void *refCon){
 									}
 								}
 								free(plist);
+							}
+							inrec++;
+						}
+					}else{
+						/* check for mix-minus output lists on inputs */
+						inrec = mixEngine->ins;
+						cmax = mixEngine->chanCount;
+						for(i=0; i<mixEngine->inCount; i++){
+							if(inrec->UID){
 								plist = GetMetaData(inrec->UID, "MixMinusList", 0);
 								if(strlen(plist)){
 									pptr = inrec->mm_jPorts;
@@ -272,7 +281,6 @@ void *jackChangeWatcher(void *refCon){
 							}
 							inrec++;
 						}
-					}else{
 						/* itterate though the output groups, attempting to reconnect unconnected ports. */
 						orec = mixEngine->outs;
 						pthread_rwlock_rdlock(&mixEngine->outGrpLock);
@@ -378,7 +386,7 @@ void *playerChangeWatcher(void *refCon){
 					data.value.iVal = htonl(data.value.iVal);
 					notifyMakeEntry(nType_bal, &data, sizeof(data));
 				}
-				if(changed & change_bus){
+				if(changed & (change_bus | change_mutes)){
 					data.senderID = 0;
 					data.reference = htonl(i);
 					data.value.iVal = htonl(instance->busses);
@@ -522,7 +530,7 @@ void *playerChangeWatcher(void *refCon){
 					notifyMakeEntry(nType_bal, &data, sizeof(data));
 
 					notifyMakeEntry(nType_bus, &data, sizeof(data));
-	
+
 					notifyMakeEntry(nType_pstat, &data, sizeof(data));
 					
 					/* if mmList is set, disconnect list, and clear */
@@ -566,6 +574,19 @@ void *playerChangeWatcher(void *refCon){
 						instance->nextAplEvent = associatedPLNext(instance->aplFile, instance->nextAplEvent);
 					}
 				}
+				
+				if((changed & change_feedbus) && (instance->UID)){
+					type = ustr(instance->feedBus);
+					SetMetaData(instance->UID, "MixMinusBus", type);
+					free(type);
+				}
+				
+				if((changed & change_feedvol) && (instance->UID)){
+					type = fstr(3, instance->feedVol);
+					SetMetaData(instance->UID, "MixMinusVol", type);
+					free(type);
+				}
+
 				/* all handled: clear flags */
 				instance->changed = 0;	
 			}
@@ -670,8 +691,8 @@ void *playerChangeWatcher(void *refCon){
 		if(lastBusses != curBusses){
 			if(strlen(triggerDir)){
 				// check cue
-				state = curBusses & (1L << 1);
-				if(state != (lastBusses & (1L << 1))){
+				state = curBusses & (1L << 24);
+				if(state != (lastBusses & (1L << 24))){
 					str_setstr(&triggerFile, triggerDir);	
 					if(state){
 						str_appendstr(&triggerFile, "cue.start");
@@ -685,8 +706,8 @@ void *playerChangeWatcher(void *refCon){
 				}
 			
 				// check muteA	
-				state = curBusses & (1L << 24);
-				if(state != (lastBusses & (1L << 24))){
+				state = curBusses & (1L << 25);
+				if(state != (lastBusses & (1L << 25))){
 					str_setstr(&triggerFile, triggerDir);	
 					if(state){
 						str_appendstr(&triggerFile, "muteA.start");
@@ -700,8 +721,8 @@ void *playerChangeWatcher(void *refCon){
 				}
 			
 				// check muteB
-				state = curBusses & (1L << 25);
-				if(state != (lastBusses & (1L << 25))){
+				state = curBusses & (1L << 26);
+				if(state != (lastBusses & (1L << 26))){
 					str_setstr(&triggerFile, triggerDir);	
 					if(state){
 						str_appendstr(&triggerFile, "muteB.start");
@@ -715,14 +736,59 @@ void *playerChangeWatcher(void *refCon){
 				}
 			
 				// check muteC
-				state = curBusses & (1L << 26);
-				if(state != (lastBusses & (1L << 26))){
+				state = curBusses & (1L << 27);
+				if(state != (lastBusses & (1L << 27))){
 					str_setstr(&triggerFile, triggerDir);	
 					if(state){
 						str_appendstr(&triggerFile, "muteC.start");
 						createTaskItem(triggerFile, loadConfigFromTask, NULL, instance->UID, 0, 0, 0);
 					}else{
 						str_appendstr(&triggerFile, "muteC.stop");
+						createTaskItem(triggerFile, loadConfigFromTask, NULL, instance->UID, 0, 0, 0);
+					}
+					free(triggerFile);
+					triggerFile = NULL;
+				}
+				
+				// check TalkBack1	
+				state = curBusses & (1L << 29);
+				if(state != (lastBusses & (1L << 29))){
+					str_setstr(&triggerFile, triggerDir);	
+					if(state){
+						str_appendstr(&triggerFile, "talkback1.start");
+						createTaskItem(triggerFile, loadConfigFromTask, NULL, instance->UID, 0, 0, 0);
+					}else{
+						str_appendstr(&triggerFile, "talkback1.stop");
+						createTaskItem(triggerFile, loadConfigFromTask, NULL, instance->UID, 0, 0, 0);
+					}
+					free(triggerFile);
+					triggerFile = NULL;
+				}
+			
+				// check TalkBack2
+				state = curBusses & (1L << 30);
+				if(state != (lastBusses & (1L << 30))){
+					str_setstr(&triggerFile, triggerDir);	
+					if(state){
+						str_appendstr(&triggerFile, "talkback2.start");
+						createTaskItem(triggerFile, loadConfigFromTask, NULL, instance->UID, 0, 0, 0);
+					}else{
+						str_appendstr(&triggerFile, "talkback2.stop");
+						createTaskItem(triggerFile, loadConfigFromTask, NULL, instance->UID, 0, 0, 0);
+					}
+					free(triggerFile);
+					triggerFile = NULL;
+				}
+			
+				// check TalkBack3
+				state = curBusses & (1L << 31);
+				if(state != (lastBusses & (1L << 31))){
+					str_setstr(&triggerFile, triggerDir);	
+					if(state){
+						str_appendstr(&triggerFile, "talkback3.start");
+						createTaskItem(triggerFile, loadConfigFromTask, NULL, instance->UID, 0, 0, 0);
+					}else{
+						str_appendstr(&triggerFile, "talkback3.stop");
 						createTaskItem(triggerFile, loadConfigFromTask, NULL, instance->UID, 0, 0, 0);
 					}
 					free(triggerFile);

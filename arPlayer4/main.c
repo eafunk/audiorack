@@ -153,6 +153,7 @@ char *str_NthField(const char *string, const char *token, unsigned int field){
 void jack_shutdown_callback(void *arg){
 	CustomData *data = (CustomData *)arg;
 	/* Jack server went away... shutdown. */
+	data->client = NULL;
 	data->terminate = TRUE;
 }
 
@@ -795,11 +796,13 @@ void mainloop(char *argv[], char isPipeline){
   
 finish:
 	/* free and shutdown */
-	data.terminate = TRUE;		// just incase we got here with it false.
+	data.terminate = TRUE;	// just incase we got here with it false.
 	if(data.lastTags)
 		free(data.lastTags);
-	jack_deactivate(data.client);
-	jack_client_close(data.client);
+	if(data.client){
+		jack_deactivate(data.client);
+		jack_client_close(data.client);
+	}
 	if(data.changedThread){
 		pthread_cond_broadcast(&data.changedSemaphore);
 		pthread_join(data.changedThread, NULL);

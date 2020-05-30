@@ -36,8 +36,6 @@
 #include "tasks.h"
 #include "automate.h"
 
-#define def_mount_list	"/private/var/automount/Network,/Network,/Volumes"
-
 unsigned int dbFPcache = 0;
 
 /**************************************************************************
@@ -273,10 +271,12 @@ char db_quote_string(dbInstance *db, char **str){
 	char *newstr;
 	switch(db->type){
 		case dbtype_mysql:
+			size = 0;
 			length = strlen(*str);
 			newstr = malloc(length * 2 + 3);
 			newstr[0] = '\'';
-			size = mysql_real_escape_string_quote((MYSQL *)db->instance, newstr+1, *str, length, '\'');
+			if(length)
+				size = mysql_real_escape_string((MYSQL *)db->instance, newstr+1, *str, length);
 			newstr[++size] =  '\'';
 			newstr[++size] = 0;
 			free(*str);
@@ -2617,9 +2617,11 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, unsigned char markMissing){
 	char *mountName = NULL;
 	char *urlStr = NULL;
 	char *pathStr = NULL;
+	char *adjPathStr = NULL;
 	char *hash = NULL;
 	char *prefixList, *newurl;
 	uint32_t listSize, i, p;
+	unsigned char c;	// true for case modified
 	int stat = -1;
 	size_t plen = 0;
 	size_t pos;
@@ -2800,7 +2802,20 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, unsigned char markMissing){
 	str_ReplaceAll(&pathStr, "*", "\\*");
 	str_ReplaceAll(&pathStr, "?", "\\?");
 	str_ReplaceAll(&pathStr, "[", "\\[");
-		
+	
+	// Copy the string and change the case of the first letter, if it's a letter
+	// for an alternate comparison on systems that change the case of the mount
+	str_setstr(&adjPathStr, pathStr);
+	if(isupper(*adjPathStr))
+		*adjPathStr = tolower(*adjPathStr);
+	else if(islower(*adjPathStr))
+		*adjPathStr = toupper(*adjPathStr);
+	else{
+		// not case changable
+		free(adjPathStr);
+		adjPathStr = NULL;
+	}
+
 	// path is Full Path, pathStr is the relative path, if any
 	// i.e. path = /longer/path/to/mount/some/file
 	// and  pathStr = mount/some/file
@@ -2808,6 +2823,7 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, unsigned char markMissing){
 	globbuf.gl_pathc = 0;
 	i = 0;
 	p = 0;
+	c = 0;
 	do{
 		if(CheckFileHashMatch(path, hash)){
 			// Hash code agrees with database, not missing
@@ -2827,8 +2843,15 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, unsigned char markMissing){
 				tmp = str_NthField(prefixList, ",", p);
 				if(tmp && strlen(pathStr)){
 					str_setstr(&path, tmp);
-					str_appendstr(&path, pathStr);
-
+					if(adjPathStr && c){
+						// trying the pathStr version with case adjustment
+						str_appendstr(&path, adjPathStr);
+						c = 0; // go back to original case next time
+					}else{
+						str_appendstr(&path, pathStr);
+						if(adjPathStr)
+							c = 1; // try case change next time
+					}
 					i = 0;
 					if(globbuf.gl_pathc){
 						globfree(&globbuf);
@@ -2839,13 +2862,15 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, unsigned char markMissing){
 							// found a path in new glob list
 							str_setstr(&path, globbuf.gl_pathv[0]);
 							i++;
-							p++;
+							if(!c)
+								p++;
 							free(tmp);
 							break;
 						}
 					}
 					free(tmp);
-					p++;
+					if(!c)
+						p++;
 				}else{
 					// no more prefixes
 					p = listSize+1;
@@ -2946,6 +2971,8 @@ cleanup:
 	free(prefix);
 	if(mountName)
 		free(mountName);
+	if(adjPathStr)
+		free(adjPathStr);
 	if(pathStr)
 		free(pathStr);
 	if(urlStr)

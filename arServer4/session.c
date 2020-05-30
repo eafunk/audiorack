@@ -51,7 +51,8 @@ unsigned char handle_config(ctl_session *session);
 unsigned char handle_info(ctl_session *session);
 unsigned char handle_attach(ctl_session *session);
 unsigned char handle_external(ctl_session *session);
-unsigned char handle_cue(ctl_session *session);
+unsigned char handle_tbon(ctl_session *session);
+unsigned char handle_tboff(ctl_session *session);
 unsigned char handle_play(ctl_session *session);
 unsigned char handle_stop(ctl_session *session);
 unsigned char handle_pstat(ctl_session *session);
@@ -61,8 +62,12 @@ unsigned char handle_vol(ctl_session *session);
 unsigned char handle_sender(ctl_session *session);
 unsigned char handle_next(ctl_session *session);
 unsigned char handle_bus(ctl_session *session);
-unsigned char handle_bal(ctl_session *session);
+unsigned char handle_showbus(ctl_session *session);
+unsigned char handle_showmutes(ctl_session *session);
 unsigned char handle_mutes(ctl_session *session);
+unsigned char handle_mmbus(ctl_session *session);
+unsigned char handle_mmvol(ctl_session *session);
+unsigned char handle_bal(ctl_session *session);
 unsigned char handle_pos(ctl_session *session);	
 unsigned char handle_unload(ctl_session *session);
 unsigned char handle_load(ctl_session *session);
@@ -297,6 +302,16 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 		result = handle_external(session);
 		goto finish;
 	}
+	if (!strcmp(arg, "tbon")) {
+		result = handle_tbon(session);
+		live_event = time(NULL);
+		goto finish;
+	}
+	if (!strcmp(arg, "tboff")) {
+		result = handle_tboff(session);
+		live_event = time(NULL);
+		goto finish;
+	}
 	if(!strcmp(arg, "play")) {
 		result = handle_play(session);
 		live_event = time(NULL);
@@ -337,13 +352,32 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 		live_event = time(NULL);
 		goto finish;
 	}
+		if(!strcmp(arg, "showbus")) {
+		result = handle_showbus(session);
+		goto finish;
+	}
+	if(!strcmp(arg, "mutes")) {
+		result = handle_mutes(session);
+		live_event = time(NULL);
+		goto finish;
+	}
+	if(!strcmp(arg, "mmbus")) {
+		result = handle_mmbus(session);
+		live_event = time(NULL);
+		goto finish;
+	}
+	if(!strcmp(arg, "mmvol")) {
+		result = handle_mmvol(session);
+		live_event = time(NULL);
+		goto finish;
+	}
 	if(!strcmp(arg, "bal")) {
 		result = handle_bal(session);
 		live_event = time(NULL);
 		goto finish;
 	}
-	if(!strcmp(arg, "mutes")){
-		result = handle_mutes(session);
+	if(!strcmp(arg, "showmutes")){
+		result = handle_showmutes(session);
 		goto finish;
 	}
     if(!strcmp(arg, "pos")) {
@@ -1609,6 +1643,46 @@ unsigned char handle_play(ctl_session *session){
 	return rError;
 }
 
+unsigned char handle_tbon(ctl_session *session){
+	char *param;
+	int aInt;
+	inChannel *instance;
+
+	// first parameter, talkback number
+	param = strtok_r(NULL, " ", &session->save_pointer);
+	if(param != NULL){
+		aInt = atoi(param);
+		if((aInt < 0) || (aInt > 2)){
+			session->errMSG = "Bad talkback number.\n";
+			return rError;            
+		}
+		mixEngine->reqTalkBackBits = mixEngine->reqTalkBackBits | (1<<aInt);
+		return rOK;
+	}
+	session->errMSG = "Missing parameter talkback number.\n";
+	return rError;
+}
+
+unsigned char handle_tboff(ctl_session *session){
+	char *param;
+	int aInt;
+	inChannel *instance;
+
+	// first parameter, talkback number
+	param = strtok_r(NULL, " ", &session->save_pointer);
+	if(param != NULL){
+		aInt = atoi(param);
+		if((aInt < 0) || (aInt > 2)){
+			session->errMSG = "Bad talkback number.\n";
+			return rError;            
+		}
+		mixEngine->reqTalkBackBits = mixEngine->reqTalkBackBits & ~(1<<aInt);
+		return rOK;
+	}
+	session->errMSG = "Missing parameter talkback number.\n";
+	return rError;
+}
+
 unsigned char handle_stop(ctl_session *session){
 	char *param;
 	uint32_t aInt;
@@ -1901,7 +1975,7 @@ unsigned char handle_bus(ctl_session *session){
 	uint32_t aLong;
 	inChannel *instance;
 				
-	// first parameter, input bus (player) number
+	// first parameter, input (player) number
 	param = strtok_r(NULL, " ", &session->save_pointer);
 	if(param != NULL){
 		if(*param == '$')
@@ -1918,9 +1992,149 @@ unsigned char handle_bus(ctl_session *session){
 			aLong = strtoul(param, &end, 16);
 			session->lastPlayer = aInt;
 			instance = &mixEngine->ins[aInt];
-			instance->reqBusses = aLong;
+			instance->reqBusses = (instance->reqBusses & 0xff000000) | (aLong & 0x00ffffff);
 			instance->requested = instance->requested | change_bus;
 			return rOK;
+		}
+	}
+	session->errMSG = "Missing parameter.\n";
+	return rError;
+}
+
+unsigned char handle_showbus(ctl_session *session){
+	char buf[16]; /* send data buffer */
+	int tx_length;
+	char *param;
+	uint32_t aInt;
+	inChannel *instance;
+	
+	// first parameter, input (player) number
+	param = strtok_r(NULL, " ", &session->save_pointer);
+	if(param != NULL){
+		if(*param == '$')
+			aInt = session->lastPlayer;
+		else
+			aInt = atoi(param);
+		if(!checkPnumber(aInt)){
+			session->errMSG = "Bad player number.\n";
+			return rError;
+		}
+		session->lastPlayer = aInt;
+		instance = &mixEngine->ins[aInt];
+		tx_length = snprintf(buf, sizeof buf, "%08x\n", instance->busses);
+		my_send(session, buf, tx_length, session->silent);
+		return rNone;
+	}
+	session->errMSG = "Missing parameter.\n";
+	return rError;
+}
+
+unsigned char handle_mutes(ctl_session *session){
+	char *param;
+	char *end;
+	uint32_t aInt;
+	uint32_t aLong;
+	inChannel *instance;
+
+	// first parameter, input (player) number
+	param = strtok_r(NULL, " ", &session->save_pointer);
+	if(param != NULL){
+		if(*param == '$')
+			aInt = session->lastPlayer;
+		else
+			aInt = atoi(param);
+		if(!checkPnumber(aInt)){
+			session->errMSG = "Bad player number.\n";
+			return rError;
+		}
+		// second parameter, mute group enable byte (0 = disable, 1 = enable on bits of top byte)
+		param = strtok_r(NULL, " ", &session->save_pointer);
+		if(param != NULL){
+			aLong = strtoul(param, &end, 16);
+			session->lastPlayer = aInt;
+			instance = &mixEngine->ins[aInt];
+			instance->reqBusses = (instance->reqBusses & 0x00ffffff) | (aLong & 0xff000000);
+			instance->requested = instance->requested | change_mutes;
+			return rOK;
+		}
+	}
+	session->errMSG = "Missing parameter.\n";
+	return rError;
+}
+
+unsigned char handle_mmbus(ctl_session *session){
+	char *param;
+	char *end;
+	uint32_t bus;
+	uint32_t aInt;
+	inChannel *instance;
+				
+	// first parameter, input bus (player) number
+	param = strtok_r(NULL, " ", &session->save_pointer);
+	if(param != NULL){
+		if(*param == '$')
+			aInt = session->lastPlayer;
+		else
+			aInt = atoi(param);
+		if(!checkPnumber(aInt)){
+			session->errMSG = "Bad player number.\n";
+			return rError;
+		}
+		// second parameter, mix-minus bus number +1 in the lower byte (zero for no bus), with
+		// upper bit 31, 30, 29, and 24 set to enable cue feed over-ride of above on Talkback 
+		// 3, 2, 1, and Cue active.
+		param = strtok_r(NULL, " ", &session->save_pointer);
+		if(param != NULL){
+			bus = atol(param);
+			bus = (bus & 0xff00001f);		// limit range to 0-31 plus upper byte
+			session->lastPlayer = aInt;
+			instance = &mixEngine->ins[aInt];
+			if(instance->status & status_standby){
+				instance->reqFeedBus = bus;
+				instance->requested = instance->requested | change_feedbus;
+				return rOK;
+			}else{
+				session->errMSG = "Specified player is empty.\n";
+				return rError;
+			}
+			return rOK;
+		}
+	}
+	session->errMSG = "Missing parameter.\n";
+	return rError;
+}
+
+unsigned char handle_mmvol(ctl_session *session){
+	char *param;
+	float aFloat;
+	uint32_t aInt;
+	inChannel *instance;
+
+	// first parameter, input bus number
+	param = strtok_r(NULL, " ", &session->save_pointer);
+	if(param != NULL){
+		if(*param == '$')
+			aInt = session->lastPlayer;
+		else
+			aInt = atoi(param);
+		if(!checkPnumber(aInt)){
+			session->errMSG = "Bad player number.\n";
+			return rError;
+		}
+		// second parameter, volume scalar
+		param = strtok_r(NULL, " ", &session->save_pointer);
+		if(param != NULL){
+			aFloat = atof(param);
+			instance = &mixEngine->ins[aInt];
+			session->lastPlayer = aInt;
+			if(instance->status & status_standby){
+				instance->reqFeedVol = aFloat;
+				instance->requested = instance->requested | change_feedvol;
+				return rOK;
+			}else{
+				session->errMSG = "Specified player is empty.\n";
+				return rError;
+			}
 		}
 	}
 	session->errMSG = "Missing parameter.\n";
@@ -1952,7 +2166,6 @@ unsigned char handle_bal(ctl_session *session){
 				aFloat = 1.0;
 			if (aFloat < -1.0)
 				aFloat = -1.0;
-			aFloat = atof(param);
 			instance = &mixEngine->ins[aInt];
 			session->lastPlayer = aInt;
 			if(instance->status & status_standby){
@@ -1969,34 +2182,52 @@ unsigned char handle_bal(ctl_session *session){
 	return rError;
 }
 
-unsigned char handle_mutes(ctl_session *session){
+unsigned char handle_showmutes(ctl_session *session){
 	char buf[4096]; /* send data buffer */
 	int tx_length;
 	uint32_t mute;
 	
 	mute = mixEngine->activeBus;
-	if(mute & (1L << 1))
+	if(mute & (1L << 24))
 		tx_length = snprintf(buf, sizeof buf, "Cue +\n");
 	else
 		tx_length = snprintf(buf, sizeof buf, "Cue -\n");
 	my_send(session, buf, tx_length, session->silent);
 
-	if(mute & (1L << 24))
+	if(mute & (1L << 25))
 		tx_length = snprintf(buf, sizeof buf, "MuteA +\n");
 	else
 		tx_length = snprintf(buf, sizeof buf, "MuteA -\n");
 	my_send(session, buf, tx_length, session->silent);
 
-	if(mute & (1L << 25))
+	if(mute & (1L << 26))
 		tx_length = snprintf(buf, sizeof buf, "MuteB +\n");
 	else
 		tx_length = snprintf(buf, sizeof buf, "MuteB -\n");
 	my_send(session, buf, tx_length, session->silent);
 
-	if(mute & (1L << 26))
+	if(mute & (1L << 27))
 		tx_length = snprintf(buf, sizeof buf, "MuteC +\n");
 	else
 		tx_length = snprintf(buf, sizeof buf, "MuteC -\n");
+	my_send(session, buf, tx_length, session->silent);
+
+	if(mute & (1L << 29))
+		tx_length = snprintf(buf, sizeof buf, "TB0 +\n");
+	else
+		tx_length = snprintf(buf, sizeof buf, "TB0 -\n");
+	my_send(session, buf, tx_length, session->silent);
+
+	if(mute & (1L << 30))
+		tx_length = snprintf(buf, sizeof buf, "TB1 +\n");
+	else
+		tx_length = snprintf(buf, sizeof buf, "TB1 -\n");
+	my_send(session, buf, tx_length, session->silent);
+
+	if(mute & (1L << 31))
+		tx_length = snprintf(buf, sizeof buf, "TB2 +\n");
+	else
+		tx_length = snprintf(buf, sizeof buf, "TB2 -\n");
 	my_send(session, buf, tx_length, session->silent);
 	return rNone;
 }
@@ -2855,19 +3086,19 @@ unsigned char handle_outvol(ctl_session *session){
 						if((delta > 1.0) && (aFloat < 0.001)) // prvent 0 x numb = 0 problem
 						   aFloat = 0.001;
 					}else
-						aFloat = atof(session->save_pointer);						
+						aFloat = atof(session->save_pointer);
 					instance->reqVol = aFloat;
 					instance->requested = instance->requested | change_vol;
 					
 					pthread_rwlock_unlock(&mixEngine->outGrpLock);
-					free(name);						
+					free(name);
 					return rOK;
 				}
 			}
 			instance++;
 		}
 		pthread_rwlock_unlock(&mixEngine->outGrpLock);
-		free(name);				
+		free(name);
 	}
 	session->errMSG = "Missing or bad output group name.\n";
 	return rError;
@@ -3034,8 +3265,8 @@ unsigned char handle_getout(ctl_session *session){
 	}
 	session->errMSG = "Missing or bad output group name.\n";
 	return rError;
-}		
-						
+}
+
 unsigned char handle_jconlist(ctl_session *session){
 	char buf[4096]; /* send data buffer */
 	int tx_length;
@@ -3142,21 +3373,36 @@ unsigned char handle_jackdisc(ctl_session *session){
 }
 
 unsigned char handle_setmm(ctl_session *session){
-	char *param;
+	char *param, *end;
 	inputRecord *rec = NULL;
+	float vol;
+	uint32_t bus;
 		
 	// first parameter, input Name
 	param = strtok_r(NULL, " ", &session->save_pointer);
 	if(param != NULL){
-
 		pthread_rwlock_wrlock(&inputLock);
 		if(rec = getRecordForInput((inputRecord *)&inputList, param)){
-			if(rec->mmList)
-				free(rec->mmList);
-			if(session->save_pointer && strlen(session->save_pointer)){
-				rec->mmList = strdup(session->save_pointer);
-			}else{
-				rec->mmList = NULL;
+			// second parameter, mix bus assignment bit
+			param = strtok_r(NULL, " ", &session->save_pointer);
+			if(param != NULL){
+				bus = atol(param);
+				bus = (bus & 0xff00001f);
+				// third parameter, mix-minus volume scalar
+				param = strtok_r(NULL, " ", &session->save_pointer);
+				if(param != NULL){
+					vol = atof(param);
+					rec->mmVol = vol;
+					rec->mmBus = bus;
+					// fourth parameter, jack connection list
+					if(rec->mmList)
+						free(rec->mmList);
+					if(session->save_pointer && strlen(session->save_pointer)){
+						rec->mmList = strdup(session->save_pointer);
+					}else{
+						rec->mmList = NULL;
+					}
+				}
 			}
 		}
 		pthread_rwlock_unlock(&inputLock);
@@ -3176,12 +3422,15 @@ unsigned char handle_getmm(ctl_session *session){
 	// first parameter, input Name
 	param = strtok_r(NULL, " ", &session->save_pointer);
 	if(param != NULL){
-
 		pthread_rwlock_wrlock(&inputLock);
 		if(rec = getRecordForInput((inputRecord *)&inputList, param)){
-			tx_length = snprintf(buf, sizeof buf, "\n");
+			// found the record...
+			tx_length = snprintf(buf, sizeof buf, "Bus\tVolume\tConnection List\n");
+			my_send(session, buf, tx_length, session->silent);
 			if(rec->mmList && strlen(rec->mmList))
-				tx_length = snprintf(buf, sizeof buf, "%s\n", rec->mmList);
+				tx_length = snprintf(buf, sizeof buf, "%u\t%f\t%s\n", rec->mmBus, rec->mmVol, rec->mmList);
+			else
+				tx_length = snprintf(buf, sizeof buf, "%u\t%f\t\n", rec->mmBus, rec->mmVol);
 			my_send(session, buf, tx_length, session->silent);
 		}
 		pthread_rwlock_unlock(&inputLock);

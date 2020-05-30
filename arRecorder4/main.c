@@ -552,6 +552,7 @@ void jack_shutdown_callback(void *arg){
 	CustomData *data = (CustomData *)arg;
 	/* Jack server went away... shutdown. */
 	data->closeReq = TRUE;
+	data->client = NULL;
 	pthread_cond_broadcast(&data->pushSemaphore);
 }
 
