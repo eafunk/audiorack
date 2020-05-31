@@ -1269,6 +1269,160 @@ end:
 	return result;
 }
 
+uint32_t LoadGSTPlayer(int pNum, const char *url_str, uint32_t UID){
+	inChannel *instance;
+	char command[1024];
+	char *tmp, *pipeline;
+	float vol;	
+	char *wdir, *bin;
+	int i, fd;
+	uint32_t locUID, result;
+	
+	struct execRec{
+		char **argv;
+		pid_t child;
+	} *recPtr;
+	
+	result = 0;
+	instance = &mixEngine->ins[pNum];
+
+	if(UID == 0){
+		locUID = createMetaRecord(url_str, NULL, 0);
+		GetURLMetaData(locUID, url_str);
+	}else{ 
+		locUID = UID;
+		retainMetaRecord(UID);
+	}
+	instance->UID = locUID;
+
+	recPtr = NULL;
+	if(tmp = str_NthField(url_str, ":///", 1)){
+		pipeline = uriDecode(tmp);
+		free(tmp);
+		// allocate record for execution var's
+		recPtr = (struct execRec *)calloc(1, sizeof(struct execRec));
+		// make array for holding arguments
+		recPtr->argv = (char **)calloc(mixEngine->chanCount+7, sizeof(char*));
+		// populate argument strings
+		bin = GetMetaData(0, "file_bin_dir", 0);
+		if(strlen(bin)){
+			if(strrchr(bin, directoryToken) != (bin + strlen(bin)))
+				// no trailing slash... include it
+				str_appendstr(&bin, "/arPlayer4");
+			else
+				// already has training slashq
+				str_appendstr(&bin, "arPlayer4");
+			recPtr->argv[0] = bin;
+		}else{
+			free(bin);
+			recPtr->argv[0] = strdup("/opt/audiorack/bin/arPlayer4");
+		}
+		
+		recPtr->argv[1] = strdup("-p");
+		recPtr->argv[2] = pipeline;
+		recPtr->argv[3] = strdup(mixEngine->ourJackName);
+		recPtr->argv[4] = ustr(pNum);
+		recPtr->argv[5] = NULL;
+		for(i=0; i<mixEngine->chanCount; i++){
+			if(i < (mixEngine->chanCount - 1))
+				snprintf(command, sizeof command, "%s:In%dch%d&", mixEngine->ourJackName, pNum, i);
+			else
+				snprintf(command, sizeof command, "%s:In%dch%d", mixEngine->ourJackName, pNum, i);
+			str_appendstr(&recPtr->argv[5], command);
+		}
+		recPtr->argv[6] = NULL;
+
+		// set up mixer channel
+		double val;
+		instance->busses = GetMetaInt(instance->UID, "def_bus", NULL);
+		if(instance->busses == 0)
+			instance->busses = def_busses;
+
+		val = GetMetaFloat(instance->UID, "Volume", NULL);
+		if((val == 0.0) || (val > 10)) 
+			val = def_vol;
+		instance->vol = val;
+		
+		tmp = hstr(ctl_vol | ctl_fade, 8);
+		SetMetaData(instance->UID, "Controls", tmp); 
+		free(tmp);
+		
+		instance->fadePos = GetMetaFloat(instance->UID, "FadeOut", NULL);
+		instance->fadeTime = GetMetaFloat(instance->UID, "FadeTime", NULL);
+		
+		// fork and execute;
+		if((recPtr->child = fork()) < 0)
+			goto end;
+		else if(recPtr->child == 0){
+			// We are the forked child
+			
+			// set working dir as determined at arserver startup
+			if(strlen(wdir_path) > 0)
+				chdir(wdir_path);
+
+			// redirect the standard descriptors to /dev/null
+			fd = open("/dev/null", O_RDONLY);
+			if(fd != STDIN_FILENO){
+				dup2(fd, STDIN_FILENO);
+				close(fd);
+			}
+			fd = open("/dev/null", O_WRONLY);
+			if(fd != STDOUT_FILENO) {
+				dup2(fd, STDOUT_FILENO);
+				close(fd);
+			}
+			fd = open("/dev/null", O_WRONLY);
+			if(fd != STDERR_FILENO) {
+				dup2(fd, STDERR_FILENO);
+				close(fd);
+			}
+			// close all other file descriptors
+			for(fd=(getdtablesize()-1); fd >= 0; --fd){
+				if((fd != STDERR_FILENO) && (fd != STDIN_FILENO) && (fd != STDOUT_FILENO))
+					close(fd); // close all descriptors we are not interested in
+			}
+			// unblock all signals and set to default handlers
+			sigset_t sset;
+			sigemptyset(&sset);
+			pthread_sigmask(SIG_SETMASK, &sset, NULL);
+
+			// obtain a new process group 
+			setsid();
+
+			// and run...	
+			execvp(recPtr->argv[0], recPtr->argv);
+			// if execution fails...
+			i = 0;
+			while(recPtr->argv[i]){
+				free(recPtr->argv[i]);
+				i++;
+			}
+			free(recPtr->argv);
+			free(recPtr);
+			exit(0);
+		}
+		// Continuation of the parent here...
+	}
+	instance->attached = recPtr->child;
+	result = locUID;
+
+end:
+	if(!result){
+		setInChanToDefault(instance);
+		instance->status = status_empty;
+	}
+	if(recPtr){
+		i = 0;
+		while(recPtr->argv[i]){
+			free(recPtr->argv[i]);
+			i++;
+		}
+
+		free(recPtr->argv);
+		free(recPtr);
+	}
+	return result;
+}
 
 uint32_t LoadDBItemPlayer(int *pNum, const char *url_str, uint32_t UID){
 	uint32_t localUID;
@@ -1407,7 +1561,9 @@ uint32_t LoadPlayer(int *pNum, const char *url_str, uint32_t UID, unsigned char 
 			result = LoadInputPlayer(*pNum, url_str, UID);
 		else if(!strcmp(type, "jack"))
 			result = LoadJackPlayer(*pNum, url_str, UID);
-/*!!!		else if(!strcmp(type, "iax"))
+		else if(!strcmp(type, "gst"))
+			result = LoadGSTPlayer(*pNum, url_str, UID);
+/*!!!	else if(!strcmp(type, "iax"))
 			result = LoadIAXPlayer(*pNum, url_str, UID);
 */		else if(!strcmp(type, "item"))
 			result = LoadDBItemPlayer(pNum, url_str, UID);

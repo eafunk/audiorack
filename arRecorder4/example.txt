@@ -12,8 +12,8 @@ MPEG4 audio file: "appsrc name=audiosrc ! audioconvert ! audioresample ! audio/x
 
 WAVE file: "appsrc name=audiosrc ! audioconvert ! audioresample ! audio/x-raw-int,rate=44100,channels=2,width=16,depth=16,signed=true ! wavenc ! filesink location=foo.wav
 
-OPUS with ogg container: "appsrc name=audiosrc ! audioconvert ! audioresample ! audio/x-raw,rate=48000,channels=2 ! opusenc bitrate=64000 ! oggmux ! filesink location=out.ogg"
+OPUS file with ogg container: "appsrc name=audiosrc ! audioconvert ! audioresample ! audio/x-raw,rate=48000,channels=2 ! opusenc bitrate=64000 ! oggmux ! filesink location=out.ogg"
 
 RSP/MP3: "appsrc name=audiosrc ! audioconvert ! audioresample ! audio/x-raw,rate=32000,channels=2 ! lamemp3enc target=bitrate cbr=true bitrate=128 ! rspsink sendto=127.0.0.1:5076"
 
-RSP/OPUS: "appsrc name=audiosrc ! audioconvert ! audioresample ! audio/x-raw,rate=48000,channels=2 ! opusenc bitrate=64000 ! mpegtsmux ! rspsink sendto=127.0.0.1:5076"
+RSP/OPUS with MPEG-TS container: "appsrc name=audiosrc ! audioconvert ! audioresample ! audio/x-raw,rate=48000,channels=2 ! opusenc bitrate=64000 ! mpegtsmux ! rspsink sendto=127.0.0.1:5076"
