@@ -489,8 +489,6 @@ void handle_message(CustomData *data, GstMessage *msg) {
 								if(strlen(portName)){
 									if(jack_connect(data->client, jack_port_name(*port), portName)){
 										g_printerr("\nERROR: failed to connect to JACK port  %s.\n", portName);
-										free(portName);
-										free(chanList);
 										data->terminate = TRUE;
 									}
 								}

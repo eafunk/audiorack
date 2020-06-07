@@ -45,7 +45,6 @@ unsigned char quit;
 unsigned char restart;
 unsigned int lastp;
 char *startup_path;
-char *dbi_path;
 char *wdir_path;
 jack_options_t options;
 
@@ -169,23 +168,17 @@ void loadPreConfig(void)
 			if (strcmp(arg, "-w") == 0) {
 				// channel width specified
 				chCnt = atoi(param);
-			}else			
-			if (strcmp(arg, "-d") == 0) {
-				 // dbi driver directory path
-				 str_setstr(&dbi_path, param);
-			}else			
-			if (strcmp(arg, "-j") == 0) {
-				 // requested JACK name for arserver
-				 str_setstr(&ourJackName, param);
-			}else			
-			if (strcmp(arg, "-s") == 0) {
-				 // requested JACK server to connect to
-				 str_setstr(&jackServer, param);
+			}else if (strcmp(arg, "-j") == 0) {
+				// requested JACK name for arserver
+				str_setstr(&ourJackName, param);
+			}else if(strcmp(arg, "-s") == 0) {
+				// requested JACK server to connect to
+				str_setstr(&jackServer, param);
 			}
 		}
-        result = fgets(line, sizeof line, fp);
-    }
-    fclose(fp);
+		result = fgets(line, sizeof line, fp);
+	}
+	fclose(fp);
 }
 
 int main(int argc, const char *argv[])
@@ -193,9 +186,9 @@ int main(int argc, const char *argv[])
 	const char *err;
 	pid_t child;
 	int statset[2], wdset[2];
-    pthread_mutexattr_t attr;
-    int i, stat, fd;
-    char command[1024];
+	pthread_mutexattr_t attr;
+	int i, stat, fd;
+	char command[1024];
 	unsigned char nofork, keepalive, keepstderr, started;
 	int trueVal = 1;
 	
@@ -203,22 +196,21 @@ int main(int argc, const char *argv[])
 	nofork = 0;
 	keepalive = 0;
 	keepstderr = 0;
-	dbi_path = NULL;
 	
 	i = 1;
-    while((argc - i) > 0){
+	while((argc - i) > 0){
 		if(strcmp(argv[i], "-n") == 0){
-             // do not daemonize.
+			// do not daemonize.
 			nofork = 1;
 		}
 		if(strcmp(argv[i], "-k") == 0){
-             // set keep alive flag
+			// set keep alive flag
 			keepalive = 1;
 		}
 		if(strcmp(argv[i], "-e") == 0){
 			// don't close STDERR
 			keepstderr = 1;
-		}		
+		}
 			
 		if(!strcmp(argv[i], "?") || !strcmp(argv[i], "help") || !strcmp(argv[i], "-h")){
 			fprintf(stdout,"Usage-- command line only options:\n");
@@ -304,9 +296,9 @@ int main(int argc, const char *argv[])
 			lastChild = 0;
 			signal(SIGTERM, TERMhandlerLauncher);
 			// second fork runs arserver propper
-			if(socketpair(AF_UNIX, SOCK_STREAM, 0, wdset) < 0) {
+			if(socketpair(AF_UNIX, SOCK_STREAM, 0, wdset) < 0){
 				exit(1);
-			}			
+			}
 			child = fork();
 			if(child < 0){
 				exit(1);
@@ -394,7 +386,7 @@ int main(int argc, const char *argv[])
 				close(wdset[0]);
 			}
 		}
-		// and run again only with the -n flag...	
+		// and run again only with the -n flag...
 		const char *cmd[argc+2];
 		// copy original command flags
 		for(i=0; i<argc; i++)
@@ -402,7 +394,7 @@ int main(int argc, const char *argv[])
 		// add -n flag and null terminate
 		cmd[i] = "-n";
 		cmd[i+1] = (char*)0;
-							
+		
 		// and run...
 		execv(argv[0], (char* const*)cmd);
 		// If we return from the above call, something is wrong.
@@ -427,20 +419,20 @@ int main(int argc, const char *argv[])
 	outCnt = 6;
 	busCnt = 4;
 	
-    lock_path = NULL;
+	lock_path = NULL;
 	wdir_path = NULL;
 	startup_path = NULL;
 	ourJackName = NULL;
 	jackServer = NULL;	// Default is NULL, not an empty string
-    str_setstr(&lock_path, DefLockfileDirectory);
+	str_setstr(&lock_path, DefLockfileDirectory);
 	str_setstr(&wdir_path, "");
 	str_setstr(&startup_path, "");
 	str_setstr(&ourJackName, "");
 
 	i = 1;
-    while((argc - i) > 1){
+	while((argc - i) > 1){
 		if (strcmp(argv[i], "-c") == 0) {
-             // config file path being specified
+			// config file path being specified
 			i = i + 1;
 			str_setstr(&startup_path, argv[i]);
 		}
@@ -452,74 +444,59 @@ int main(int argc, const char *argv[])
 
 	// settings directly for command-line arguments
 	i = 1;
-    while((argc - i) > 1){
-        // there is a CLI specified parameter
-         if(strcmp(argv[i], "-x") == 0) {
+	while((argc - i) > 1){
+		// there is a CLI specified parameter
+		if(strcmp(argv[i], "-x") == 0){
 			// no starting of deafult jackd server
 			options |= JackNoStartServer;
 			i = i + 1;
-        }else
-        if(strcmp(argv[i], "-p") == 0) {
+		}else if(strcmp(argv[i], "-p") == 0) {
 			// tcp listening port being specified
 			i = i + 1;
 			tcpPort = atoi(argv[i]);
 			i = i + 1;
-        }else
-        if(strcmp(argv[i], "-w") == 0) {
+		}else if(strcmp(argv[i], "-w") == 0) {
 			// channel width count specified
 			i = i + 1;
 			chCnt = atoi(argv[i]);
 			i = i + 1;
-        }else
-        if(strcmp(argv[i], "-b") == 0) {
+		}else if(strcmp(argv[i], "-b") == 0) {
 			// mix bus count specified
 			i = i + 1;
 			busCnt = atoi(argv[i]);
 			i = i + 1;
-        }else
-        if(strcmp(argv[i], "-i") == 0) {
+		}else if(strcmp(argv[i], "-i") == 0) {
 			// input count specified
 			i = i + 1;
 			inCnt = atoi(argv[i]);
 			i = i + 1;
-        }else
-        if(strcmp(argv[i], "-o") == 0) {
+		}else if(strcmp(argv[i], "-o") == 0) {
 			// output count specified
 			i = i + 1;
 			outCnt = atoi(argv[i]);
 			i = i + 1;
-        }else
-		if(strcmp(argv[i], "-d") == 0) {
-             // dbi driver directory path being specified
-			i = i + 1;
-			str_setstr(&dbi_path, argv[i]);
-			i = i + 1;
-        }else
-		if (strcmp(argv[i], "-r") == 0) {
-             //run-lock file directory path being specified
+		}else if(strcmp(argv[i], "-r") == 0) {
+			//run-lock file directory path being specified
 			i = i + 1;
 			str_setstr(&lock_path, argv[i]);
 			i = i + 1;
-        }else			
-		if(strcmp(argv[i], "-j") == 0) {
-             //requested Jack name for us being specified
+		}else if(strcmp(argv[i], "-j") == 0) {
+			//requested Jack name for us being specified
 			i = i + 1;
 			str_setstr(&ourJackName, argv[i]);
 			i = i + 1;
-		}else			
-		if(strcmp(argv[i], "-s") == 0) {
-             //JACK server name to connect to specified
+		}else if(strcmp(argv[i], "-s") == 0) {
+			//JACK server name to connect to specified
 			i = i + 1;
 			str_setstr(&jackServer, argv[i]);
 			i = i + 1;
 		}else
 			i = i + 1;
-
-    }    
+	}
 	if(geteuid() == 0){
 		// set created file permissions: r/w/x user, group, enyone (for the lock file)
 		umask(000); 
-	
+		
 		// create lock file so only one server can run at a time on a given port
 		snprintf(command, sizeof command, "%sars%d.pid", lock_path, tcpPort);
 		i = open(command, O_RDWR|O_CREAT, 0666);
@@ -542,11 +519,11 @@ int main(int argc, const char *argv[])
 		// write pid to lock file
 		snprintf(command, sizeof command, "%u\n",getpid());
 		write(i, command, strlen(command)); 	
-
+		
 		snprintf(command, sizeof command, "pid=%u\n", getpid());
 		write(STDERR_FILENO, command, strlen(command));
 	}
-
+	
 	// try droping priveleges to the "arserver" user and group.
 	// this only works if we are run as root user, otherwise, it keeps the same user/group as the parent.
 	// any instance of arserver forked from this launcher will inherit the launchers user/group.

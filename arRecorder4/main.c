@@ -1286,10 +1286,12 @@ void mainloop(int next_arg, char *argv[], int apl_arg, unsigned char persist, lo
 				if(strlen(portName)){
 					if(jack_connect(data.client, portName, jack_port_name(*port))){
 						g_printerr("\nERROR: failed to connect to JACK port  %s.\n", portName);
-						free(portName);
-						free(chanList);
-						goto finish;
-
+						if(!data.persist){
+							free(portName);
+							free(chanList);
+							// failed jack connection... quit
+							goto finish;
+						}
 					}
 				}
 				free(portName);

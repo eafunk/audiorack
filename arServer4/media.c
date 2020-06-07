@@ -902,6 +902,9 @@ void GetURLMetaData(uint32_t UID, const char *url){
 		else if(!strcmp(type, "stop")){
 			SetMetaData(UID, "Name", "--- Play List Stop ---");	
 			SetMetaData(UID, "Missing", "0");
+		}else if(!strcmp(type, "gst")){
+			SetMetaData(UID, "Name", "custom gstreamer pipeline player");	
+			SetMetaData(UID, "Missing", "0");
 		}else
 			GetGstDiscoverMetaData(UID, url);
 	}

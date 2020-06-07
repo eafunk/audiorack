@@ -151,9 +151,13 @@ was run. Copy the /opt/audiorack/support/user_startup.conf into your new
 startup file.
 
 Note that this default launch of arServer4 will run arServer4 in the
-background, keep-alive on, standard IO sockets closed.  For debugging, 
+background, keep-alive off, standard IO sockets closed.  For debugging, 
 run with the -e and -n options to keep stderr open, and to run directly, 
 without a running through a secondary "keep-alive/watchdog" process.
+
+Add the -k option when you run the program, or in the above mentioned
+ars_startup.conf file to make arServer run in keep-alive mode:  If the 
+arServer crashes, it watchdog launcher will restart it automagically.
 
 To see all the command line options for arServer:
 /opt/audiorack/bin/arServer4 ?
