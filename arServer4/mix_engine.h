@@ -48,8 +48,8 @@ typedef struct{
 	pthread_spinlock_t spinlock;
 } callbackQueue;
 
-#define sourceTypeLive 		0
-#define sourceTypeCanRepos 	1
+#define sourceTypeLive		0
+#define sourceTypeCanRepos	1
 
 #define persistConnected 1
 #define persistDisConn 2

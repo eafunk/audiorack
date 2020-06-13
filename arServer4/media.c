@@ -920,7 +920,7 @@ uint32_t LoadJackPlayer(int pNum, const char *url_str, uint32_t UID){
 	 * connects the input's second channel to client port3 AND port4. */
 	 
 	inChannel *instance;
-	uint32_t locUID, result;
+	uint32_t locUID, result, controls;
 	jack_port_t **in_port;
 	int i, c, cmax;
 	unsigned char isConnected;
@@ -988,8 +988,10 @@ uint32_t LoadJackPlayer(int pNum, const char *url_str, uint32_t UID){
 			SetMetaData(locUID, "Name", sourceName);
 			free(sourceName);
 		}
-	
-		tmp = hstr(ctl_vol | ctl_fade, 8);
+		tmp = GetMetaData(instance->UID, "Controls", 0);
+		controls = strtoul(tmp, NULL, 16);
+		free(tmp);
+		tmp = hstr(controls | ctl_vol | ctl_fade | ctl_feed, 8);
 		SetMetaData(instance->UID, "Controls", tmp); 
 		free(tmp);
 
@@ -1102,9 +1104,10 @@ uint32_t LoadInputPlayer(int pNum, const char *url_str, uint32_t UID){
 			
 		/* set name property to connected application name */
 		if(name)
-			SetMetaData(locUID, "Name", name);
-		
-		tmp = hstr(ctl_vol | ctl_fade, 8);
+		tmp = GetMetaData(instance->UID, "Controls", 0);
+		controls = controls | strtoul(tmp, NULL, 16);
+		free(tmp);
+		tmp = hstr(controls | ctl_vol | ctl_fade, 8);
 		SetMetaData(locUID, "Controls", tmp); 
 		free(tmp);
 
@@ -1128,7 +1131,7 @@ uint32_t LoadURLPlayer(int pNum, const char *url_str, uint32_t UID){
 	float vol;	
 	char *wdir, *bin;
 	int i, fd;
-	uint32_t locUID, result;
+	uint32_t locUID, result, controls;
 	
 	struct execRec{
 		char **argv;
@@ -1190,8 +1193,10 @@ uint32_t LoadURLPlayer(int pNum, const char *url_str, uint32_t UID){
 	if((val == 0.0) || (val > 10)) 
 		val = def_vol;
 	instance->vol = val;
-	
-	tmp = hstr(ctl_vol | ctl_fade, 8);
+	tmp = GetMetaData(instance->UID, "Controls", 0);
+	controls = strtoul(tmp, NULL, 16);
+	free(tmp);
+	tmp = hstr(controls | ctl_vol | ctl_fade, 8);
 	SetMetaData(instance->UID, "Controls", tmp); 
 	free(tmp);
 	
@@ -1279,7 +1284,7 @@ uint32_t LoadGSTPlayer(int pNum, const char *url_str, uint32_t UID){
 	float vol;	
 	char *wdir, *bin;
 	int i, fd;
-	uint32_t locUID, result;
+	uint32_t locUID, result, controls;
 	
 	struct execRec{
 		char **argv;
@@ -1346,7 +1351,10 @@ uint32_t LoadGSTPlayer(int pNum, const char *url_str, uint32_t UID){
 			val = def_vol;
 		instance->vol = val;
 		
-		tmp = hstr(ctl_vol | ctl_fade, 8);
+		tmp = GetMetaData(instance->UID, "Controls", 0);
+		controls = strtoul(tmp, NULL, 16);
+		free(tmp);
+		tmp = hstr(controls | ctl_vol | ctl_fade, 8);
 		SetMetaData(instance->UID, "Controls", tmp); 
 		free(tmp);
 		
