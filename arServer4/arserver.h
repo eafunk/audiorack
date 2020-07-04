@@ -75,7 +75,7 @@ extern "C"
 #endif
 
 enum{
-	ctl_vol 	=(1L << 0),
+	ctl_vol	=(1L << 0),
 	ctl_pos		=(1L << 1),
 	ctl_skipf	=(1L << 2),
 	ctl_skipb	=(1L << 3),

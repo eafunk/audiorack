@@ -105,6 +105,8 @@ typedef struct {
 	double	endTime;
 } queueRecord;
 
+void str_hexDump(const char *ptr);
+
 uint32_t ELFHash(uint32_t hash, const char* str, unsigned int len);
 
 // CRC32 checksum: based on implementation by Finn Yannick Jacobs

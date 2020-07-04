@@ -905,12 +905,147 @@ void GetURLMetaData(uint32_t UID, const char *url){
 		}else if(!strcmp(type, "gst")){
 			SetMetaData(UID, "Name", "custom gstreamer pipeline player");	
 			SetMetaData(UID, "Missing", "0");
+		}else if(!strcmp(type, "sip")){
+			SetMetaData(UID, "Name", "sip URLs are not loadable directly");	
+			SetMetaData(UID, "Missing", "1");
 		}else
 			GetGstDiscoverMetaData(UID, url);
 	}
 
 	if(type)
 		free(type);
+}
+
+uint32_t LoadSipPlayer(const char *name, const char *src, const char *dst){
+	/* NOTE This function operates independently of the LoadPlayer family 
+	 * of function call below, due to the very unique nature of sip players */
+	 
+	inChannel *instance;
+	uint32_t result, controls;
+	jack_port_t **port;
+	int i, c, p, cmax, maxp;
+	unsigned char isConnected;
+	char portName[32];
+	char *tmp;
+	char isEmpty;
+	float fval;
+
+	result = 0;
+	// load next available player
+	maxp = GetMetaInt(0, "client_players_visible", NULL);
+	if(maxp <= 0)
+		maxp = 8;
+	if(maxp >= mixEngine->inCount)
+		maxp = mixEngine->inCount;
+		
+	for(i = 0; i < maxp; i++){
+		p = lastp + i;
+		if(p >= maxp)
+			p = p - maxp;
+		instance = &mixEngine->ins[p];
+		if(!instance->status && !instance->UID){
+			instance->status = status_loading;
+			break;
+		}
+	}
+	if(i == maxp){
+		// no available players
+		p = -1;
+		goto bail;
+	}
+	tmp = NULL;
+	str_setstr(&tmp, "sip:///");
+	str_appendstr(&tmp, name);
+	instance->UID = createMetaRecord(tmp, NULL, 0);
+	free(tmp);
+	tmp = NULL;
+
+	SetMetaData(instance->UID, "Name", "name");
+
+	SetMetaData(instance->UID, "Type", "sip");
+
+	// set up mixer channel
+	double val;
+	instance->busses = GetMetaInt(0, "sip_bus", NULL);
+	if(instance->busses == 0)
+		instance->busses = def_busses;
+
+	val = GetMetaFloat(0, "sip_vol", NULL);
+	if((val == 0.0) || (val > 10)) 
+		val = def_vol;
+	instance->vol = val;
+	
+	/* make jack connections to mixer input */
+	isConnected = 0;
+	port = instance->in_jPorts;
+	cmax = mixEngine->chanCount;
+	for(c=0; c<cmax; c++){
+		snprintf(portName, sizeof(portName), ":output_%u", c+1);
+		str_setstr(&tmp, src);
+		str_appendstr(&tmp, portName);
+		pthread_mutex_lock(&mixEngine->jackMutex);
+		if(!jack_connect(mixEngine->client, tmp, jack_port_name(*port))){
+			pthread_mutex_unlock(&mixEngine->jackMutex);
+			isConnected++;
+		}else
+			pthread_mutex_unlock(&mixEngine->jackMutex);
+		free(tmp);
+		tmp = NULL;
+		port++;
+	}
+	
+	/* make jack connections from mix-minus feed */
+	port = instance->mm_jPorts;
+	for(c=0; c<cmax; c++){
+		snprintf(portName, sizeof(portName), ":input_%u", c+1);
+		str_setstr(&tmp, dst);
+		str_appendstr(&tmp, portName);
+		pthread_mutex_lock(&mixEngine->jackMutex);
+		if(!jack_connect(mixEngine->client, jack_port_name(*port), tmp)){
+			pthread_mutex_unlock(&mixEngine->jackMutex);
+			isConnected++;
+		}else
+			pthread_mutex_unlock(&mixEngine->jackMutex);
+		free(tmp);
+		tmp = NULL;
+		port++;
+	}
+	
+	fval = GetMetaFloat(0, "sip_feed_vol", &isEmpty);
+	if(isEmpty)
+		fval = 1.0;
+	instance->feedVol = fval;
+	tmp = fstr(fval, 3);
+	SetMetaData(instance->UID, "MixMinusVol", tmp);
+	free(tmp);
+	
+	instance->feedBus = GetMetaInt(0, "sip_feed_bus", NULL);
+	if(!instance->feedBus)
+		instance->feedBus = 0x20000001;	// default to monitor bus and TBA
+	tmp = ustr(instance->feedBus);
+	SetMetaData(instance->UID, "MixMinusBus", tmp);
+	free(tmp);
+	
+	if(isConnected){
+		tmp = hstr(ctl_vol | ctl_fade | ctl_feed, 8);
+		SetMetaData(instance->UID, "Controls", tmp); 
+		free(tmp);
+		result = instance->UID;
+	}else{
+		/* this will cause the deletion of the UID record as well by the 
+		 * playerChangeWatcher dispatch thread */
+		setInChanToDefault(instance);
+		instance->status = status_empty;
+	}
+	
+	// send out metadata change notifications
+	notifyData	data;
+	data.senderID = getSenderID();
+	data.reference = htonl(instance->UID);
+	data.value.iVal = 0;
+	notifyMakeEntry(nType_bus, &data, sizeof(data));
+bail:
+	return result;
 }
 
 uint32_t LoadJackPlayer(int pNum, const char *url_str, uint32_t UID){
@@ -928,7 +1063,7 @@ uint32_t LoadJackPlayer(int pNum, const char *url_str, uint32_t UID){
 	char *decodedName;
 
 	result = 0;
-    instance = &mixEngine->ins[pNum];
+	instance = &mixEngine->ins[pNum];
 	if(UID == 0){
 		locUID = createMetaRecord(url_str, NULL, 0);
 	}else{ 
@@ -1531,8 +1666,6 @@ uint32_t LoadPlayer(int *pNum, const char *url_str, uint32_t UID, unsigned char 
 		if(*pNum < 0){
 			// load next available player		
 			maxp = GetMetaInt(0, "client_players_visible", NULL);
-			
-			maxp = 0;
 			if(maxp <= 0)
 				maxp = 8;
 			if(maxp >= mixEngine->inCount)
@@ -1547,7 +1680,6 @@ uint32_t LoadPlayer(int *pNum, const char *url_str, uint32_t UID, unsigned char 
 					instance->status = status_loading;
 					break;
 				}
-				instance++;
 			}
 			if(i == maxp){
 				// no available players
@@ -1574,9 +1706,7 @@ uint32_t LoadPlayer(int *pNum, const char *url_str, uint32_t UID, unsigned char 
 			result = LoadJackPlayer(*pNum, url_str, UID);
 		else if(!strcmp(type, "gst"))
 			result = LoadGSTPlayer(*pNum, url_str, UID);
-/*!!!	else if(!strcmp(type, "iax"))
-			result = LoadIAXPlayer(*pNum, url_str, UID);
-*/		else if(!strcmp(type, "item"))
+		else if(!strcmp(type, "item"))
 			result = LoadDBItemPlayer(pNum, url_str, UID);
 		else
 			result = LoadURLPlayer(*pNum, url_str, UID);
@@ -1592,7 +1722,7 @@ uint32_t LoadPlayer(int *pNum, const char *url_str, uint32_t UID, unsigned char 
 				// if type has already been set, i.e. LoadDBItem may 
 				// have set the type based on database properties...
 				free(type);
-				type = tmp;				
+				type = tmp;
 			}
 			if(!strcmp(type, "file") && checkPnumber(*pNum)){
 				// Handle apl files, if any

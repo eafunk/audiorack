@@ -24,6 +24,35 @@
  *  Some handy untility functions for manipulating strings, 
  *  URLs, numbers as strings, hashing, tolkenizing, etc.
  ******************************************************************/
+char printable(char val){
+	if((val > 31) && (val < 127))
+		return val;
+	else
+		return '.';
+}
+
+void str_hexDump(const char *ptr){
+	unsigned int size = strlen(ptr);
+	char buf[16];
+	unsigned int i = 0;
+	unsigned int cnt;
+	
+	while(i < size){
+		cnt = size - i;
+		if(cnt > 16)
+			cnt = 16;
+		memset(buf, 0, sizeof(buf));
+		memcpy(buf, ptr, cnt);
+		fprintf(stderr, "%04X:%02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %c%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c\n", 
+			i ,ptr[0],ptr[1],ptr[2],ptr[3],ptr[4],ptr[5],ptr[6],ptr[7],ptr[8],ptr[9],ptr[10],ptr[11],ptr[12],ptr[13],ptr[14],ptr[15],
+			printable(ptr[0]),printable(ptr[1]),printable(ptr[2]),printable(ptr[3]),printable(ptr[4]),printable(ptr[5]),
+			printable(ptr[6]),printable(ptr[7]),printable(ptr[8]),printable(ptr[9]),printable(ptr[10]),
+			printable(ptr[11]),printable(ptr[12]),printable(ptr[13]),printable(ptr[14]),printable(ptr[15]));
+		ptr = ptr + 16;
+		i = i + 16;
+	}
+}
+
 uint32_t ELFHash(uint32_t hash, const char* str, unsigned int len)
 {
 	uint32_t x;

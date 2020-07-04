@@ -107,8 +107,8 @@ void createTaskItem(char *theName, void (*theProc)(void *), void *usrDataPtr, ui
 		rec->refCnt = 1;
 		rec->finished = 0;
 		rec->pid = 0;
-		rec->name = strdup(theName);
-		rec->userData = usrDataPtr;
+		rec->name = strdup(theName);		// This memory is freed when the task completes
+		rec->userData = usrDataPtr;		// If non-zero, this is freed when the task completes
 		rec->Proc = theProc;
 		rec->player = thePlayer;
 		rec->UID = theUID;
@@ -131,10 +131,6 @@ void createTaskItem(char *theName, void (*theProc)(void *), void *usrDataPtr, ui
 
 //********************** Tasks routines here ************************//
 
-void executeCleanUp(void *pass){
-	free(pass);
-}
-
 void ExecuteCommand(void *refIn){
 	char *command, *line, *start, *frag;
 	ctl_session session;
@@ -147,13 +143,8 @@ void ExecuteCommand(void *refIn){
 	session.silent = 1;
 
 	command =(char*)(parent->userData);
-	pthread_cleanup_push((void (*)(void *))executeCleanUp, (void *)command);
-    pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);	// task is non-cancalable
-	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
-
 	start = command;
 	// replace any '\r' chars with '\n'
-	// (deal with realbasic stupidity until I can get the UI re-writen in objective-c)
 	session.save_pointer = command;
 	while(session.save_pointer = strchr(session.save_pointer, '\r'))
 		*session.save_pointer = '\n';
@@ -163,7 +154,6 @@ void ExecuteCommand(void *refIn){
 		processCommand(&session, line, NULL);
 		// check for delete cancelation
 	}
-	pthread_cleanup_pop(1);
 }
 
 void ExecuteProcess(char *command, uint32_t UID, uint32_t timeOut){
@@ -326,7 +316,7 @@ char modbusQuery(int *sock, char *addr, unsigned char unitID, unsigned short inp
 	char *dest;
 	size_t size, limit;
 	int rx_length;
-	struct sockaddr_in  adrRec;
+	struct sockaddr_in adrRec;
 	struct timeval tv;
 
 	// format request packet
@@ -408,15 +398,6 @@ char modbusQuery(int *sock, char *addr, unsigned char unitID, unsigned short inp
 	return -2;	// zero indicated connection closed or RX timeout
 }
 
-void modbusPollCleanUp(void *pass){
-	struct modbusPollRec *rec;
-
-	rec = (struct modbusPollRec *)pass;
-	if(rec->sock >=0)
-		close(rec->sock);
-	free(rec);
-}
-
 void modbusPoll(void  *refIn){
 	taskRecord *parent;
 	struct modbusPollRec *rec;
@@ -426,18 +407,12 @@ void modbusPoll(void  *refIn){
 
 	parent = (taskRecord *)refIn;
 	rec = (struct modbusPollRec *)parent->userData;
-
-    pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
-    pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
-	pthread_cleanup_push((void (*)(void *))modbusPollCleanUp, (void *)rec);
-
 	timeout.tv_nsec = 0;
 	timeout.tv_sec = rec->period;
-
 	state = -1;
 	rec->sock = -1;
 
-    while(1){
+	while(!parent->cancelThread){
 		result = modbusQuery(&rec->sock, rec->addr, rec->unitID, rec->inputID);
 		switch(result){
 			case -1:
@@ -479,6 +454,7 @@ void modbusPoll(void  *refIn){
 				state = result;
 		}
 		nanosleep(&timeout, NULL);
-    }
-	pthread_cleanup_pop(1);
+	}
+	if(rec->sock >= 0)
+		close(rec->sock);
 }

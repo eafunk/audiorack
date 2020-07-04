@@ -123,6 +123,11 @@ extern uint32_t	log_busses;
 extern pthread_mutex_t lastsegMutex;
 extern pthread_cond_t lastsegSemaphore;
 
+extern int sip_ctl_sock;
+extern pthread_mutex_t sipMutex;
+
+extern int sipStatus;
+
 unsigned char initDispatcherThreads(void);
 void shutdownDispatcherThreads(void);
 void serverLogMakeEntry(char *message);

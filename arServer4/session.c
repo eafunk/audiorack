@@ -230,7 +230,7 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 	
 	result = rError;
 	session->errMSG = "";
-	if(arg == NULL)
+	if((arg == NULL) || !strlen(arg))
 		goto finish;
 	session->errMSG = "Huh?\n";	
 	// Check the arguments
@@ -911,8 +911,8 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 */
 
 finish:
-	if(result == rError){	
-		if(strlen(arg) > 1){
+	if(result == rError){
+		if(arg && (strlen(arg) > 1)){
 			tx_length = snprintf(buf, sizeof buf, "%s", session->errMSG);
 			my_send(session, buf, tx_length, session->silent);
 		}
@@ -974,7 +974,7 @@ void* sessionThread(ctl_session *session){
 	// send prompt
 	tx_length = strlen(constPrompt);
 	if(my_send(session, constPrompt, tx_length, 0) < 0) goto finish;
-	command[0] = 0;
+	*command = 0;
 	
 	// wait for a client command to arrive
 	rx_length = my_recv(session, block, sizeof(block) - 1);
@@ -986,23 +986,25 @@ void* sessionThread(ctl_session *session){
 	session->silent = 0;	
 	while(rx_length > 0){
 		// "\n" is our command delimitor
-		fragment = strtok_r(block, "\n", &save_pointer);
-		while(fragment){
-			// delimitor found in the string
-			strncat(command, fragment, sizeof(command) - (strlen(command) + 1));
-			if(processCommand(session, command, NULL))
-				goto finish;
+		save_pointer = block;
+		while(fragment = strpbrk(save_pointer, "\n\r")){
+			// found end-of-line
+			*fragment = 0;
+			strncat(command, save_pointer, sizeof(command) - (strlen(command) + 1));
+			save_pointer = fragment+1;
 
-			// send prompt
-			tx_length = strlen(constPrompt);
-			if(my_send(session, constPrompt, tx_length, 0) < 0) 
-				goto finish;
-			command[0] = 0;
-			// check for another one
-			fragment = strtok_r(NULL, "\n", &save_pointer);
+			if(strlen(command)){
+				if(processCommand(session, command, NULL))
+					goto finish;
+				// send prompt
+				tx_length = strlen(constPrompt);
+				if(my_send(session, constPrompt, tx_length, 0) < 0) 
+					goto finish;
+			}
+			*command = 0;
 		}
 		// no delimitor left in the string... save whats left, the delimitor my show up in the next round
-		if(save_pointer)
+		if(strlen(save_pointer))
 			strncat(command, save_pointer, sizeof(command) - (strlen(command) + 1));
 		// wait for a client command to arrive
 		rx_length = my_recv(session, block, sizeof(block) - 1);
@@ -1036,7 +1038,7 @@ finish:
 			quit = 1;
 		}
 	}
-    return NULL;
+	return NULL;
 }
 
 void* TCPListener(void *refCon){    
@@ -1552,7 +1554,6 @@ unsigned char handle_external(ctl_session *session){
 		
 	}else{
 		// parent continues here...
-		
 		char *fragment, *save_pointer;
 		char buff[1024];
 		char command[4096];
@@ -1580,25 +1581,25 @@ unsigned char handle_external(ctl_session *session){
 			// wait for a client command to arrive or a socket error
 			while((i = read(session->cs, buff, sizeof(buff)-1)) > 0){
 				// null at end of segment to make it a c-string
-				buff[i] = 0; 
+				buff[i] = 0;
 				// "\n" is our command delimitor
-				fragment = strtok_r(buff, "\n", &save_pointer);
-				while(fragment){
-					// delimitor found in the string
-					strncat(command, fragment, sizeof(command) - (strlen(command) + 1));
+				save_pointer = buff;
+				while(fragment = strpbrk(save_pointer, "\n\r")){
+					// found end-of-line
+					*fragment = 0;
+					strncat(command, save_pointer, sizeof(command) - (strlen(command) + 1));
+					save_pointer = fragment+1;
 					// process command, ignoring return value... disallow quit/shutdown from external programs
 					processCommand(session, command, NULL);
 					// send prompt
 					i = snprintf(command, (sizeof command) - 1, "%s", constPrompt);
 					strcat(command, "\n");
 					send(session->cs, command, i+1, 0);
-					command[0] = 0;
-					// check for another one
-					fragment = strtok_r(NULL, "\n", &save_pointer);
+					*command = 0;
 				}
 				// no delimitor left in the string... save whats left, the delimitor my show up in the next round
-				if(save_pointer)
-					strncat(command, save_pointer, sizeof(command) - (strlen(command) + 1));			
+				if(strlen(save_pointer))
+					strncat(command, save_pointer, sizeof(command) - (strlen(command) + 1));
 			}
 			if((i < 0) && (errno != EAGAIN))
 				// control socket error (closed?) Kill attached process
@@ -2086,7 +2087,7 @@ unsigned char handle_mmbus(ctl_session *session){
 		param = strtok_r(NULL, " ", &session->save_pointer);
 		if(param != NULL){
 			bus = atol(param);
-			bus = (bus & 0xff00001f);		// limit range to 0-31 plus upper byte
+			bus = (bus & 0xff00003f);		// limit range to 0-32 plus upper byte
 			session->lastPlayer = aInt;
 			instance = &mixEngine->ins[aInt];
 			if(instance->status & status_standby){
@@ -2274,6 +2275,7 @@ unsigned char handle_unload(ctl_session *session){
 	uint32_t aInt, c, cmax;
 	inChannel *instance;
 	jack_port_t **port;
+	char *xfr, *name, *type, *req, *tmp;
 	
 	// first parameter, player number
 	param = strtok_r(NULL, " ", &session->save_pointer);
@@ -2291,6 +2293,45 @@ unsigned char handle_unload(ctl_session *session){
 			session->errMSG = "Can't unload...item is playing.\n";
 			return rError;
 		}
+
+		// handle possibvle sip player transfer on close
+		if(instance->UID){
+			type = GetMetaData(instance->UID, "Type", 0);
+			if(!strcmp(type, "sip")){
+				xfr = GetMetaData(0, "sip_transfer", 1);
+				name = GetMetaData(instance->UID, "Name", 1);
+				if(name){
+					if(strlen(name)){
+						// switch baresip to player's line number 
+						// and initiate call transfer or hand-up
+						int lineno = atoi(name);
+						req = NULL;
+						str_setstr(&req, "/line ");
+						tmp = istr(lineno);
+						str_appendstr(&req, tmp);
+						free(tmp);
+						str_appendchr(&req, '\n');
+						if(xfr && strlen(xfr)){
+							str_appendstr(&req, "/transfer ");
+							str_appendstr(&req, xfr);
+							str_appendchr(&req, '\n');
+						}else{
+							str_appendstr(&req, "/hangup\n");
+						}
+						pthread_mutex_lock(&sipMutex);
+						send(sip_ctl_sock, req, strlen(req), 0);
+						pthread_mutex_unlock(&sipMutex);
+						free(req);
+					}
+					free(name);
+				}
+				if(xfr)
+					free(xfr);
+			}
+			free(type);
+		}
+			 
+				
 		session->lastPlayer = aInt;
 		if(instance->persist){
 			instance->persist = persistOff;
@@ -3778,14 +3819,13 @@ unsigned char handle_stat(ctl_session *session){
 	pthread_rwlock_unlock(&queueLock);
 	my_send(session, buf, tx_length, session->silent);
 	
-	// iax telephone interface status
-/*	if(iax_process_thread){
-		if(iaxp_get_reg_state())
-			tx_length = snprintf(buf, sizeof buf, "iaxPhone=registered\n");
-		else
-*/			tx_length = snprintf(buf, sizeof buf, "iaxPhone=unregistered\n");
-//	}else
-//		tx_length = snprintf(buf, sizeof buf, "iaxPhone=off\n");
+	// sip telephone interface status
+	if(sipStatus == 2)
+		tx_length = snprintf(buf, sizeof buf, "sipPhone=registered\n");
+	else if(sipStatus == 1)
+		tx_length = snprintf(buf, sizeof buf, "sipPhone=unregistered\n");
+	else
+		tx_length = snprintf(buf, sizeof buf, "sipPhone=off\n");
 	my_send(session, buf, tx_length, session->silent);
 
 	return rNone;
@@ -4378,7 +4418,7 @@ unsigned char handle_modbuspoll(ctl_session *session){
 									str_appendstr(&tmp, conf);
 									createTaskItem(tmp, modbusPoll, rec, 0, 0, 0, 0); // no timeout
 									free(tmp);
-			
+
 									return rOK;
 								}
 							}

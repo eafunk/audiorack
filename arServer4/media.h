@@ -39,7 +39,8 @@ void mediaShutdown(void);
 char *GetFileHash(const char *path);
 char *getFilePrefixPoint(char **file);
 void GetFileMetaData(uint32_t UID, const char *url);
-unsigned char CheckFileHashMatch(const char *path, const char *hash);	
+unsigned char CheckFileHashMatch(const char *path, const char *hash);
+uint32_t LoadSipPlayer(const char *name, const char *src, const char *dst);
 uint32_t LoadPlayer(int *pNum, const char *url_str, uint32_t UID, unsigned char noCheck);
 void GetURLMetaData(uint32_t UID, const char *url);
 

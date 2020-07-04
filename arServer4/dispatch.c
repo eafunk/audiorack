@@ -56,6 +56,7 @@ pthread_mutex_t lastsegMutex;
 pthread_cond_t lastsegSemaphore;
 
 pthread_t playerWatchThread;
+pthread_t sipWatchThread;
 char *svrLogFileName;
 FILE *svrLogFile;
 vuNContainer *vuRecord;
@@ -65,6 +66,12 @@ unsigned char dispRun = 0;
 pthread_t ctlInQueueWatchThread;
 pthread_t jackWatchThread;
 
+pthread_mutex_t sipMutex;
+
+int sipStatus = 0;
+
+int sip_ctl_sock = -1;
+
 void *jackChangeWatcher(void *refCon);
 void *playerChangeWatcher(void *refCon);
 void *notifyWatcher(void *refCon);
@@ -73,6 +80,7 @@ void serverLogCloseFile(void);
 void *metersUpdateThread(void *refCon);
 void *programLogWatcher(void* refCon);
 void *controlQueueInWatcher(void *refCon);
+void *sipSessionWatcher(void *refCon);
 
 unsigned char initDispatcherThreads(void){
 	unsigned char vuRecCnt;
@@ -80,6 +88,8 @@ unsigned char initDispatcherThreads(void){
 	unsigned int bytes;
 
 	dispRun = 1;
+	
+	pthread_mutex_init(&sipMutex, NULL);
 
 	pthread_mutex_init(&lastsegMutex, NULL);
 	pthread_cond_init(&lastsegSemaphore, NULL);
@@ -107,6 +117,8 @@ unsigned char initDispatcherThreads(void){
 
 	pthread_create(&playerWatchThread, NULL, &playerChangeWatcher, NULL);	
 	
+	pthread_create(&sipWatchThread, NULL, &sipSessionWatcher, NULL);	
+
 	pthread_create(&ctlInQueueWatchThread, NULL, &controlQueueInWatcher, mixEngine);	
 
 	vuRecCnt = mixEngine->busCount + mixEngine->inCount;
@@ -131,31 +143,230 @@ void shutdownDispatcherThreads(void){
 	/* wake Threads so they notice run state change end */
 	pthread_cond_broadcast(&mixEngine->changedSemaphore); 
 	pthread_cond_broadcast(&mixEngine->ctlInQueueSemaphore);
-	pthread_join(playerWatchThread, NULL);
-	pthread_join(ctlInQueueWatchThread, NULL);
-
+	
 	pthread_cond_broadcast(&srvLogSemaphore); 
+	pthread_cond_broadcast(&notifySemaphore); 
+	pthread_cond_broadcast(&pgmLogSemaphore); 
+	pthread_cond_broadcast(&lastsegSemaphore); 
+	pthread_cond_broadcast(&mixEngine->cbQueueSemaphore);
+	
+	pthread_join(playerWatchThread, NULL);
+	pthread_join(sipWatchThread, NULL);
+	pthread_join(ctlInQueueWatchThread, NULL);
 	pthread_join(srvLogThread, NULL);
+	pthread_join(notifyThread, NULL);
+	pthread_join(pgmLogThread, NULL);
+
 	serverLogCloseFile();
 	pthread_mutex_destroy(&srvLogMutex);
 	pthread_cond_destroy(&srvLogSemaphore);
-	pthread_cond_broadcast(&notifySemaphore); 
-	pthread_join(notifyThread, NULL);
 	pthread_mutex_destroy(&notifyMutex);
 	pthread_cond_destroy(&notifySemaphore);
-	pthread_cond_broadcast(&pgmLogSemaphore); 
-	pthread_join(pgmLogThread, NULL);
 	pthread_mutex_destroy(&pgmLogMutex);
 	pthread_cond_destroy(&pgmLogSemaphore);
-	pthread_cond_broadcast(&lastsegSemaphore); 
 	pthread_mutex_destroy(&lastsegMutex);
 	pthread_cond_destroy(&lastsegSemaphore);
+	pthread_mutex_destroy(&sipMutex);
+
 	pthread_join(vuUpdateThread, NULL);
 	if(vuRecord)
 		free(vuRecord);
-	pthread_cond_broadcast(&mixEngine->cbQueueSemaphore);
 	pthread_join(jackWatchThread, NULL);
 
+}
+
+void *sipSessionWatcher(void *refCon){
+	char *baresipPort = NULL;
+	char *tmp = NULL;
+	char *src = NULL;
+	char *dst = NULL;
+	char *name = NULL;
+	int lineno = 0;
+	int len;
+	char established;
+	char block[256]; /* receive data buffer */
+	char line[4096]; /* receive data buffer */
+	char *fragment, *ptr, *remains;
+	time_t lastRegCheck, now;
+	const char *req = "/reginfo\n";
+	
+	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+	lastRegCheck = 0;
+	established = 0;
+	while(dispRun){
+		if(sip_ctl_sock > -1){
+			// connection open -- this is the only thread that reads from sip_ctl_sock, so no mutex is needed
+			len = recv(sip_ctl_sock, block, sizeof(block)-1, 0);
+			if(len < 0){
+				if(errno != EAGAIN){
+					// connection failure, not a time out
+					close(sip_ctl_sock);
+					sip_ctl_sock = -1;
+					sipStatus = 0;
+				}
+			}else if(len){
+				// data received
+				block[len] = 0; // null at end of segment to make it a c-string
+				remains = block;
+				while(fragment = strpbrk(remains, "\n\r")){
+					if(*fragment == '\r'){
+						// echod back key... clear line
+						remains = fragment+1;
+						*line = 0;
+						continue;
+					}
+					// found end-of-line
+					*fragment = 0;
+					strncat(line, remains, sizeof(line) - (strlen(line) + 1));
+					remains = fragment+1;
+					if(!strlen(line))
+						continue;
+					// process line
+					if(strstr(line, "--- User Agents (")){
+						sipStatus = 1;
+					}else if(strstr(line, "> sip:")){
+						if(strstr(line, "\x1b[32mOK ")){
+							sipStatus++;
+						}
+					}else if(strstr(line, "Call established: ")){
+						established = 1;
+					}else if(strstr(line, "call: answering call")){
+						if(tmp = strstr(line, "on line ")){
+							lineno = atoi(tmp+8);
+							if(name)
+								free(name);
+							name = istr(lineno);
+							if(tmp = strstr(line, " from sip:")){
+								tmp = tmp + 10;
+								if(ptr = strchr(tmp, '@'))
+									*ptr = 0;
+								str_appendstr(&name, " - ");
+								str_appendstr(&name, tmp);
+							}
+							established = 0;
+							if(dst)
+								free(dst);
+							dst = NULL;
+							if(src)
+								free(src);
+							src = NULL;
+						}
+					}else if(tmp = strstr(line, "jack: source unique name `")){
+						tmp = tmp  + 26;
+						if(ptr = strchr(tmp, '\''))
+							*ptr = 0;
+						str_setstr(&src, tmp);
+					}else if(tmp = strstr(line, "jack: destination unique name `")){
+						tmp = tmp + 31;
+						if(ptr = strchr(tmp, '\''))
+							*ptr = 0;
+						str_setstr(&dst, tmp);
+					}
+					
+					if(established && lineno && src && dst){
+						// setup new call
+						LoadSipPlayer(name, src, dst);
+						if(name)
+							free(name);
+						name = NULL;
+						if(dst)
+							free(dst);
+						dst = NULL;
+						if(src)
+							free(src);
+						src = NULL;
+						lineno = 0;
+						established = 0;
+					}
+					// clear line
+					*line = 0;
+				}
+				if(strlen(remains))
+					strncat(line, remains, sizeof(line) - (strlen(line) + 1));
+				// loop to recieve more
+				continue;
+			}
+			now = time(NULL);
+			if((now - lastRegCheck) > 10){
+				// more than 10 seconds since last c registeration check
+				pthread_mutex_lock(&sipMutex);
+				send(sip_ctl_sock, req, strlen(req), 0);
+				pthread_mutex_unlock(&sipMutex);
+				lastRegCheck = now;
+			}
+		}else{
+			// no connection... try to make one if baresipCtl is set
+			if(baresipPort && strlen(baresipPort)){
+				struct timeval tv;
+				int sock;
+				int trueVal = 1;
+				struct sockaddr_in adrRec;
+				
+				pthread_mutex_lock(&sipMutex);
+				sock = socket(PF_INET, SOCK_STREAM, IPPROTO_IP);
+				if(sock > -1){
+					// set up socket timeout for periodic polling of run status and dead child	
+					tv.tv_sec = 1;		// seconds
+					tv.tv_usec = 0;	// and microseconds
+					setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+					setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+					setsockopt(sock, SOL_SOCKET,SO_REUSEADDR, &trueVal, sizeof(trueVal));
+					setsockopt(sock, SOL_SOCKET,SO_KEEPALIVE, &trueVal, sizeof(trueVal));
+					bzero(&adrRec, sizeof(adrRec));
+					adrRec.sin_family = AF_INET;
+					adrRec.sin_port = htons(atoi(baresipPort));
+					adrRec.sin_addr.s_addr = inet_addr("127.0.0.1");
+					if(connect(sock, (struct sockaddr *)&adrRec, sizeof(adrRec))){
+						// connection failure
+						close(sock);
+						sipStatus = 0;
+					}else{
+						sip_ctl_sock = sock;
+						sipStatus = 1;
+						// clear leftovers from previous connection
+						*line = 0;
+						// connected, pass through the loop again
+						pthread_mutex_unlock(&sipMutex);
+						continue;
+					}
+				}
+				pthread_mutex_unlock(&sipMutex);
+			}
+			sleep(1);	// check again in one second
+		}
+		
+		// check for change in sip control port setting
+		if(tmp = GetMetaData(0, "sip_ctl_port", 1)){
+			if(baresipPort){
+				if(strcmp(baresipPort, tmp)){
+					// setting changed
+					free(baresipPort);
+					baresipPort = tmp;
+					tmp = NULL;
+					pthread_mutex_lock(&sipMutex);
+					if(sip_ctl_sock > -1)
+						close(sip_ctl_sock);
+					sip_ctl_sock = -1;
+					pthread_mutex_unlock(&sipMutex);
+					sipStatus = 0;
+				}
+			}else if(strlen(tmp)){
+				baresipPort = tmp;
+				tmp = NULL;
+			}
+			if(tmp)
+				free(tmp);
+		}
+	}
+	pthread_mutex_lock(&sipMutex);
+	if(sip_ctl_sock > -1)
+		close(sip_ctl_sock);
+	sip_ctl_sock = -1;
+	pthread_mutex_unlock(&sipMutex);
+	if(baresipPort)
+		free(baresipPort);
+	return NULL;
 }
 
 void *jackChangeWatcher(void *refCon){
@@ -1062,9 +1273,9 @@ void* metersUpdateThread(void *refCon){
 		}
 		
 		// Wait for a time out to check again
-        timeout.tv_nsec= 100 * 1000 * 1000;  // 100 ms
-        timeout.tv_sec=0;	// 0 seconds
-        nanosleep(&timeout, NULL);
+		timeout.tv_nsec= 100 * 1000 * 1000;  // 100 ms
+		timeout.tv_sec=0;	// 0 seconds
+		nanosleep(&timeout, NULL);
 	}
 	if(record)
 		free(record);

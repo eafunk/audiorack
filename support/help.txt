@@ -191,7 +191,8 @@ saves the current output group definitions to the output device definition confi
 jackconn [source port name string]>[destination port name string] 
 jackdisc [source port name string]>[destination port name string]
 Manually connect or disconnect the specified jack-audio ports.  Strings are of the typical jack format: client_name:port_name.  Note the ">" delimiter 
-between sourec and destinations.
+between sourec and destinations.  Connections will be persisten - arServer will attempt to reconnrect them if the ports go away and come back again, but
+will not persist through an arServer quit and restart until the connections made again as part of the startup process.
 
 jconlist
 Returns the current list of persistent jack connections, including connections that might be waiting to reconnect when a jack client comes back on-line.  This list is manipulated with the jackconn and jackdisc commands.
