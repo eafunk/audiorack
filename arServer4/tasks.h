@@ -24,7 +24,7 @@
 #include <time.h>
 #include "utilities.h"
 
-struct modbusData{	
+struct __attribute__((packed)) modbusData {	
 	uint16_t			transID;
 	uint16_t			protoID;
 	unsigned char		pading;

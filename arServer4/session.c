@@ -4449,7 +4449,7 @@ unsigned char handle_coilset(ctl_session *session, unsigned char val){
 	
 	// first parameter, ip-address of unit
 	addr = strtok_r(NULL, " ", &session->save_pointer);
-	if(addr != NULL){		
+	if(addr != NULL){
 		if((sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP)) >= 0){
 			tv.tv_sec = 1;  
 			tv.tv_usec = 0;  
@@ -4506,11 +4506,12 @@ unsigned char handle_coilset(ctl_session *session, unsigned char val){
 										}
 										if(size == limit){
 											// we have a whole packet
-											if(memcmp(&packet, &reply, size))
+											if(memcmp(&packet, &reply, size)){
 												tmp = strdup("[session] handle_coilset-Modbus Send: Reply mismatch from ");
 												str_appendstr(&tmp, addr);
 												serverLogMakeEntry(tmp);
 												free(tmp);
+											}
 											break;
 										}
 									}

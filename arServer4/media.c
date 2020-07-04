@@ -960,7 +960,7 @@ uint32_t LoadSipPlayer(const char *name, const char *src, const char *dst){
 	free(tmp);
 	tmp = NULL;
 
-	SetMetaData(instance->UID, "Name", "name");
+	SetMetaData(instance->UID, "Name", name);
 
 	SetMetaData(instance->UID, "Type", "sip");
 
