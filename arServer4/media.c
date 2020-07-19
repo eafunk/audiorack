@@ -1272,9 +1272,9 @@ uint32_t LoadURLPlayer(int pNum, const char *url_str, uint32_t UID){
 		char **argv;
 		pid_t child;
 	} *recPtr;
-    
-    result = 0;
-    instance = &mixEngine->ins[pNum];
+	
+	result = 0;
+	instance = &mixEngine->ins[pNum];
 
 	if(UID == 0){
 		locUID = createMetaRecord(url_str, NULL, 0);

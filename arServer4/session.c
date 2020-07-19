@@ -4562,7 +4562,7 @@ unsigned char handle_rstat(ctl_session *session){
 	while(UID = FindUidForKeyAndValue("Type", "encoder", i)){
 		name = GetMetaData(UID, "Name", 0);
 		if(!strlen(name))
-			str_setstr(&name, "<uninitialized>");
+			str_setstr(&name, "<unnamed>");
 		status = GetMetaInt(UID, "Status", NULL);
 		pos = GetMetaFloat(UID, "Position", NULL);
 		if((status & rec_running) && (when = GetMetaInt(UID, "TimeStamp", NULL)))
@@ -4775,10 +4775,17 @@ unsigned char handle_closerec(ctl_session *session){
 		}
 		if(uid){
 			tmp = GetMetaData(uid, "Type", 0);
-			if(!strcmp(tmp, "encoder")){		
-				if(queueControlOutPacket(mixEngine, cPeer_recorder | cType_end, uid, 0, NULL)){
+			if(!strcmp(tmp, "encoder")){
+				if(GetMetaInt(uid, "Status", NULL)){
+					if(queueControlOutPacket(mixEngine, cPeer_recorder | cType_end, uid, 0, NULL)){
+						session->lastUID = uid;
+						return rOK; 
+					}
+				}else{
+					// not initialized... just release the metadata record
+					releaseMetaRecord(uid);
 					session->lastUID = uid;
-					return rOK; 
+					return rOK;
 				}
 			}
 			free(tmp);
@@ -4789,38 +4796,90 @@ unsigned char handle_closerec(ctl_session *session){
 }
 
 unsigned char handle_newrec(ctl_session *session){
-	char buf[16]; /* send data buffer */
-    int tx_length;
-   	uint32_t newUID;
+	char buf[32]; /* send data buffer */
+	int tx_length;
+	uint32_t newUID;
+	struct tm tm;
+	time_t ut;
+	char *tmp;
 	
 	if(newUID = createMetaRecord(NULL, NULL, 0)){
+		time(&ut);
+		localtime_r(&ut, &tm);
+		strftime(buf, sizeof(buf), "Rec%Y-%m-%d_%H%M%S", &tm);
+		SetMetaData(newUID, "Name", buf);
 		SetMetaData(newUID, "Type", "encoder");
 		SetMetaData(newUID, "Status", "0");
 		SetMetaData(newUID, "Pipeline", "");
-		session->lastUID = newUID;
+		
+		// get partial path to recorder templates directory
+		tmp = GetMetaData(0, "file_rec_template_dir", 0);
+		if(strlen(tmp)){
+			if(strrchr(tmp, directoryToken) != (tmp + strlen(tmp)))
+				// no trailing slash... add it
+				str_appendchr(&tmp, directoryToken);
+		}else
+			str_setstr(&tmp, ".audiorack/templates/");
+			
+		if(session->save_pointer && strlen(session->save_pointer)){
+			// if a second parameter is provided, use name or path to specify the recorder config file 
+			if(strcmp(session->save_pointer, "none")){
+				if(strchr(session->save_pointer, directoryToken)){
+					// full or partial path specified... load the template file as passed
+					str_setstr(&tmp, session->save_pointer);
+				}else{
+					// just a name, make path relative to the templates directory
+					str_appendstr(&tmp, session->save_pointer);
+				}
+			}else{
+				// unlesss it's "none", then don't load any config file
+				free(tmp);
+				tmp = NULL;
+			}
+		}else{
+			// use default recorder template: 
+			str_appendstr(&tmp, "default.rec");
+		}
+		
+		session->lastUID = newUID;  // need to set this for config load below
+
+		if(tmp){
+			if(!loadConfiguration(session, tmp)){
+				// failed to open file
+				free(tmp);
+				releaseMetaRecord(newUID);
+				session->errMSG = "Failed to read specified recorder template\n";
+				return rError;
+			}
+			free(tmp);
+		}
+		
 		tx_length = snprintf(buf, sizeof buf, "UID=%08x\n", (unsigned int)newUID);
 		my_send(session, buf, tx_length, session->silent);
 		return rOK;
 	}
 	session->errMSG = "Error creating a new encoder UID record.\n";
-	return rError;	
+	return rError;
 }
 
 unsigned char handle_initrec(ctl_session *session){
 	char *param;
 	char *end;
 	char *tmp;
+	char *name;
+	char *pipe;
 	uint32_t uid;
 	
 	struct execRec{
 		char *argv[16];	// arRecorder takes no more than 14 args + argv[0] run path + NULL at end
 		pid_t child;
 	} recPtr;
-	char *wdir;
+	char *wdir, *rdir;
 	char *save_pointer;
 	int i, fd;
 	char pidStr[256];
 	long val;
+	float gain;
 
 	// first parameter, encoder UID in hex format
 	param = strtok_r(NULL, " ", &session->save_pointer);
@@ -4837,6 +4896,26 @@ unsigned char handle_initrec(ctl_session *session){
 			tmp = GetMetaData(uid, "Type", 0);
 			if(!strcmp(tmp, "encoder")){
 				free(tmp);
+				rdir = GetMetaData(0, "def_record_dir", 0);
+				if(!strlen(rdir)){
+					// get working diretory if def_record_dir is empty
+					struct passwd pwrec;
+					struct passwd* pwPtr;
+					char pwbuf[1024];
+					free(rdir);
+					if(strlen(wdir_path) == 0){
+						// Get our effective user's home directory
+						if(getpwuid_r(geteuid(), &pwrec, pwbuf, sizeof(pwbuf), &pwPtr) != 0)
+							rdir = strdup(pwPtr->pw_dir);
+						else
+							rdir = strdup("~");
+					}else
+						rdir = strdup(wdir_path);
+				}
+				if(strrchr(rdir, directoryToken) != (rdir + strlen(tmp) - 1))
+					// no trailing slash... add it
+					str_appendchr(&rdir, directoryToken);
+				
 				// populate argument strings
 				tmp = GetMetaData(0, "file_bin_dir", 0);
 				if(strlen(tmp)){
@@ -4871,6 +4950,10 @@ unsigned char handle_initrec(ctl_session *session){
 				}
 				tmp=GetMetaData(uid, "MakePL", 0);
 				if(strlen(tmp)){
+					// handle special rec_dir macro, which doesn't corrispond to a meta value
+					str_ReplaceAll(&tmp, "[rec_dir]", rdir);
+					// next we conver all pipeline string macros into their values
+					resolveStringMacros(&tmp, uid);
 					recPtr.argv[i] = strdup("-a");
 					i++;
 					recPtr.argv[i] = tmp;
@@ -4885,23 +4968,33 @@ unsigned char handle_initrec(ctl_session *session){
 					recPtr.argv[i] = ustr(val);
 					i++;
 					
-					tmp=GetMetaData(uid, "Name", 0);
-					if(strlen(tmp)){
-						recPtr.argv[i] = tmp;
+					name=GetMetaData(uid, "Name", 0);
+					if(strlen(name)){
+						recPtr.argv[i] = name;
 						i++;
 						recPtr.argv[i] = strdup(mixEngine->ourJackName);
 						i++;
 						recPtr.argv[i] = ustr(uid);
 						i++;
 						tmp=GetMetaData(uid, "Ports", 0);
+						str_ReplaceAll(&tmp, "[ourJackName]", mixEngine->ourJackName);
 						if(strlen(tmp)){
 							recPtr.argv[i] = tmp;
 							i++;
-							tmp=GetMetaData(uid, "Pipeline", 0);
-							if(strlen(tmp)){
-								recPtr.argv[i] = tmp;
+							pipe=GetMetaData(uid, "Pipeline", 0);
+							if(strlen(pipe)){
+								// handle special rec_dir macro, which doesn't corrispond to a meta value
+								str_ReplaceAll(&pipe, "[rec_dir]", rdir);
+								// next we conver all pipeline string macros into their values
+								resolveStringMacros(&pipe, uid);
+								
+								recPtr.argv[i] = pipe;
 								i++;
 								recPtr.argv[i] = NULL;
+								// note desired volume (gain) before running
+								// this meta value will be cleared to 1.0, and we will need 
+								// to restore it.
+								gain = GetMetaFloat(uid, "Volume", NULL);
 								
 								// execute it;
 								recPtr.child = fork();
@@ -4920,7 +5013,7 @@ unsigned char handle_initrec(ctl_session *session){
 									}else
 										wdir = wdir_path;
 									if(strlen(wdir) > 0)
-										chdir(wdir);		
+										chdir(wdir);
 								
 									// redirect the standard descriptors to /dev/null
 									fd = open("/dev/null", O_RDONLY);
@@ -4963,6 +5056,7 @@ unsigned char handle_initrec(ctl_session *session){
 										free(recPtr.argv[i]);
 										i++;
 									}
+									free(rdir);
 									SetMetaData(uid, "Status", "1");	// set status to loading
 									sleep(2);
 									if(waitpid(recPtr.child, NULL, WNOHANG)){
@@ -4974,20 +5068,27 @@ unsigned char handle_initrec(ctl_session *session){
 										return rError;
 									}else{
 										/* still running after 2 seconds */
+										valuetype val;
+										/* restore recorder gain, if Volume setting was non-zero prior to running */
+										if(val.fVal = gain){
+											val.iVal = htonl(val.iVal);
+											queueControlOutPacket(mixEngine, cPeer_recorder | cType_vol, uid, 4, (char *)&(val.iVal));
+										}
+										/* all done */
 										return rOK;
 									}
 								}
-			
+								
 							}else
-								free(tmp);
+								free(pipe);
 						}else
 							free(tmp);
 						
 					}else
-						free(tmp);	
+						free(name);	
 				}
-	
 				/* failed */
+				free(rdir);
 				while(i--)
 					free(recPtr.argv[i]);
 			}else

@@ -143,12 +143,23 @@ configuration found in the /opt/audiorack/support/ directory.
 
 This default configuration will create a .audiorack directory in the 
 user's account that runs the program.  This directory is used to store
-program settings, and can optionally contain an alternate startup file.
+program settings, and on first run, will have a copy of the startup file
+/opt/audiorack/support/user_startup.conf copied into it as ars_startup.conf.
+You can edit the .audiorack/ars_startup.conf file to customize it. At 
+startup, an empty triggers directory is created in if it doesn't already 
+exist in the .audiorack directory, in which you can place command files 
+that are executed at start and stop of mute busses, players with matching 
+names, etc. And also at startup, a templates directory is created, if it 
+doesn't already exist, and filled with copies of all the recorder creation 
+template files found in /opt/audiorack/support/templates.  Existing files
+are not overwritten, so you can customized these recorder templates. These
+files are specified by name when the newrec command is executed to pre-load
+a newly created recorder instance with some base settings for the desired
+recorder type, such as mp3file.rec, wavfile.rec, etc.
+
 An alternate startup file can contain pre-load configuration flags which
 are treated as if the command line options were passed when the program 
-was run. Copy the /opt/audiorack/support/user_startup.conf into your new
-~/.audiorack directory as ars_startup.conf and edit it to customize this
-startup file.
+was run. 
 
 Note that this default launch of arServer4 will run arServer4 in the
 background, keep-alive off, standard IO sockets closed.  For debugging, 

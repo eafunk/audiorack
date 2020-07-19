@@ -377,11 +377,39 @@ returns the UID of the first item found that has a specified metadata property v
 rstat
 returns the current status and other information for all the current recorders
 
-newrec
-Creates a new file recorder/streamer instance with no specified properties.  The UID of the new instance is returned to reference it in the commands that follow
+newrec [recorder template file path]
+Creates a new file recorder/streamer instance.  When sucessfull, UID of the new instance is returned to reference it in the commands that follow.
+The specified recorder template file can be the full or partial path (from current working dir) to the desired recorder template used to configure 
+the recorder, or it can a file name, in which case the file_rec_template_dir setting specified a directory to prepend the given path with. If 
+file_rec_template_dir is not set, .audiorack/templates/ is used.  If "none" is specified, then an empty recorder with no settings other than name, 
+Type="encoder" and Pipeline="" is returned.  If no recorder template file path is specified, then a template called default.rec is loaded from the 
+file_rec_template_dir directory.
 
 initrec [UID integer]
-Initializes the specified file recorder/streamer instance UID, in hex format or -1 for last used UID. MetaData properties for the specified UID, set prior to issuing this command, are used to set up and initialize recorder/encoder. See appendix C for details on the recorder properties.
+Initializes the specified file recorder/encoder instance UID, in hex format or -1 for last used UID. 
+MetaData properties for the specified UID, set prior to issuing this command, usually via a template file,
+are used to set up and initialize recorder/encoder. 
+
+The Pipeline property is interperited prior to final initialization converting bracketed text into 
+the corrisponding property values, or default values, if specified. For example, if SampleRate is 
+not set, ChanNum is 2, Name is Rec2020-07-12_1335, the arserver top level setting def_record_dir 
+is ~/myrecordings and Pipleline is:
+appsrc name=audiosrc ! audioconvert ! audioresample ! audio/x-raw-int,rate=[SampleRate=44100],channels=[ChanNum=2,1,2],width=16,depth=16,signed=true ! wavenc ! filesink location=[rec_dir][Name].wav
+this will be converted to the following just before running the recorder:
+appsrc name=audiosrc ! audioconvert ! audioresample ! audio/x-raw-int,rate=44100,channels=2,width=16,depth=16,signed=true ! wavenc ! filesink location=~/myrecordings/Rec2020-07-12_1335.wav
+Note the special [rec_dir] macro which accesses the arserver def_record_dir setting rather than a recoder setting, and makes sure there is a trailing '/'.
+
+Likewise, the Ports property is interperited replacing "[ourJackName]" with the jack-audio client 
+name of this arserver instance. For example, if our jack-audio name is ars9550, the this Port property:
+[ourJackName]:mixBus3ch0&[ourJackName]:mixBus3ch1
+is converted to this prior to recorder execution:
+ars9550:mixBus3ch0&ars9550:mixBus3ch1
+Which heppend to be our mix-bus #3 output (Alt Mix Bus).
+
+And finally, the MakePL property is interperited as with the Pipeline property above, so that the 
+[rec_dir][Name] macro pair can be used so the playlist file has a similar name and location to the 
+media file. for exampel, MakePL set to:
+[rec_dir][Name].fpl
 
 startrec [UID integer]
 starts or re-starts the recorder with the associated UID (hex format)

@@ -343,13 +343,13 @@ char modbusQuery(int *sock, char *addr, unsigned char unitID, unsigned short inp
 				// bad address failure
 				close(*sock);
 				*sock = -1;
-				return -1;
+				return -1;	// connection failed
 			}
 			if(connect(*sock, (struct sockaddr *)&adrRec, sizeof(adrRec)) != 0){
 				// connection failure
 				close(*sock);
 				*sock = -1;
-				return -1;
+				return -1;	// connection failed
 			}
 		}
 	}
@@ -359,7 +359,7 @@ char modbusQuery(int *sock, char *addr, unsigned char unitID, unsigned short inp
 		// connection failure
 		close(*sock);
 		*sock = -1;
-		return -1;
+		return -2;	// write failed, lost connectionm
 	}
 
 	// get reply
@@ -374,7 +374,7 @@ char modbusQuery(int *sock, char *addr, unsigned char unitID, unsigned short inp
 				// reply is too big!
 				close(*sock);
 				*sock = -1;
-				return -5;
+				return -5;	// Wrong size reply
 			}
 			limit = reply.length + 6; // now read to the end of the packet only
 		}
@@ -385,7 +385,7 @@ char modbusQuery(int *sock, char *addr, unsigned char unitID, unsigned short inp
 				return (reply.data[1] & 0x01);
 			}else{
 				// invalid reply
-				return -3;
+				return -3;	// Invalid reply
 			}
 		}
 	}
@@ -394,8 +394,8 @@ char modbusQuery(int *sock, char *addr, unsigned char unitID, unsigned short inp
 	close(*sock);
 	*sock = -1;
 	if(rx_length)	// negative number indicates socket error
-		return -6;
-	return -2;	// zero indicated connection closed or RX timeout
+		return -6;	// socket error
+	return -4;	// zero indicated connection closed or RX timeout, lost connection
 }
 
 void modbusPoll(void  *refIn){
@@ -422,18 +422,23 @@ void modbusPoll(void  *refIn){
 				free(tmp);
 				break;
 			case -2:
-				tmp = strdup("[session] modbusPoll-Modbus Query: losted connection from ");
+				tmp = strdup("[session] modbusPoll-Modbus Query: Send failed to ");
 				str_appendstr(&tmp, rec->addr);
 				serverLogMakeEntry(tmp);
 				free(tmp);
 				break;
 			case -3:
-				tmp = strdup("[session] modbusPoll-Modbus Query: Invalid reply  from ");
+				tmp = strdup("[session] modbusPoll-Modbus Query: Invalid reply from ");
 				str_appendstr(&tmp, rec->addr);
 				serverLogMakeEntry(tmp);
 				free(tmp);
 				break;
 			case -4:
+				tmp = strdup("[session] modbusPoll-Modbus Query: Receive failed from ");
+				str_appendstr(&tmp, rec->addr);
+				serverLogMakeEntry(tmp);
+				free(tmp);
+				break;
 			case -5:
 				tmp = strdup("[session] modbusPoll-Modbus Query: Wrong size reply from ");
 				str_appendstr(&tmp, rec->addr);

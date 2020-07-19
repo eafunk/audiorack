@@ -215,7 +215,7 @@ double GetMetaFloat(uint32_t uid, const char *key, unsigned char *isEmpty){
 		if(isEmpty)
 			*isEmpty = 0;
 	}else if(isEmpty)
-			*isEmpty = 1;
+		*isEmpty = 1;
 	pthread_rwlock_unlock(&dataLock);
 	return result;
 }
@@ -409,6 +409,46 @@ uint32_t FindUidForKeyAndValue(const char *key, const char *value, unsigned int 
 	}
 	pthread_rwlock_unlock(&dataLock);			
 	return result;
+}
+
+void resolveStringMacros(char **theStr, uint32_t uid){
+	// where uid is the metadata item to draw the requested metadata property from.
+	// macro can be of the forms:
+	// [Property=DefValue,comma,list,of,values,to,choose,from]
+	// [Property=DefValue]
+	// [Property]
+	// Default value, if set, is used when the property is empty.
+	// value list is ignored buy this function. It is intened for UI generation
+	char *start, *end;
+	char *prop, *defval, *tmp;
+	unsigned int loc;
+	
+	if(theStr && *theStr){
+		while(start = strchr(*theStr, '[')){
+			if(end = strchr(*theStr, ']')){
+				*end = 0;
+				prop = strtok_r(start+1, "=", &tmp);
+				defval = strtok_r(NULL, ",", &tmp);
+				tmp = GetMetaData(uid, prop, 0);
+				if(!strlen(tmp)){
+					if(defval)
+						str_setstr(&tmp, defval);
+				}
+				loc = start - *theStr;
+				// fill start to end of string with spaces
+				// clearing out NULLs we inserted above
+				prop = start;
+				while(prop <= end){
+					*prop = ' ';
+					prop++;
+				}
+				str_cutstr(theStr, loc, end-start+1);
+				str_insertstr(theStr, tmp, loc);
+				free(tmp);
+			}else
+				break;
+		}
+	}
 }
 
 // Queue functions should never be called while the data lock is held 

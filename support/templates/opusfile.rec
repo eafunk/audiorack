@@ -1,0 +1,5 @@
+setmeta -1 Pipeline appsrc name=audiosrc ! audioconvert ! audioresample ! audio/x-raw,rate=[samplrate=48000,8000,12000,16000,24000,48000],channels=[channels=2,1,2] ! opusenc bitrate=[bitrate=128000] ! oggmux ! filesink location=[rec_dir][Name].opus
+; use our alt mix bus as a recording source
+setmeta -1 TagBus 4
+setmeta -1 Ports [ourJackName]:mixBus3ch0&[ourJackName]:mixBus3ch1
+

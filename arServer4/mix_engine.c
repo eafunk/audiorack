@@ -151,7 +151,7 @@ int process(jack_nframes_t nframes, void *arg){
 	mixEngineRecPtr mixEngineRef = (mixEngineRecPtr)arg;
 	
 	unsigned int i, b, c, s, max, icount, ccount, bcount, busbits;
-	jack_default_audio_sample_t *in, *out, *samp, *dest;
+	jack_default_audio_sample_t *src, *samp, *dest;
 	jack_port_t **in_port;
 	jack_port_t **out_port;
 	float leftVol, rightVol, vol;
@@ -175,7 +175,7 @@ int process(jack_nframes_t nframes, void *arg){
 	unsigned char wakeChanged;
 	float curSegLevel;
 	unsigned char handled = 0;
-	uint32_t feedBits;
+	unsigned char invertflag;
 	
 	wakeChanged = 0;
 	activeBus = 0;
@@ -200,10 +200,10 @@ int process(jack_nframes_t nframes, void *arg){
 						char type = packet->type & 0x0f;
 						if(type == cType_end){
 							/* handle end of media message */
-							inchrec->status = inchrec->status | status_finished;	
+							inchrec->status = inchrec->status | status_finished;
 							// force a segue when segNext is set
 							if(inchrec->segNext)
-								inchrec->posSeg = 0.1;				
+								inchrec->posSeg = 0.1;
 							inchrec->requested = inchrec->requested | change_stop;
 							handled = 1;
 						}else if((type == cType_pos) && (size == 11)){
@@ -463,41 +463,42 @@ int process(jack_nframes_t nframes, void *arg){
 			}
 		}
 		
-		inchrec->tmpFeedBus = 0;
-		feedBits = inchrec->feedBus & 0xE1000000;
-		if(feedBits & mixEngineRef->activeBus)
+		// feed bus assignment
+		inchrec->tmpFeedBus = inchrec->feedBus & 0xE1000000;
+		if(inchrec->tmpFeedBus & mixEngineRef->activeBus)
 			// override the selected feedbus to cue when TB or Cue override bits
 			// are enabled AND the accociated bus has play activity
-			feedBits = 2;
+			inchrec->tmpFeedBus = 2;
 		else
 			// otherwise, use the specified mix bus number + 1 for the feed source
-			feedBits = 0x0000001f & inchrec->feedBus;
-		inchrec->tmpFeedBus = feedBits;
+			inchrec->tmpFeedBus = 0x0000001f & inchrec->feedBus;
 		
 		curSegLevel = 0;
 		for(c=0; c<ccount; c++){ 	// channel c of input number i
-			/* clear mixminus/premix outputs */
-			out = jack_port_get_buffer(*out_port, nframes);
-			memset(out, 0, nframes * sizeof(jack_default_audio_sample_t));
+			/* clear mixminus/feed outputs - we are using these buffers for
+			 * temporary volume/balance scaled input sample storage */
+			src = dest = jack_port_get_buffer(*out_port, nframes);
+			memset(dest, 0, nframes * sizeof(jack_default_audio_sample_t));
 			
-			/* get input buffer */
-			in = samp = jack_port_get_buffer(*in_port, nframes);
+			/* get actual input buffer */
+			samp = jack_port_get_buffer(*in_port, nframes);
 			// volume and balance scaling
 			pk = 0.0;
 			avr = 0.0;
 			for(s = 0; s < nframes; s++){
 				if(c & 0x1)
-					*samp = *samp * rightVol;
+					*dest = *samp * rightVol;
 				else
-					*samp = *samp * leftVol;
+					*dest = *samp * leftVol;
 					
 				// VU meter sample calculations - all VU levels are squared (power)
-				SampSqrd = (*samp) * (*samp);
+				SampSqrd = (*dest) * (*dest);
 				avr = avr + SampSqrd;
 				if(SampSqrd > pk)
 					pk = SampSqrd;
 					
 				samp++;
+				dest++;
 			}
 			
 			/* VU Block calculations */
@@ -519,6 +520,7 @@ int process(jack_nframes_t nframes, void *arg){
 				vu->peak = pk;
 			
 			/* Mix samples into mix ringbuffers at current write point */
+			invertflag = 0;
 			for(b=0; b<bcount; b++){
 				/* bus b, channel c arranged as a linear array of alternating 
 				 * channels grouped by bus, index = 2*b+c */
@@ -528,15 +530,15 @@ int process(jack_nframes_t nframes, void *arg){
 					
 				/* if bus is enabled, mix samples into it's buffer */
 				if((1 << b) & busbits){ // note: only one busbit bit should be set, if any
-					mixbuffer_sum(mixEngineRef->mixbuses, nframes, in, c, b, 0);
-					if((b + 1) == feedBits){
-						/* invert and copy pre-mixed samples to the corrisponding 
-						 * mixminus/feed output */
-						samp = in;
+					mixbuffer_sum(mixEngineRef->mixbuses, nframes, src, c, b, 0);
+					if((b + 1) == inchrec->tmpFeedBus){
+						invertflag = 1;
+						/* If this bus is also the feed bus, invert scaled input samples
+						 * that are already in the mixminus/feed output buffer */
+						dest = src;
 						for(s = 0; s < nframes; s++){
-							*out = -(*samp);
-							samp++;
-							out++;
+							*dest = -(*dest);
+							dest++;
 						}
 					}
 				}
@@ -545,10 +547,14 @@ int process(jack_nframes_t nframes, void *arg){
 					/* readback of summed bus VU meters goes here */
 				}
 			}
+			if(invertflag == 0)
+				// no mixminus in the feed out.  Zero the temporary scaled input samples.
+				memset(src, 0, nframes * sizeof(jack_default_audio_sample_t));
+			
 			in_port++;
 			out_port++;
-		}			
-
+		}
+		
 		if(inchrec->isConnected){
 			if((inchrec->status & status_standby) == 0){
 				inchrec->status = inchrec->status & (~status_loading);
@@ -614,12 +620,11 @@ int process(jack_nframes_t nframes, void *arg){
 	/* distrubute mix buffers to assigned input mix-minus outputs */
 	inchrec = mixEngineRef->ins;
 	for(i=0; i<icount; i++){
-		/* input number i */
 		if(inchrec->tmpFeedBus && (inchrec->tmpFeedBus <= bcount)){
 			out_port = inchrec->mm_jPorts;
 			vol = inchrec->feedVol;
-			for(c=0; c<ccount; c++){ 	// channel c of input number i
-				/* channel c of output number i */
+			for(c=0; c<ccount; c++){
+				/* channel c */
 				samp = jack_port_get_buffer(*out_port, nframes);
 				/* add samples from assigned mixbus ring buffer */
 				mixbuffer_read(mixEngineRef->mixbuses, nframes, 
@@ -694,11 +699,11 @@ int process(jack_nframes_t nframes, void *arg){
 		/* note: ccount still set from input processing loop */
 		for(c=0; c<ccount; c++){
 			/* channel c of output number i */
-			samp = out = jack_port_get_buffer(*out_port, nframes);
+			samp = dest = jack_port_get_buffer(*out_port, nframes);
 
 			/* get samples from assigned mixbus ring buffer */
 			mixbuffer_read(mixEngineRef->mixbuses, nframes, 
-											delay, out, c, b, 0);
+											delay, dest, c, b, 0);
 											
 			if(vol < 1.0){	
 				/* scale the sample for the output group volume */
@@ -725,10 +730,10 @@ int process(jack_nframes_t nframes, void *arg){
 	for(b=0; b<bcount; b++){
 		for(c=0; c<ccount; c++){
 			/* channel c of mix output number b */
-			out = samp = jack_port_get_buffer(*out_port, nframes);
+			dest = samp = jack_port_get_buffer(*out_port, nframes);
 			/* get samples from assigned mixbus ring buffer */
 			mixbuffer_read(mixEngineRef->mixbuses, nframes, 
-											0, out, c, b, 0);
+											0, dest, c, b, 0);
 			pk = 0.0;
 			avr = 0.0;
 			for(s = 0; s < nframes; s++){

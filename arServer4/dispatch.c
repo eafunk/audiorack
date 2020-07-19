@@ -1586,7 +1586,7 @@ void *controlQueueInWatcher(void *refCon){
 													if((item = cJSON_GetObjectItem(ar, "ArtistID")) && (item->valueint))
 														entryRec->artistID = item->valueint;
 													if((item = cJSON_GetObjectItem(ar, "OwnerID")) && (item->valueint))
-														entryRec->ownerID = item->valueint;												
+														entryRec->ownerID = item->valueint;
 													if((item = cJSON_GetObjectItem(ar, "db_loc")) && (item->valueint))
 														entryRec->location = item->valueint;
 												}

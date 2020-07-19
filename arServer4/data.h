@@ -72,6 +72,7 @@ uint32_t GetMetaRev(uint32_t uid);
 unsigned int GetMetaKeysAndValues(uint32_t uid, char ***keys, char ***values);
 uint32_t FindUidForKeyAndValue(const char *key, const char *value, unsigned int index);
 unsigned char DelMetaData(uint32_t uid, const char *key);
+void resolveStringMacros(char **theStr, uint32_t uid);
 
 queueRecord *createQueueRecord(uint32_t uid);
 unsigned char releaseQueueRecord(queueRecord *root, queueRecord *rec, unsigned char force);

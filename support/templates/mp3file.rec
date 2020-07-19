@@ -1,0 +1,5 @@
+setmeta -1 Pipeline appsrc name=audiosrc ! audioresample ! audio/x-raw,rate=[samplerate=44100,8000,16000,32000,44100,48000,96000],channels=[channels=2,1,2] ! audioconvert ! lamemp3enc target=bitrate bitrate=[kbitrate=192] ! filesink location=[rec_dir][Name].mp3
+; use our alt mix bus as a recording source
+setmeta -1 TagBus 4
+setmeta -1 Ports [ourJackName]:mixBus3ch0&[ourJackName]:mixBus3ch1
+

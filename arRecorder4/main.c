@@ -110,8 +110,10 @@ typedef struct __attribute__((packed)){		/* data structures for each channel ins
 
 typedef struct{
 	// values are scalar magnitude
-	float	peak;		
+	float	peak;
 	float	avr;
+	float	ptmp;
+	float	atmp;
 } vuData;
 
 #define cbQsize	256		// must be a power of 2
@@ -126,14 +128,14 @@ typedef struct{
 typedef struct {
 		uint32_t ID;
 		uint32_t fingerprint;
-        char *name;
-        char *artist;
-        char *album;
-        char *source;
+		char *name;
+		char *artist;
+		char *album;
+		char *source;
 		char *comment;
 		char *owner;
-        uint32_t albumID;
-        uint32_t artistID;
+		uint32_t albumID;
+		uint32_t artistID;
 		uint32_t ownerID;
 }ProgramLogRecord;
 
@@ -557,6 +559,7 @@ void jack_shutdown_callback(void *arg){
 }
 
 static int jack_process(jack_nframes_t nframes, void *arg){
+	jack_nframes_t origFrames = nframes;
 	CustomData *data = (CustomData *)arg;
 	jack_port_t **port;
 	unsigned int i, s; 
@@ -573,6 +576,7 @@ static int jack_process(jack_nframes_t nframes, void *arg){
 	controlPacket header;
 	valuetype *val;
 	void *midi_bufferIn, *midi_bufferOut;
+	uint32_t peer;
 	
 	midi_bufferOut = jack_port_get_buffer(data->midiOut_jPort, nframes);
 	jack_midi_clear_buffer(midi_bufferOut);
@@ -602,7 +606,7 @@ static int jack_process(jack_nframes_t nframes, void *arg){
 	midi_bufferIn = jack_port_get_buffer(data->midiIn_jPort, nframes);
 	event_count = jack_midi_get_event_count(midi_bufferIn);
 	char change_flag = FALSE;
-	uint32_t peer = htonl(data->UID);
+	peer = htonl(data->UID);
 	for(i=0; i<event_count; i++){
 		jack_midi_event_get(&in_event, midi_bufferIn, i);
 		if(in_event.size > 6){
@@ -657,18 +661,25 @@ static int jack_process(jack_nframes_t nframes, void *arg){
 						change_flag = TRUE;
 					}
 				}else if(type == cType_reid){
+					/* handle realtime re-ID packet */
 					if(cnt == 4){
 						val = (valuetype *)&packet->data;
 						data->UID = ntohl(val->iVal);
 						change_flag = TRUE;
-						peer = htonl(data->UID);
+					}
+				}else if(((packet->type & cType_MASK) == cType_tags)){ 
+					/* tags (most likely application specific) directed to just this recorder:
+					 * enqueue packet for non-realtime tag handling */
+					if(((cnt+7) <= 2048) && (jack_ringbuffer_write_space(data->ctlrecvqueue) >= (cnt+7))){
+						jack_ringbuffer_write(data->ctlrecvqueue, (char *)packet, cnt+7);
+						change_flag = TRUE;
 					}
 				}
 			}else if(((packet->type & cType_MASK) == cType_tags)){ 
 				if(((packet->type & cPeer_MASK) == cPeer_allrec) 
-						|| (((packet->type & cPeer_MASK) == cPeer_bus) && (ntohl(packet->peer) & (1 << (data->tagBus - 1))))
-						|| (((packet->type & cPeer_MASK) == cPeer_recorder) && (ntohl(packet->peer) == peer))){
-					/* enqueue packet for non-realtime tag handling */
+						|| (((packet->type & cPeer_MASK) == cPeer_bus) && data->tagBus && (ntohl(packet->peer) & (1 << (data->tagBus - 1))))){
+					/* tags directed to all or any recorder recording the tagBus, likely track info:
+					 * enqueue packet for non-realtime tag handling */
 					if(((cnt+7) <= 2048) && (jack_ringbuffer_write_space(data->ctlrecvqueue) >= (cnt+7))){
 						jack_ringbuffer_write(data->ctlrecvqueue, (char *)packet, cnt+7);
 						change_flag = TRUE;
@@ -694,46 +705,66 @@ static int jack_process(jack_nframes_t nframes, void *arg){
 	port = data->audioIn_jPorts;
 	vol = data->vol;
 	for(i=0; i<data->chCount; i++){
-		/* get JACK port sample buffer */
-		samp = data->jbufs[i] = jack_port_get_buffer(port[i], nframes);
+		/* get JACK port sample buffers */
+		data->jbufs[i] = jack_port_get_buffer(port[i], nframes);
+		// and get vu records and clear their temp. variables
+		vu = &(data->VUmeters[i]);
+		vu->atmp = 0.0;
+		vu->ptmp = 0.0;
+	}
 		
-		// volume  scaling
-		pk = 0.0;
-		avr = 0.0;
-		for(s = 0; s < nframes; s++){
-			*samp = *samp * vol;
-			// VU meter sample calculations - all VU levels are squared (power)
-			SampSqrd = (*samp) * (*samp);
-			avr = avr + SampSqrd;
-			if(SampSqrd > pk)
-				pk = SampSqrd;
-			samp++;
+	jack_ringbuffer_get_write_vector(data->ringbuffer, rbData);
+	/* pain-in-the-ass ring buffer interleaving across a possibly split (ring) buffer */
+	sampCnt = (rbData[0].len + rbData[1].len) / sizeof(jack_default_audio_sample_t);
+	rbdPtr = &rbData[0];
+	while(nframes && sampCnt){
+		for(i=0; i<data->chCount; i++){
+			vu = &(data->VUmeters[i]);
+			dest = (jack_default_audio_sample_t*)rbdPtr->buf;
+			src = data->jbufs[i];
+			*dest = (*src) * vol;
+			
+			// VU sample calculations
+			SampSqrd = (*dest) * (*dest);
+			vu->atmp = vu->atmp + SampSqrd;
+			if(SampSqrd > vu->ptmp)
+				vu->ptmp = SampSqrd;
+			
+			rbdPtr->buf = rbdPtr->buf + sizeof(jack_default_audio_sample_t);
+			data->jbufs[i] = data->jbufs[i] + 1;
+			sampCnt--;
+			sampWrite++;
+			rbdPtr->len = rbdPtr->len - sizeof(jack_default_audio_sample_t);
+			if(!rbdPtr->len)
+				rbdPtr = &rbData[1];
 		}
-		
+		nframes--;	
+	}
+
+	for(i=0; i<data->chCount; i++){
 		/* VU Block calculations */
 		vu = &(data->VUmeters[i]);
 		// VU avarage over 10,000 samples - aprox 10 Hz @ sample rate = 96,000
-		avr = ( 1 - (0.0001 * nframes)) * vu->avr + 0.0001 * avr;
-		if(avr > 100.0)
-			avr = 100.0; 
-		vu->avr = avr;
+		vu->avr = ( 1 - (0.0001 * (origFrames))) * vu->avr + 0.0001 * vu->atmp;
+		if(vu->avr > 100.0)
+			vu->avr = 100.0; 
 
 		// VU peak fall time constatnt is 50,000 samples - aprox 2 Hz @ sample rate = 96,000
-		vu->peak = vu->peak * ( 1 - (0.00002 * nframes));
-		if(pk > 100.0)
-			pk = 100.0;
-		if(pk > vu->peak)
-			vu->peak = pk;	
+		vu->peak = vu->peak * ( 1 - (0.00002 * (origFrames)));
+		if(vu->peak > 100.0)
+			vu->peak = 100.0;
+		if(vu->ptmp > vu->peak)
+			vu->peak = vu->ptmp;
 	}
 	
 	/* send uv control port data every 100mS */
-	if(data->vuPeriod < nframes)
-		data->vuPeriod = nframes;
-	data->vuSampleRem = data->vuSampleRem - nframes;
+	if(data->vuPeriod < origFrames)
+		data->vuPeriod = origFrames;
+	data->vuSampleRem = data->vuSampleRem - origFrames;
 	if(data->vuSampleRem <= 0){
 		data->vuSampleRem = data->vuSampleRem + data->vuPeriod;
 		cnt = (sizeof(controlPacket) - 1) + (data->chCount * sizeof(vuNData));
-		if(packet = (controlPacket *)jack_midi_event_reserve(midi_bufferOut, nframes-1, cnt)){
+		if(packet = (controlPacket *)jack_midi_event_reserve(midi_bufferOut, origFrames-1, cnt)){
 			vuNData *values;
 			packet->type = cType_vu | cPeer_recorder;	
 			packet->peer = htonl(data->UID);
@@ -751,25 +782,8 @@ static int jack_process(jack_nframes_t nframes, void *arg){
 	if(data->closeReq)
 		pthread_cond_broadcast(&data->pushSemaphore);
 	else if((data->status & rec_running) || ((data->status & (rec_start | rec_wait)) == rec_start)){
-		jack_ringbuffer_get_write_vector(data->ringbuffer, rbData);
-		/* pain-in-the-ass ring buffer interleaving across a possibly split (ring) buffer */
-		sampCnt = (rbData[0].len + rbData[1].len) / sizeof(jack_default_audio_sample_t);
-		rbdPtr = &rbData[0];
-		while(nframes && sampCnt){
-			for(i=0; i<data->chCount; i++){
-				dest = (jack_default_audio_sample_t*)rbdPtr->buf;
-				src = data->jbufs[i];
-				*dest = *src;
-				rbdPtr->buf = rbdPtr->buf + sizeof(jack_default_audio_sample_t);
-				data->jbufs[i] = data->jbufs[i] + 1;
-				sampCnt--;
-				sampWrite++;
-				rbdPtr->len = rbdPtr->len - sizeof(jack_default_audio_sample_t);
-				if(!rbdPtr->len)
-					rbdPtr = &rbData[1];
-			}
-			nframes--;	
-		}
+		/* Only advance the write marker when running, otherwise, write over the same ring buffer segment
+		 * above, over and over again just to scale the samples and get VU data, until we do start running. */
 		jack_ringbuffer_write_advance(data->ringbuffer, sampWrite * sizeof(jack_default_audio_sample_t)); 
 		pthread_cond_broadcast(&data->pushSemaphore);
 		if(nframes)
@@ -906,9 +920,9 @@ void* handleCtlQueues(void *refCon){
 	ProgramLogRecord logRec;
 
 
-    pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
-    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
-    do{
+	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+	do{
 		/* check for writing settings to outqueue */
 		if(data->settingsChanged){
 
@@ -1037,7 +1051,6 @@ void handle_message(CustomData *data, GstMessage *msg) {
 			data->status = data->status | rec_err_con_fail;
 			break;
 		case GST_MESSAGE_EOS: 
-			g_print ("End-Of-Stream from %s\n", GST_OBJECT_NAME (msg->src));
 			if(!data->closeWaiting)
 				data->status = data->status | rec_err_con_fail;
 			gst_element_set_state(data->pl, GST_STATE_READY);
@@ -1045,9 +1058,6 @@ void handle_message(CustomData *data, GstMessage *msg) {
 		case GST_MESSAGE_STATE_CHANGED:
 			gst_message_parse_state_changed(msg, &old_state, &new_state, &pending_state);
 			if(GST_MESSAGE_SRC(msg) == GST_OBJECT (data->pl)){
-				g_print("Pipeline state changed from %s to %s:\n",
-								gst_element_state_get_name(old_state), 
-								gst_element_state_get_name(new_state));
 				
 				data->state = new_state;
 								
@@ -1063,7 +1073,6 @@ void handle_message(CustomData *data, GstMessage *msg) {
 					data->status = data->status & ~rec_start;
 					data->settingsChanged = TRUE;
 					pthread_cond_broadcast(&data->ctlSemaphore);
-g_print("status set to running & ready\n");
 				}					
 				if((new_state == GST_STATE_READY) && (old_state != GST_STATE_NULL)){
 					if(!data->closeWaiting && (data->status & (rec_start | rec_running))){
@@ -1473,6 +1482,7 @@ int main(int argc, char *argv[]){
 			return 0;
 		}
 	}
+	fprintf(stderr, "arRecorder version 4.0.0\n\n"); 
 	fprintf(stderr, "Usage: (optional, in front of required) [required - in order]\n"); 
 	fprintf(stderr, "%s (-p) (-a file-path) (-s unix-start-time) (-l time-limit-seconds) (-b tags-bus-bit-number) [our unique Jack name] [control client name] [ctlUID] [jack port connection list] [gstreamer-pipline]\n\n", argv[0]);
 	fprintf(stderr, "-p optionaly enables jack connection persistance, causing arRecorder to keep running when jack connections are lost\n");
@@ -1482,7 +1492,7 @@ int main(int argc, char *argv[]){
 	fprintf(stderr, "-s optionaly enables recorder auto-starting at/after the specified unix-time value.\n");
 	fprintf(stderr, "-l optionaly enables recorder auto-stoping at/after the specified record duration is reached.\n");
 	fprintf(stderr, "-b optionaly enables the passing of song tag data, received from the control port, to the gstreamer pipeline\n");
-	fprintf(stderr, "when the received tag play bus bits have the specified bit number [1..8] set.\n");
+	fprintf(stderr, "when the received tag play bus bits have the specified bit number [1..8] set (bit number + 1).\n");
 	fprintf(stderr, "Control client name is the Jack name for an arServer instance to which we will connect our control ports,\n");
 	fprintf(stderr, "and ctlUID is our recorder unique ID with which we will tag control messages we send, and watch for taged messages\n");
 	fprintf(stderr, "that match our id that we receive.\n");

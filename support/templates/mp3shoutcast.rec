@@ -1,0 +1,5 @@
+setmeta -1 Pipeline appsrc name=audiosrc ! audioconvert ! audioresample ! audio/x-raw,rate=[samplerate=44100,8000,16000,32000,44100,48000,96000],channels=[channels=2,1,2] ! lamemp3enc target=bitrate cbr=true bitrate=[kbitrate=128] ! shout2send ip=[server] port=[port=8001] password=[password] mount=[mount]
+; use our main mix bus as a recording source
+setmeta -1 TagBus 3
+setmeta -1 Ports [ourJackName]:mixBus2ch0&[ourJackName]:mixBus2ch1
+

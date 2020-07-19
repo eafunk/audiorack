@@ -275,8 +275,6 @@ uint32_t SplitItem(uint32_t parent, char *URLstr, unsigned char last){
 			if(atof(tmp = GetMetaData(parent, "Volume", 0)) != 0.0)
 				SetMetaData(newID, "Volume", tmp);
 			free(tmp);
-			SetMetaData(newID, "fx_config", (tmp = GetMetaData(parent, "fx_config", 0)));
-			free(tmp);
 			SetMetaData(newID, "def_segout", (tmp = GetMetaData(parent, "def_segout", 0)));
 			free(tmp);
 			SetMetaData(newID, "def_seglevel", (tmp = GetMetaData(parent, "def_seglevel", 0)));
@@ -814,12 +812,14 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 	free(type);
 }
 
-void watchdogReset(void){	
+void watchdogReset(void){
 	// check main bus VU meters for silence
 	if(silent_timeout && (silent_bus < mixEngine->busCount)){
 		float sum = 0.0;
-		for(int i=silent_bus; i<mixEngine->chanCount; i++)
-			sum += mixEngine->mixbuses->VUmeters[i].peak;
+		int c = mixEngine->chanCount * silent_bus;
+		int m = c + mixEngine->chanCount;
+		for(; c < m; c++)
+			sum += mixEngine->mixbuses->VUmeters[c].peak;
 
 		if(sum < silent_thresh){
 			if((difftime(time(NULL), silent_event) > silent_timeout)){
