@@ -431,8 +431,8 @@ int LoadItem(int pos, queueRecord *qrec){
 				data.reference = 0;
 				data.senderID = getSenderID();
 				data.value.iVal = 0;
-				notifyMakeEntry(nType_status, &data, sizeof(data));	
-			
+				notifyMakeEntry(nType_status, &data, sizeof(data));
+				
 				free(tmp);
 				return i;
 			}else{
@@ -481,7 +481,6 @@ void UnloadItem(int pos, queueRecord *qrec){
 		// retain the queue record (reference count++) so that
 		// the player unload doesn't also remove from the queue list
 		retainListRecord((LinkedListEntry *)qrec);
-	
 		qrec->status = 0;
 		qrec->player = 0;
 		port = instance->in_jPorts;
@@ -536,7 +535,7 @@ void MoveItem(int sourcePos, int destPos, unsigned char clearTimes){
 		
 	if(fromRec = moveAfterNode(fromRec, toRec, (LinkedListEntry *)&queueList)){
 		if(destPos >= mixEngine->inCount){
-			// unload from player if loaded and move up past the number of mixer inputes
+			// unload from player if loaded
 			UnloadItem(destPos, NULL);
 		}
 		plRev++;  // new rev number since the list changed 

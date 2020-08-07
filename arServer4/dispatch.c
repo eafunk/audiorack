@@ -665,40 +665,63 @@ void *playerChangeWatcher(void *refCon){
 				}
 				if(changed & change_loaded){
 					/* handle loaded player */
-					if(instance->UID){
-						name = GetMetaData(instance->UID, "Name", 0);
-						type = GetMetaData(instance->UID, "Type", 0);
-						if(strlen(triggerDir) && strlen(name) && !strcmp(type, "input")){
-							str_setstr(&triggerFile, triggerDir);
-							str_appendstr(&triggerFile, name);
-							str_appendstr(&triggerFile, ".load");
-							createTaskItem(triggerFile, loadConfigFromTask, NULL, instance->UID, i, 0, 0);
-							free(triggerFile);
-							triggerFile = NULL;
+					uint32_t locID;
+					if(locID = instance->UID){
+						if(instance->managed && (instance->status & status_deleteWhenDone)){
+							if(!getQueuePos(&locID)){
+								// doesn't apprear to be in the queue anymore... unload it.
+								// this can happen if an item is deleted from the list while it is loading.
+								instance->persist = 0;
+								jack_port_t **port;
+								port = instance->in_jPorts;
+								cmax = mixEngine->chanCount;
+								pthread_mutex_lock(&mixEngine->jackMutex);
+								for(c=0; c<cmax; c++){
+									jack_port_disconnect(mixEngine->client, *port);
+									port++;
+								}
+								pthread_mutex_unlock(&mixEngine->jackMutex);
+								// clear loaded flag
+								changed = changed & ~change_loaded;
+							}
 						}
-						free(name);
-						free(type);
+						if(changed & change_loaded){
+							name = GetMetaData(instance->UID, "Name", 0);
+							type = GetMetaData(instance->UID, "Type", 0);
+							if(strlen(triggerDir) && strlen(name) && !strcmp(type, "input")){
+								str_setstr(&triggerFile, triggerDir);
+								str_appendstr(&triggerFile, name);
+								str_appendstr(&triggerFile, ".load");
+								createTaskItem(triggerFile, loadConfigFromTask, NULL, instance->UID, i, 0, 0);
+								free(triggerFile);
+								triggerFile = NULL;
+							}
+							free(name);
+							free(type);
+						}
 					}
-					notifyData data;
-					data.reference = 0;
-					data.senderID = 0;
-					data.value.iVal = 0;
-					notifyMakeEntry(nType_status, &data, sizeof(data));
-					
-					data.reference = htonl(i);
-					data.value.fVal = instance->vol;
-					data.value.iVal = htonl(data.value.iVal);
-					notifyMakeEntry(nType_vol, &data, sizeof(data));
-					
-					data.value.fVal = instance->bal;
-					data.value.iVal = htonl(data.value.iVal);
-					notifyMakeEntry(nType_bal, &data, sizeof(data));
+					if(changed & change_loaded){
+						notifyData data;
+						data.reference = 0;
+						data.senderID = 0;
+						data.value.iVal = 0;
+						notifyMakeEntry(nType_status, &data, sizeof(data));
+						
+						data.reference = htonl(i);
+						data.value.fVal = instance->vol;
+						data.value.iVal = htonl(data.value.iVal);
+						notifyMakeEntry(nType_vol, &data, sizeof(data));
+						
+						data.value.fVal = instance->bal;
+						data.value.iVal = htonl(data.value.iVal);
+						notifyMakeEntry(nType_bal, &data, sizeof(data));
 
-					data.value.iVal = htonl(instance->busses);
-					notifyMakeEntry(nType_bus, &data, sizeof(data));
-	
-					data.value.iVal = htonl(instance->status);
-					notifyMakeEntry(nType_pstat, &data, sizeof(data));
+						data.value.iVal = htonl(instance->busses);
+						notifyMakeEntry(nType_bus, &data, sizeof(data));
+		
+						data.value.iVal = htonl(instance->status);
+						notifyMakeEntry(nType_pstat, &data, sizeof(data));
+					}
 				}
 				if(changed & change_unloaded){
 					/* handle unloaded player */

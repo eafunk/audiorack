@@ -958,7 +958,7 @@ void* sessionThread(ctl_session *session){
 	tx_length = snprintf(command, sizeof command, "AudioRack Server, version %s\n", versionStr);
 
 	if(my_send(session, command, tx_length, 0) < 0) goto finish;
-	tx_length = snprintf(command, sizeof command, "Copyright (C) 2004-2019 Ethan Funk\n\n");
+	tx_length = snprintf(command, sizeof command, "Copyright (C) 2004-2020 Ethan Funk\n\n");
 	if(my_send(session, command, tx_length, 0) < 0)goto finish;
 	tx_length = snprintf(command, sizeof command, "AudioRack Server comes with ABSOLUTELY NO WARRANTY; for details\n");
 	if(my_send(session, command, tx_length, 0) < 0) goto finish;

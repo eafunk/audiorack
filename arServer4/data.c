@@ -510,6 +510,7 @@ unsigned char releaseQueueRecord(queueRecord *root, queueRecord *rec, unsigned c
 		}
 		
 		if(instance && instance->managed){
+			
 			uint32_t c, cmax;
 			jack_port_t **port;
 			// this will trigger the standard player unload
@@ -603,7 +604,7 @@ unsigned char getQueuePos(uint32_t *ref){
 		}
 		pthread_rwlock_unlock(&queueLock);
 	}
-    return 0;
+	return 0;
 }
 
 unsigned int queueGetNextSegPos(int *thisP){
