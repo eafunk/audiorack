@@ -510,7 +510,6 @@ unsigned char releaseQueueRecord(queueRecord *root, queueRecord *rec, unsigned c
 		}
 		
 		if(instance && instance->managed){
-			
 			uint32_t c, cmax;
 			jack_port_t **port;
 			// this will trigger the standard player unload

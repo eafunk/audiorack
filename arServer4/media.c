@@ -534,7 +534,7 @@ void m3uPLGetProperties(FILE *fp, uint32_t UID)
 			path = uriDecode(tmp);
 		free(tmp);
 		tmp = basename(path);
-		SetMetaData(UID, "Name", tmp);	
+		SetMetaData(UID, "Name", tmp);
 		free(path);
 		
 		// calculate and set duration
@@ -1239,6 +1239,8 @@ uint32_t LoadInputPlayer(int pNum, const char *url_str, uint32_t UID){
 			
 		/* set name property to connected application name */
 		if(name)
+			SetMetaData(locUID, "Name", name);
+
 		tmp = GetMetaData(instance->UID, "Controls", 0);
 		controls = controls | strtoul(tmp, NULL, 16);
 		free(tmp);

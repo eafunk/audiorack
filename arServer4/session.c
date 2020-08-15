@@ -3702,7 +3702,7 @@ unsigned char handle_playnow(ctl_session *session){
 			session->lastPlayer = sInt;
 			instance->status = instance->status | status_deleteWhenDone;
 			instance->requested = instance->requested | change_play;
-			return rOK;		
+			return rOK;
 		}else{
 			// Not a UID.  Handle as a URL
 			sInt = -1;  // load from next available player
@@ -4328,7 +4328,7 @@ unsigned char handle_segall(ctl_session *session){
 	// search all players, fade items that are found to be playing and managed
 	for(i=0;i<mixEngine->inCount;i++){
 		instance = &mixEngine->ins[i];
-		if(instance->managed && (instance->status & status_playing) && ((instance->status & status_cueing) == 0)){
+		if((instance->status & status_playing) && ((instance->status & status_cueing) == 0)){
 			// currently playing and not in cue... fade it!
 			instance->fadePos = instance->pos;
 		}

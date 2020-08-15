@@ -608,7 +608,7 @@ void *playerChangeWatcher(void *refCon){
 					if(instance->UID){
 						name = GetMetaData(instance->UID, "Name", 0);
 						type = GetMetaData(instance->UID, "Type", 0);
-						if(strlen(triggerDir) && strlen(name) && !strcmp(type, "input")){			
+						if(strlen(triggerDir) && strlen(name) && !strcmp(type, "input")){
 							str_setstr(&triggerFile, triggerDir);
 							str_appendstr(&triggerFile, name);
 							str_appendstr(&triggerFile, ".stop");
@@ -636,12 +636,10 @@ void *playerChangeWatcher(void *refCon){
 								instance->status = instance->status & ~status_logged;
 							}
 							
-							if(instance->managed){
-								pthread_mutex_lock( &lastsegMutex );
-								pthread_cond_broadcast(&lastsegSemaphore);
-								pthread_mutex_unlock( &lastsegMutex );
-							}
-									
+							pthread_mutex_lock( &lastsegMutex);
+							pthread_cond_broadcast(&lastsegSemaphore);
+							pthread_mutex_unlock( &lastsegMutex);
+							
 							// create program log entry
 							if((instance->status & status_logged) == 0){
 								instance->status = instance->status | status_logged;
@@ -667,7 +665,7 @@ void *playerChangeWatcher(void *refCon){
 					/* handle loaded player */
 					uint32_t locID;
 					if(locID = instance->UID){
-						if(instance->managed && (instance->status & status_deleteWhenDone)){
+						if(instance->managed){
 							if(!getQueuePos(&locID)){
 								// doesn't apprear to be in the queue anymore... unload it.
 								// this can happen if an item is deleted from the list while it is loading.
