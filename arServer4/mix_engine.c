@@ -130,6 +130,7 @@ void setInChanToDefault(inChannel *chrec){
 	chrec->nextAplEvent = 0.0;
 	chrec->persist = persistOff;
 	chrec->sourceType = sourceTypeLive;
+	chrec->managed	= 0;
 }
 
 void setAllUnloadedToDefault(mixEngineRecPtr mixRef){

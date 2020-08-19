@@ -5,10 +5,9 @@
 
 pidfile=$1
 if [ -f $1 ]; then
-        exit
+	exit
 fi
-echo $$ > $1               
+echo $$ > $1
 shift
 eval "$@"
 rm $pidfile
-

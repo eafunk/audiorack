@@ -684,6 +684,7 @@ void *playerChangeWatcher(void *refCon){
 							}
 						}
 						if(changed & change_loaded){
+							// still loaded after above test
 							name = GetMetaData(instance->UID, "Name", 0);
 							type = GetMetaData(instance->UID, "Type", 0);
 							if(strlen(triggerDir) && strlen(name) && !strcmp(type, "input")){
@@ -699,6 +700,7 @@ void *playerChangeWatcher(void *refCon){
 						}
 					}
 					if(changed & change_loaded){
+						// again, still loaded after above tests
 						notifyData data;
 						data.reference = 0;
 						data.senderID = 0;
@@ -760,9 +762,9 @@ void *playerChangeWatcher(void *refCon){
 					notifyMakeEntry(nType_vol, &data, sizeof(data));
 					
 					notifyMakeEntry(nType_bal, &data, sizeof(data));
-
+					
 					notifyMakeEntry(nType_bus, &data, sizeof(data));
-
+					
 					notifyMakeEntry(nType_pstat, &data, sizeof(data));
 					
 					/* if mmList is set, disconnect list, and clear */
@@ -800,7 +802,7 @@ void *playerChangeWatcher(void *refCon){
 						free(type);
 					}
 				}
-
+				
 				if((changed & change_aplEvent) && (instance->aplFile)){
 					if(associatedPLLog(instance->aplFile, instance->UID, instance->busses, instance->aplFPmatch)){
 						instance->nextAplEvent = associatedPLNext(instance->aplFile, instance->nextAplEvent);
@@ -818,7 +820,7 @@ void *playerChangeWatcher(void *refCon){
 					SetMetaData(instance->UID, "MixMinusVol", type);
 					free(type);
 				}
-
+				
 				/* all handled: clear flags */
 				instance->changed = 0;	
 			}

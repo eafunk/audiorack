@@ -1666,7 +1666,7 @@ uint32_t LoadPlayer(int *pNum, const char *url_str, uint32_t UID, unsigned char 
 			type[idx] = tolower(type[idx]);
 		
 		if(*pNum < 0){
-			// load next available player		
+			// load next available player
 			maxp = GetMetaInt(0, "client_players_visible", NULL);
 			if(maxp <= 0)
 				maxp = 8;
@@ -1715,6 +1715,8 @@ uint32_t LoadPlayer(int *pNum, const char *url_str, uint32_t UID, unsigned char 
 		
 		
 		if(result){
+			instance = &mixEngine->ins[*pNum];
+			instance->managed = 0;	// this will be set by the caller function for queue items
 			tmp = GetMetaData(result, "Type", 0);
 			if(!strlen(tmp)){
 				// set type if not already set...
@@ -1726,9 +1728,8 @@ uint32_t LoadPlayer(int *pNum, const char *url_str, uint32_t UID, unsigned char 
 				free(type);
 				type = tmp;
 			}
-			if(!strcmp(type, "file") && checkPnumber(*pNum)){
+			if(!strcmp(type, "file")){
 				// Handle apl files, if any
-				instance = &mixEngine->ins[*pNum];
 				FILE **fpp = &instance->aplFile;	// gcc bug work around
 				rval = associatedPLOpen(url_str, fpp);
 				if(rval >= 0){
@@ -1778,7 +1779,7 @@ uint32_t LoadPlayer(int *pNum, const char *url_str, uint32_t UID, unsigned char 
 			}	
 		}else
 			instance->status = status_empty;
-
+		
 		free(type);
 	}
 	
@@ -1787,7 +1788,7 @@ bail:
 		lastp = p;
 	}
 	
-    return result;
+	return result;
 }
 
 unsigned char plTaskRunner(uint32_t UID)

@@ -38,7 +38,8 @@
 #define maxSessions 20
 
 /* program wide globals */
-const char *versionStr="4.0.2";
+const char *versionStr="4.0.3";
+const char *versionCR="2004-2020  Ethan Funk";
 mixEngineRecPtr mixEngine;
 unsigned char run;
 unsigned char quit;
@@ -557,7 +558,7 @@ int main(int argc, const char *argv[])
     // display version
 	snprintf(command, sizeof command, "AudioRack Server, version %s\n", versionStr);
 	write(STDERR_FILENO, command, strlen(command));
-	snprintf(command, sizeof command, "Copyright (C) 2004-2020 Ethan Funk\n\n");
+	snprintf(command, sizeof command, "Copyright (C) %s\n\n", versionCR);
 	write(STDERR_FILENO, command, strlen(command));
 
 	snprintf(command, sizeof command, "AudioRack Server comes with ABSOLUTELY NO WARRANTY; for details\n");

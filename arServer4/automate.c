@@ -476,7 +476,7 @@ void UnloadItem(int pos, queueRecord *qrec){
 		instance = &mixEngine->ins[qrec->player-1];
 		if(!instance->managed || (instance->status & status_playing))
 			// don't unload an item that is playing or is not "managed" 
-			// i.e. the user laoded it into a player, not automation.
+			// i.e. the user loaded it into a player, not automation.
 			return;
 		// retain the queue record (reference count++) so that
 		// the player unload doesn't also remove from the queue list
