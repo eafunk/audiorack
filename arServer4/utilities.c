@@ -198,12 +198,13 @@ unsigned int str_CountFields(char *string, const char *token){
 	return result;
 }
 
-void str_strip_chr(char **string, const char find){
-	char *str;
-	
-	while(str = strchr(*string, find)){
-		str_cutstr(string, str - *string, 1);
-	}
+void str_strip_lfcr(char *string){
+	char *str = string;
+	while(str = strchr(str, '\r'))
+		*str = ' ';
+	str = string;
+	while(str = strchr(str, '\n'))
+		*str = ' ';
 }
 
 char *str_firstnonspace(char *string){

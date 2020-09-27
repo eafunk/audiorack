@@ -81,18 +81,18 @@ typedef struct {
 typedef struct {
 	void *next;	// next record in list, or NULL for end
 	uint32_t refCnt;
-    uint32_t taskID;  
-    uint32_t UID;  
-    int16_t player;
+	uint32_t taskID;  
+	uint32_t UID;  
+	int16_t player;
 	char *name;
-    void *userData;
-    void (*Proc)(void *);
-    unsigned char finished;     
-    pthread_t thread;
+	void *userData;
+	void (*Proc)(void *);
+	unsigned char finished;     
+	pthread_t thread;
 	time_t started;
-    int timeOut;
+	int timeOut;
 	unsigned char cancelThread;
-    unsigned char delUID;
+	unsigned char delUID;
 	pid_t pid;
 } taskRecord;
 
@@ -122,7 +122,7 @@ void str_cutstr(char **string, unsigned int pos, unsigned int length);
 unsigned int str_CountFields(char *string, const char *token);
 char *str_prefixSpan(char *string, const char *prefix);
 char *str_NthField(const char *string, const char *token, unsigned int field);
-void str_strip_chr(char **string, const char find);
+void str_strip_lfcr(char *string);
 char *str_firstnonspace(char *string);
 void str_ReplaceAll(char **theStr, const char *find, const char *replace);
 char *fstr(double num, int dp);

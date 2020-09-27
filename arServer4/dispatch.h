@@ -100,17 +100,17 @@ typedef struct {
 		void *next;			// next record in list, or NULL for end
 		uint32_t ID;
 		uint32_t UID;
-        time_t when;
-        char *name;
-        char *artist;
-        char *album;
-        char *source;
+		time_t when;
+		char *name;
+		char *artist;
+		char *album;
+		char *source;
 		char *comment;
 		char *owner;
 		char *webURL;
 		uint32_t location;
-        uint32_t albumID;
-        uint32_t artistID;
+		uint32_t albumID;
+		uint32_t artistID;
 		uint32_t ownerID;
 		uint32_t logID;
 		unsigned char added;

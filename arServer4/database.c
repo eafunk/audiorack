@@ -529,7 +529,7 @@ unsigned char MakeLogEntry(ProgramLogRecord *rec){
 				goto cleanup;
 			}
 		}
-	} 
+	}
 	
 	// perform the sql insert function
 	if(!db_queryf(instance, "INSERT INTO %slogs (Item, Location, Time, Name, Artist, Album, Added, ArtistID, AlbumID, OwnerID, "
@@ -1154,8 +1154,7 @@ void dbPick(taskRecord *parent){
 	while(!parent->cancelThread && single && strlen(single) && str_firstnonspace(single)){
 		// perform the sql query function
 		// replace any special function macros
-		str_strip_chr(&single, '\n'); // strip out LF and CR
-		str_strip_chr(&single, '\r');
+		str_strip_lfcr(single); // replace LF and CR with spaces
 		dbMacroReplace(&single);
 		if(!db_query(instance, single)){
 			count = db_result_get_result_rows(instance);
