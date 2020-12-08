@@ -1027,7 +1027,7 @@ finish:
 		// check for auto exit on loss of last control connection
 		pthread_mutex_lock(&sMutex);
 		recPtr = &sessionList[i];
-        for(i=0; i<sessionListSize; i++){
+		for(i=0; i<sessionListSize; i++){
 				if(recPtr->cs)
 					break;
 				recPtr++;
@@ -1041,7 +1041,7 @@ finish:
 	return NULL;
 }
 
-void* TCPListener(void *refCon){    
+void* TCPListener(void *refCon){
 	ctl_session *recPtr;
 	socklen_t namelen; /* length of client name */
 	int ns; /* client socket */

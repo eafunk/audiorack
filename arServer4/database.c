@@ -116,7 +116,7 @@ unsigned char db_get_thread_instance(dbInstance **inst){
 	// returns true if the instance is connected (verified with ping).
 	dbInstance *db;
 	
-	// create thread keys for a per-thread dbi instance and connections if they don't yet exist
+	// create thread keys for a per-thread db instance and connections if they don't yet exist
 	pthread_once(&gthread_db_key_once, db_make_threadspecific);
 	
 	// check to see if this thread has it's own dbi instance yet
@@ -299,7 +299,7 @@ unsigned char db_use_database(dbInstance *db, const char *name){
 }
 
 void *db_result_detach(dbInstance *db){
-	// If a result is returned it will need to be reattached  to be freed.
+	// If a result is returned it will need to be reattached to be freed.
 	// The result will no longer be available until re-attached
 	void *res;
 	res = db->result;
@@ -2194,8 +2194,10 @@ uint32_t dbGetNextScheduledItem(void **result, time_t *targetTime, short *priori
 		str_appendstr(&sql, "GROUP BY [prefix]schedule.Item ORDER BY Priority DESC, Minutes ASC");
 		dbMacroReplace(&sql);
 		// perform the sql query function
-		if(db_query(instance, sql))
+		if(db_query(instance, sql)){
 			goto cleanup;
+fprintf(stderr, "fill db error on query-> %s/n", sql);
+		}
 	}
 	// get next row from query result
 	if(db_result_next_row(instance)){
@@ -2230,8 +2232,10 @@ cleanup:
 	if(!ID){
 		db_set_errtag(instance, NULL);
 		db_result_free(instance);
-	}
-	*result = db_result_detach(instance);
+		*result = NULL;
+fprintf(stderr, "fill returned zero\n");
+	}else
+		*result = db_result_detach(instance);
 	return ID;
 }
 
@@ -2454,7 +2458,7 @@ char *FindFromMeta(uint32_t UID){
 		free(tmp);
 		releaseMetaRecord(localUID);
 				
-		// still no go... try a one of the relative paths if a FPL URL property is set
+		// still no go... try one of the relative paths if a FPL URL property is set
 		free(result);
 		result = GetMetaData(UID, "FPL", 0);	// this is a URL
 		if(strlen(result)){
@@ -2888,7 +2892,7 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, unsigned char markMissing){
 	if(missing){
 		// can't find it
 		// set missing metadata flag
-		SetMetaData(UID, "Missing", "1");	
+		SetMetaData(UID, "Missing", "1");
 
 		msg = NULL;
 		str_setstr(&msg, "[database] GetdbFileMetaData-");

@@ -1904,7 +1904,7 @@ void fplFilePLOpen(struct locals *locBlock, uint32_t plUID){
 	
 	itemURL = GetMetaData(plUID, "URL", 0);
 	if(fplPLGetNextMeta(locBlock->fp, locBlock->plMeta)){
-		// error... 		
+		// error...
 		str_insertstr(&itemURL, "[media] fplFilePLOpen-", 0);
 		str_appendstr(&itemURL, ": corrupt file header for fpl");
 		serverLogMakeEntry(itemURL);

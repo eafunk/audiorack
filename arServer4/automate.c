@@ -247,7 +247,7 @@ uint32_t SplitItem(uint32_t parent, char *URLstr, unsigned char last){
 	// create/get metadata for URL	
 	newID = createMetaRecord(URLstr, NULL, 0);
 	// fill the metadata record
-	GetURLMetaData(newID, URLstr);			
+	GetURLMetaData(newID, URLstr);
 
 	pthread_rwlock_wrlock(&queueLock);
 	if(parentNode = (queueRecord *)findNode((LinkedListEntry *)&queueList, parent, NULL, &prevNode)){
@@ -340,7 +340,7 @@ uint32_t SplitItem(uint32_t parent, char *URLstr, unsigned char last){
 				pthread_rwlock_wrlock(&queueLock);
 				releaseQueueRecord((queueRecord *)&queueList, instance, 0);
 				pthread_rwlock_unlock(&queueLock);
-				goto fail;			
+				goto fail;
 			}
 			
 			plRev++;
@@ -360,6 +360,12 @@ uint32_t SplitItem(uint32_t parent, char *URLstr, unsigned char last){
 			notifyMakeEntry(nType_mstat, &data, sizeof(data));			
 			return newID;
 		}
+	}else{
+		tmp = hstr(parent, 8);
+		str_appendstr(&tmp, ": split failed parent UID is not in the queue.");
+		str_insertstr(&tmp, "[automate] SplitItem-", 0);
+		serverLogMakeEntry(tmp);
+		free(tmp);
 	}
 	pthread_rwlock_wrlock(&queueLock);
 	wakeQueManager();
@@ -841,6 +847,9 @@ void watchdogReset(void){
 				}else{
 					serverLogMakeEntry("[automation] -:Silence detection timed out; trying restart");
 					sleep(5);	// wait 5 seconds for log entry to be made
+					silent_tryseg = 0; // If arserver is not in keep-alive mode, the following command
+					// will do nothing.  In that case, clearing silent_tryseg will cause arserver to 
+					// attempt a segall next time this watchdogReset function is called.
 					write(STDOUT_FILENO, "#", 1);
 					return;
 				}
@@ -893,7 +902,7 @@ void SchedulerInserter(time_t *lastSchedTime, unsigned char highOnly){
 		// sheduling just turned on... start at list end
 		*lastSchedTime = endTime;
 	if(*lastSchedTime < firstTime)
-		*lastSchedTime = firstTime;	
+		*lastSchedTime = firstTime;
 
 	priority = 0;
 	target = -1;
