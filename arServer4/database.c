@@ -1395,7 +1395,8 @@ char *traverseFolderListing(char **dir, char *pre, uint32_t modified,
 	}else
 		include = GetMetaData(0, "db_loc", 0);
 	
-	/* handle relative paths when there is a prefix specified */
+	/* handle relative paths when there is a prefix specified, otherwise,
+	 * dir is taken to be an absolute path, and should have a leading slash. */
 	if(strlen(pre)){
 		/* escaping all *,?,[ chars found in pathStr to prevent paths
 		 * with these chars from being interpereted by the glob function
@@ -1417,9 +1418,9 @@ char *traverseFolderListing(char **dir, char *pre, uint32_t modified,
 		str_ReplaceAll(&dirStr, "?", "\\?");
 		str_ReplaceAll(&dirStr, "[", "\\[");
 		
-		// path is Full Path, pathStr is the path sufix, with out lesding /.
-		// path = /longer/path/to/mount/some/file,
-		// dirStr = mount/some/file
+		// path is Full Path. dirStr is the path sufix, without leading slash.
+		// path = /longer/path/to/mount/some/dir,
+		// dirStr = mount/some/dir
 		globbuf.gl_offs = 0;
 		globbuf.gl_pathc = 0;
 		i = 0;
@@ -1847,8 +1848,17 @@ void folderPick(taskRecord *parent){
 	char *target;
 	char *priority;
 	
-	dir = GetMetaData(parent->UID, "Folder", 0);
+	// new, relative prefix/path method, Prefix = "/some/path/prefix/", Path="trailing/directory/name"
+	// or absolute Path = "/full/path/to/directory" if prefix is empty
+	dir = GetMetaData(parent->UID, "Path", 0);
 	prefix = GetMetaData(parent->UID, "Prefix", 0);
+	if(strlen(dir) == 0){
+		// Path is empty, use leggecy Folder absolute path
+		free(dir);
+		dir = GetMetaData(parent->UID, "Folder", 0);
+		// make sure prefix is empty... as it should be with the old method
+		str_setstr(&prefix, "");
+	}
 	mod = GetMetaInt(parent->UID, "Modified", NULL);
 	nomod = GetMetaInt(parent->UID, "NoModLimit", NULL);
 	seq = GetMetaInt(parent->UID, "Sequencial", NULL);
