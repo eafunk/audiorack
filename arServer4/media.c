@@ -208,6 +208,8 @@ unsigned char CheckFileHashMatch(const char *path, const char *hash){
 	
 	if(hash == NULL)
 		return 0;
+	if(strlen(hash) == 0)	// ignore hash check for items with empy hash property
+		return 1;
 	if(fHash = GetFileHash(path)){
 		if(strcmp(hash, fHash) == 0){
 			// Hash code agrees with database
@@ -2402,7 +2404,7 @@ unsigned char associatedPLLog(FILE *fp, uint32_t parent, unsigned int busses, un
 	ProgramLogRecord *entryRec; 
 	char *tmp;
 	
-	if(!(busses & 2L)){			
+	if(!(busses & 2L)){
 		// not in cue
 		if(entryRec = calloc(1, sizeof(ProgramLogRecord))){
 			localUID = createMetaRecord("", NULL, 1);
