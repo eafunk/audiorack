@@ -353,11 +353,11 @@ uint32_t SplitItem(uint32_t parent, char *URLstr, unsigned char last){
 			data.reference = 0;
 			data.senderID = getSenderID();
 			data.value.iVal = 0;
-			notifyMakeEntry(nType_status, &data, sizeof(data));	
+			notifyMakeEntry(nType_status, &data, sizeof(data));
 			data.reference = htonl(newID);
 			notifyMakeEntry(nType_mstat, &data, sizeof(data));
 			data.reference = htonl(parent);
-			notifyMakeEntry(nType_mstat, &data, sizeof(data));			
+			notifyMakeEntry(nType_mstat, &data, sizeof(data));
 			return newID;
 		}
 	}else{

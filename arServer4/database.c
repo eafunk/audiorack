@@ -2243,7 +2243,6 @@ cleanup:
 		db_set_errtag(instance, NULL);
 		db_result_free(instance);
 		*result = NULL;
-fprintf(stderr, "fill returned zero\n");
 	}else
 		*result = db_result_detach(instance);
 	return ID;
@@ -2654,7 +2653,7 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, unsigned char markMissing){
 		goto cleanup;
 	else{ 
 		if(ctmp = db_result_get_field_by_name(instance, "URL", NULL))
-			SetMetaData(UID, "URL", ctmp);		
+			SetMetaData(UID, "URL", ctmp);
 		
 		if(ctmp = db_result_get_field_by_name(instance, "Hash", NULL)){
 			SetMetaData(UID, "Hash", ctmp);
@@ -2938,11 +2937,14 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, unsigned char markMissing){
 			if(tmp != path)
 				free(tmp);
 			free(pre);
+		}else{
+			SetMetaData(UID, "Prefix", "");
+			SetMetaData(UID, "Path", path);
 		}
 		
 		if(GetMetaInt(UID, "Missing", NULL))
 			// was flag as missing, but it's not really missing... nothing else is different
-			changed = 1;		
+			changed = 1;
 		
 		// unset missing metadata flag
 		SetMetaData(UID, "Missing", "0");	
@@ -2963,18 +2965,22 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, unsigned char markMissing){
 				db_quote_string(instance, &pre);
 				rem = GetMetaData(UID, "Path", 0);
 				db_quote_string(instance, &rem);
-				newURL = GetMetaData(UID, "URL", 0);
-				db_quote_string(instance, &newURL);
+//				newURL = GetMetaData(UID, "URL", 0);	For coexistance with old v.3, we will not change the URL
+//				db_quote_string(instance, &newURL);		All commented code below is to keep the URL unchanged for now.
 				tmp = GetMetaData(UID, "Hash", 0);
 				db_quote_string(instance, &tmp);
 				// do the update
-				db_queryf(instance, 
+/*				db_queryf(instance, 
 					"UPDATE %sfile SET Missing = 0, Hash = %s, Path = %s,  Prefix = %s, URL = %s WHERE ID = %lu", 
 					 prefix, tmp, rem, pre, newURL, recID);
+*/
+				db_queryf(instance, 
+					"UPDATE %sfile SET Missing = 0, Hash = %s, Path = %s,  Prefix = %s WHERE ID = %lu", 
+					 prefix, tmp, rem, pre, recID);
 				free(tmp);
 				free(rem);
 				free(pre);
-				free(newURL);
+//				free(newURL);
 			}
 		}
 	}
@@ -3132,7 +3138,16 @@ void GetItemMetaData(uint32_t UID, const char *url){
 		GetdbFileMetaData(UID, recID, GetMetaInt(0, "db_mark_missing", NULL));
 		if(prefix)
 			free(prefix);
+		tmp = GetMetaData(UID, "Hash", 0);
+		if(strlen(tmp) == 0){
+			// change-able file - fall back to file's actual meta data
+			free(tmp);
+			tmp = GetMetaData(UID, "URL", 0);
+			GetGstDiscoverMetaData(UID, tmp);
+		}
+		free(tmp);
 		return;
+		
 	}
 	if(!strcmp(Type,"task")){
 		// get additional meta data related to task references stored in the db

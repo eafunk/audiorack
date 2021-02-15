@@ -1023,7 +1023,7 @@ uint32_t LoadSipPlayer(const char *name, const char *src, const char *dst){
 	
 	instance->feedBus = GetMetaInt(0, "sip_feed_bus", NULL);
 	if(!instance->feedBus)
-		instance->feedBus = 0x20000001;	// default to monitor bus and TBA
+		instance->feedBus = 0x20000001;	// default to monitor bus and TB-A
 	tmp = ustr(instance->feedBus);
 	SetMetaData(instance->UID, "MixMinusBus", tmp);
 	free(tmp);
@@ -1595,7 +1595,7 @@ uint32_t LoadDBItemPlayer(int *pNum, const char *url_str, uint32_t UID){
 		// resolved back into a db item... done with the metadata record... delete
 		releaseMetaRecord(localUID);
 		free(tmp);
-		return 0;	
+		return 0;
 	}
 	
 	// handle according to new type
@@ -2474,7 +2474,7 @@ char associatedPLOpen(const char *url, FILE **fp){
 		if(path = strchr(tmp, '/')){
 			path = uriDecode(path);
 		}else{
-			path = uriDecode(tmp);			
+			path = uriDecode(tmp);
 		}
 		free(tmp);
 		str_appendstr(&path, ".fpl");

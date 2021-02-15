@@ -62,6 +62,8 @@ void AddFPLEntryFromProgramLogStruct(FILE *fpl, float Offset, ProgramLogRecord *
 
 char *getScriptFromFile(const char *file, unsigned char silent);
 
+void GetGstDiscoverMetaData(uint32_t UID, const char *url_str);
+
 float associatedPLNext(FILE *fp, float curPlayPos);
 unsigned char associatedPLLog(FILE *fp, uint32_t parent, unsigned int busses, unsigned char idOK);
 char associatedPLOpen(const char *url, FILE **fp);
