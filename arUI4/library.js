@@ -850,14 +850,19 @@ async function resolveFileFromProperties(properties, update){
 		// found it... set URL if not set or if changed
 		if(changed || ((properties.URL.length) == 0)){
 			// re-encode URL
-console.log(path);
 			properties.URL = url.pathToFileURL(path).href;
 		}
 
 		let pre = getFilePrefixPoint(path);
 		properties.Prefix = pre.prefix;
 		properties.Path = pre.path;
-
+		// Old OSX: Mount -> Prefix + mountName (first dir in path) 
+		// if path=/some/path, mountName = /
+		// if path=some/path, mountName = some/
+		let idx = pre.path.indexOf("/");
+		let Mount = "";
+		if(idx > -1)
+			Mount = pre.prefix + pre.path.substring(0, idx+1);
 		if(properties.Missing)
 			// was flag as missing, but it's not really missing... nothing else is different
 			changed = 1;
@@ -2387,43 +2392,64 @@ function getDownload(request, response, params, dirs){
 				response.end();
 				return;
 			}else{
-//!! check for type = file or playlist and handle accordingly
-				connection.query("SELECT Path, Prefix, Hash, URL, Mount FROM "+locConf['prefix']+"file WHERE ID = "+ID+";", function(err, results){
+				// check for type = file or playlist and handle accordingly
+				connection.query("SELECT Type FROM "+locConf['prefix']+"toc WHERE ID = "+ID+";", function(err, tresults){
 					if(err){
-						response.status(304);
+						response.status(404);
 						response.send(err.code);
 						connection.release();
 						response.end();
 						return;
-					}else if(results[0]){
-						if(results[0].Prefix && results[0].Prefix.length && results[0].Path && results[0].Path.length){
-							// require that the file is prefixed, for security reasons
-							resolveFileFromProperties(results[0], false).then(result => {
-								if(result.Missing == 0){
-									let fullpath = result.Prefix + result.Path;
-									if(params.save && (params.save != 0))
-										response.download(fullpath);
-									else
-										response.sendFile(fullpath);
-									return;
-								}else{
-									response.status(400);
-									response.end();
+					}
+					if(tresults && Array.isArray(tresults) && tresults.length){
+						if(tresults[0].Type == "file"){
+							connection.query("SELECT Path, Prefix, Hash, URL, Mount FROM "+locConf['prefix']+"file WHERE ID = "+ID+";", function(err, results){
+								if(err){
+									response.status(404);
+									response.send(err.code);
 									connection.release();
+									response.end();
+									return;
+								}else if(results[0]){
+									if(results && Array.isArray(results) && results[0].Prefix && results[0].Prefix.length && results[0].Path && results[0].Path.length){
+										// require that the file is prefixed, for security reasons
+										resolveFileFromProperties(results[0], false).then(result => {
+											if(result.Missing == 0){
+												let fullpath = result.Prefix + result.Path;
+												if(params.save && (params.save != 0))
+													response.download(fullpath);
+												else
+													response.sendFile(fullpath);
+												return;
+											}else{
+												response.status(400);
+												response.end();
+												connection.release();
+												return;
+											}
+										});
+									}else{
+										response.status(400);
+										response.end();
+										connection.release();
+										return;
+									}
+								}else{
+									response.status(404);
+									connection.release();
+									response.end();
 									return;
 								}
 							});
+						}else if(tresults[0].Type == "playlist"){
+							//!! exprot params type
 						}else{
-							response.status(400);
-							response.end();
+							// Missing Type, or not a file or playlist
+							response.status(404);
 							connection.release();
+							response.end();
 							return;
 						}
-					}else{
-						response.status(404);
-						connection.release();
-						response.end();
-						return;
 					}
 				});
 			}
@@ -2693,7 +2719,6 @@ async function checkDupPlName(connection, Name){
 async function checkDupFileHash(connection, Hash){
 	let result = false;
 	let query = "Select ID, Missing, Prefix, Path FROM "+locConf['prefix']+"file WHERE Hash = "+libpool.escape(Hash)+";";
-console.log(query);
 	try{
 		result = await asyncQuery(connection, query);
 	}catch(err){
@@ -2707,7 +2732,6 @@ async function findAddNameTable(connection, table, name){
 	let result = false;
 	// search...
 	let query = "SELECT ID FROM "+locConf['prefix']+table+" WHERE Name = "+libpool.escape(name)+";";
-console.log(query);
 	try{
 		result = await asyncQuery(connection, query);
 	}catch(err){
@@ -2719,7 +2743,6 @@ console.log(query);
 		
 	// Not found, add...
 	query = "INSERT INTO "+locConf['prefix']+table+" (Name) VALUES ("+libpool.escape(name)+");";
-console.log(query);
 	try{
 		result = await asyncQuery(connection, query);
 	}catch(err){
@@ -2937,7 +2960,6 @@ async function importFileIntoLibrary(path, params){
 					}else
 						dupmode = 1; // no dup, override dupmode to force adding of this file
 				}
-console.log("dupmode="+dupmode+", dupID="+ID);
 				if(dupmode == 0){	// skip.  We are done.
 					conn.release();
 					pass.id = ID;	// ID of the dup. list
@@ -3178,7 +3200,6 @@ function importFile(request, response, params, dirs){
 			return;
 		}
 		importFileIntoLibrary(path, params).then(result => {
-console.log(result);
 			if(result){
 				response.status(200); 
 				response.json(result);
@@ -3289,7 +3310,7 @@ module.exports = {
 			getLogs(request, response, params);			// /logs{?location=loc-name}{&datetime=YYYY-MM-DD-HH:MM}{&column=value1&...} 
 																	// Range is from specified date/time to start of that day
 																	//	today assumed if no date specified
-																	// ?added=0 assumed (played only) if added not specified
+																	// ?added=0 assumed (playFed only) if added not specified
 																	// /logs alone returns list of location names that have log entries
 		}else if(dirs[2] == 'sched'){
 			getSched(request, response, params);			// /sched{?location=loc-name}{&fill=1}{&datetime=YYYY-MM-DD} 
@@ -3307,7 +3328,7 @@ module.exports = {
 		}else if(dirs[2] == 'download'){
 			getDownload(request, response, params, dirs);	// /download/ID	triggers a download  of the file associated with the file type item
 																	//			?save=1 to save the file instead of showing contents in page
-																	//!!		?export=[fpl,fplmedia,cue,pls,m3u] convert playlist to type
+																	//			?export=[fpl,fplmedia,cue,pls,m3u] convert playlist to type
 		}else if(dirs[2] == 'query'){
 			executeQuery(request, response, params, dirs);	// /query/ID?select=[selval1, selval2,..]&prompt=[promptval1, promptval2,..]
 																			//		runs the specified query number, replacing macros [select(...)],
@@ -3337,3 +3358,128 @@ module.exports = {
 		// initdb - name
 	}
 };
+/*
+// singleton db access:
+var mysql = require('mysql');
+
+var con = mysql.createConnection({
+	host: locConf['host'],
+	user: locConf['user'],
+	password: locConf['password']
+});
+
+con.connect(function(err) {
+  if (err) throw err;
+  console.log("Connected!");
+});
+ 
+
+unsigned char db_initialize(dbInstance *db){
+	dbInstance *newinst;
+	char *dbName;
+	char *sqlstr = NULL;
+	char *typeStr;
+	char *versionStr = NULL;
+	char *ini_file_path = NULL;
+	char *tmp = NULL;
+	FILE *fp;
+	char line[4096];
+	
+	newinst = NULL; // used as a flag to clean up new db at the end ofthe  first call of the call recursive chain
+	fp = NULL;
+	typeStr = GetMetaData(0, "db_type", 0);
+	dbName = GetMetaData(0, "db_name", 0);
+	if(!strlen(typeStr) || !strlen(dbName))
+		goto cleanup;
+
+	if(!db){
+		// set up a db instance and connection, independent of the thread associated db instance,
+		// so we can start the connection off unassociated with a particular named database.  This
+		// is required so we can connect, and THEN see if the named database exists, creating it if 
+		// needed.  If we start off connecing with the named database, and the database doesn't exist
+		// yet, the entire connection will fail.
+		db = calloc(1, sizeof(dbInstance));
+		db_set_errtag(db, "dbInitialize");
+		newinst = db;  // this sets the flag that we are the first call of the call recursive chain
+		if(!db_connection_setup(db, 0))
+			goto cleanup;
+	}
+	
+	if(!db_use_database(db, dbName))
+		versionStr = dbGetInfo("Version");
+	if(versionStr && strlen(versionStr)){
+		// this is an upgrade to an existing database
+		str_setstr(&ini_file_path, AppSupportDirectory);
+		str_appendstr(&ini_file_path, typeStr);
+		str_appendstr(&ini_file_path, versionStr);
+		str_appendstr(&ini_file_path, ".dbi");
+	}else{
+		// create new database if one with the given name doesn't already exist
+		str_setstr(&ini_file_path, AppSupportDirectory);
+		str_appendstr(&ini_file_path, typeStr);
+		str_appendstr(&ini_file_path, ".dbi");
+		str_setstr(&sqlstr, "CREATE DATABASE IF NOT EXISTS ");
+		str_appendstr(&sqlstr, dbName);
+		
+		if(db_query(db, sqlstr))
+			goto cleanup;
+		if(db_use_database(db, dbName))
+			goto cleanup;
+	}
+	
+	if((fp = fopen(ini_file_path, "r")) == NULL){
+		if(!versionStr || !strlen(versionStr)){
+			str_setstr(&tmp, "[database] dbInitialize- template file '");
+			str_appendstr(&tmp, ini_file_path);
+			str_appendstr(&tmp, "': Could not open file for reading");
+			serverLogMakeEntry(tmp);
+			free(tmp); 
+		}else
+			db_set_errtag(db, "dbInitialize");
+		goto cleanup;
+	}
+	
+	db_set_errtag(db, "dbInitialize");
+	while(fgets(line, sizeof line, fp) != NULL){
+		// each line in the .dbi file is an sql command to execute
+		str_setstr(&sqlstr, line);
+		dbMacroReplace(&sqlstr);
+		if(!db_query(db, sqlstr))
+			db_result_free(db);
+	}
+	if(versionStr && strlen(versionStr))
+		// re-enter for another go-around so we upgrade
+		// all they way to the latest version.
+		db_initialize(db);
+	
+cleanup:
+	free(dbName);
+	free(typeStr);
+	if(sqlstr)
+		free(sqlstr);
+	if(ini_file_path)
+		free(ini_file_path);
+	if(fp)
+		fclose(fp);
+	if(!db->errRec.flag){
+		versionStr = dbGetInfo("Version");
+		str_setstr(&tmp, " [database] dbInitialize-");
+		str_appendstr(&tmp, dbName);
+		str_appendstr(&tmp, ": initialized/updated to version ");
+		str_appendstr(&tmp, versionStr);
+		serverLogMakeEntry(tmp);
+		free(dbName);
+		free(versionStr);
+		if(newinst)
+			db_instance_free(newinst);
+		return 1;
+	}
+	if(versionStr)
+		free(versionStr);
+	if(dbName)
+		free(dbName);
+	if(newinst)
+		db_instance_free(newinst);
+	return 0;
+}
+*/

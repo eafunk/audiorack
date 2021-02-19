@@ -142,7 +142,7 @@ void str_appendchr(char **string, char chr){
 
 void str_appendbytes(char **data, unsigned int *length, const char *frag, unsigned int size){
 	unsigned int total;
-	/* This function adds wraw byte to the end of a memory allocation.
+	/* This function adds raw byte to the end of a memory allocation.
 	 * It DOES NOT add a NULL termination! */
 	if(frag == NULL)
 		return;
@@ -152,6 +152,21 @@ void str_appendbytes(char **data, unsigned int *length, const char *frag, unsign
 	*data = realloc(*data, total);
 	memcpy(*data+*length, frag, size);
 	*length = total;
+}
+
+char *str_substring(char *string, unsigned int from, unsigned int length){
+	// returns NULL if from index is outside of the string
+	// otherwise returnes a new string with the segment that needs to be freed
+	char *result;
+	unsigned int len;
+	len = strlen(string);
+	if(from >= len)
+		return NULL;
+	if(len < (length + from))	// limit to end of source string
+		length = len - from;
+	result = calloc(1, length);
+	memcpy(result, string+from, length);
+	return result;
 }
 
 void str_insertstr(char **string, const char *cStr, unsigned int pos){

@@ -8,6 +8,7 @@ const os = require('os');
 const _= require('lodash');
 const multer = require('multer');
 var slug = require('slug');
+const extract = require('extract-zip')
 var lib = require('./library');
 
 var config = false;
@@ -183,6 +184,8 @@ function handleConfigChanges(conf){
 			let interval = tmpAge * 3600 * 1000; // hours to mSec.
 			// check at 1/4 the age limit rate
 			tmpDirIntervalObj = setInterval(clearTmpDirAgedFilesFunc, interval/4);
+			// And fire it off right now too..
+			clearTmpDirAgedFilesFunc();
 		}else if(tmpDirIntervalObj){
 			// stop temp media dir cleanout 
 			clearInterval(tmpDirIntervalObj);
@@ -448,6 +451,25 @@ app.post('/tmpupload', function(req, res){
 			if(err){
 				res.status(400);
 				res.end("Failed");
+			}
+			// check for .zip file expantion
+			for(let i = 0; i< req.files.length; i++){
+				if(req.files[i].filename.lastIndexOf("zip") == (req.files[i].filename.length-3)){
+					// we have a zip file... expand it.
+					let path = req.files[i].path;
+					let dest = req.files[i].destination;
+					try{
+						extract(path, {dir: dest}).then(result => {
+							// remove the .zip file
+							fs.unlink(path, function (err){
+								if(err)
+									console.log("Failed to remove temp .zip file after unzipping: " + path + "err="+ err);
+							});
+						});
+					}catch(err){
+						// handle any errors
+					}
+				}
 			}
 			res.status(200);
 			res.end("Complete");

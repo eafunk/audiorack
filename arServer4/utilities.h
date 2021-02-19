@@ -117,6 +117,7 @@ void str_setstr(char **string, const char *cStr);
 void str_appendstr(char **string, const char *cStr);
 void str_appendchr(char **string, char chr);
 void str_appendbytes(char **data, unsigned int *length, const char *frag, unsigned int size);
+char *str_substring(char *string, unsigned int from, unsigned int length);
 void str_insertstr(char **string, const char *cStr, unsigned int pos);
 void str_cutstr(char **string, unsigned int pos, unsigned int length);
 unsigned int str_CountFields(char *string, const char *token);

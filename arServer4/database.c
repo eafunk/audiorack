@@ -1348,6 +1348,30 @@ void folderPickCleanUp(void *pass){
 		free(ptr->entList);
 }
 
+char *folderPathLikeStringEncode(char **Str, char prefixWildcard, char matchToEnd, dbInstance *instance){
+	// Str is assumed to already be URL encoded with the path or partial path.
+	// returns notStr (must be freed) if matchToEnd is true, otherwise returns NULL
+	char *notStr = NULL;
+	str_ReplaceAll(Str, "\\", "\\\\");	// escape '\'
+	str_ReplaceAll(Str, "%", "\\%");		// escape '%'
+	str_ReplaceAll(Str, "_", "\\_");		// escape '_'
+	if(prefixWildcard)
+		str_insertstr(Str, "file://%", 0);				// prepend 'file://%' to match any file prefix
+	else
+		str_insertstr(Str, "file://", 0);				// prepend 'file://' to match full path
+		
+	if(!matchToEnd){
+		str_appendstr(Str, "%");					// appaned '%' to match any suffix
+		// also generate notMatchStr
+		str_setstr(&notStr, *Str);
+		str_appendstr(&notStr, "/%");			// appaned '/%' to NOT match any suffix with a / in it
+		db_quote_string(instance, &notStr);
+	}
+	
+	db_quote_string(instance, Str);
+	return notStr;
+}
+
 char *traverseFolderListing(char **dir, char *pre, uint32_t modified,  
 				unsigned short none, unsigned short seq, unsigned short rerun,  
 					unsigned short first, uint32_t randlim, unsigned short date){
@@ -1357,15 +1381,19 @@ char *traverseFolderListing(char **dir, char *pre, uint32_t modified,
 		struct dirent **entList;
 		int count;
 	} locBlock;
-	int size, index, i, p;
+	int index, i, p, c;
 	int remove;
 	time_t cutoff, last;
-	char *prefix = NULL;
 	char *include = NULL;
 	char *result = NULL;
 	char *path = NULL; 
+	char *ppre = NULL;
+	char *prefix = NULL;
 	char *encStr = NULL;
 	char *sub_name = NULL;
+	char *adjPathStr = NULL;
+	char *likeStr = NULL;
+	char *notLikeStr = NULL;
 	char *tmp;
 	const char *sval;
 	const char *name; 
@@ -1379,8 +1407,8 @@ char *traverseFolderListing(char **dir, char *pre, uint32_t modified,
 	index = strlen(tmp);
 	if(index < 1)
 		goto cleanup;
-	if(tmp[index-1] != directoryToken)  // make sure there is a trailing slash in the path name. 
-		str_appendstr(dir, directoryTokenStr);
+	if(tmp[index-1] == directoryToken)  // make sure there is NOT a trailing slash in the path name. 
+		tmp[index-1] = 0;
 	
 	instance = db_get_and_connect();
 	if(!instance)
@@ -1418,6 +1446,18 @@ char *traverseFolderListing(char **dir, char *pre, uint32_t modified,
 		str_ReplaceAll(&dirStr, "?", "\\?");
 		str_ReplaceAll(&dirStr, "[", "\\[");
 		
+		// Copy the string and change the case of the first letter, if it's a letter
+		// for an alternate comparison on systems that change the case of the mount
+		str_setstr(&adjPathStr, dirStr);
+		if(isupper(*adjPathStr))
+			*adjPathStr = tolower(*adjPathStr);
+		else if(islower(*adjPathStr))
+			*adjPathStr = toupper(*adjPathStr);
+		else{
+			// not case changable
+			free(adjPathStr);
+			adjPathStr = NULL;
+		}
 		// path is Full Path. dirStr is the path sufix, without leading slash.
 		// path = /longer/path/to/mount/some/dir,
 		// dirStr = mount/some/dir
@@ -1425,6 +1465,7 @@ char *traverseFolderListing(char **dir, char *pre, uint32_t modified,
 		globbuf.gl_pathc = 0;
 		i = 0;
 		p = 0;
+		c = 0;
 		missing = 1;
 		do{
 			/* see if path points to a valid directory */
@@ -1444,24 +1485,34 @@ char *traverseFolderListing(char **dir, char *pre, uint32_t modified,
 					tmp = str_NthField(prefixList, ",", p);
 					if(tmp && strlen(dirStr)){
 						str_setstr(&path, tmp);
-						str_appendstr(&path, dirStr);
+						if(adjPathStr && c){
+							// trying the pathStr version with case adjustment
+							str_appendstr(&path, adjPathStr);
+							c = 0; // go back to original case next time
+						}else{
+							str_appendstr(&path, dirStr);
+							if(adjPathStr)
+								c = 1; // try case change next time
+						}
 						i = 0;
 						if(globbuf.gl_pathc){
 							globfree(&globbuf);
 							globbuf.gl_pathc = 0;
 						}
-						if(!glob(path, GLOB_NOSORT, NULL, &globbuf)){
+						if(!glob(path, (GLOB_NOSORT | GLOB_ONLYDIR), NULL, &globbuf)){
 							if(globbuf.gl_pathc){
 								// found a path in new glob list
 								str_setstr(&path, globbuf.gl_pathv[0]);
 								i++;
-								p++;
+								if(!c)
+									p++;
 								free(tmp);
 								break;
 							}
 						}
 						free(tmp);
-						p++;
+						if(!c)
+							p++;
 					}else{
 						// no more prefixes
 						p = listSize+1;
@@ -1485,13 +1536,13 @@ char *traverseFolderListing(char **dir, char *pre, uint32_t modified,
 			if(*dir)
 				free(*dir);
 			*dir = path;
+			str_appendstr(dir, directoryTokenStr);	// add trailing slash back in
 			path = NULL;
 		}
 	}
 
 	if(modified == 0)
 		none = 1;
-	
 	while(modified || none){
 		// deallocate previous dir result, if any
 		for(index = 0; index < locBlock.count; index++)
@@ -1540,6 +1591,20 @@ char *traverseFolderListing(char **dir, char *pre, uint32_t modified,
 			}
 			
 			if(locBlock.count > 0){
+				path = strdup(*dir);
+				if((ppre = getFilePrefixPoint(&path)) && (strlen(path)>1)){
+					// search for source matches ignoring the prefix, matching the remaining path only
+					likeStr = uriEncodeKeepSlash(path+1);
+					str_setstr(&path, *(dir+1));
+					// We really want to match upper or lower case on the first char, but this approach above
+					// of ignoring the first char is easier for the database to do and will work most of the time.
+					// encode likeStr and create notLikeStr
+					notLikeStr = folderPathLikeStringEncode(&likeStr, 1, 0, instance);	// prefix wild card, no match to end
+				}else{
+					// search for source matches using the full path
+					likeStr = uriEncodeKeepSlash(*dir);
+					notLikeStr = folderPathLikeStringEncode(&likeStr, 0, 0, instance);	// no prefix wild card, no match to end
+				}
 				if(date){
 					// try to find a file with a name of YYYY-MM-DD i.e. 2006-7-13 (no leading zeros)
 					char dateStr[11];
@@ -1575,20 +1640,11 @@ char *traverseFolderListing(char **dir, char *pre, uint32_t modified,
 
 				if(rerun){		// re-run last played if true (non-zero)
 					db_set_errtag(instance, "traverseFolderListingRerun");
-					// set directory as URL
-					tmp = uriEncodeKeepSlash(*dir);
-					str_setstr(&encStr, "file://");
-					str_appendstr(&encStr, tmp);
-					free(tmp);
-					size = strlen(encStr);
-					
-					// encode URL in db format
-					db_quote_string(instance, &encStr);
 					// perform the sql query function: Get last ADDED file name in this directory (back eight hours)
 					name = "";
 					if(!db_queryf(instance, "SELECT Time, Source AS Name FROM %slogs USE INDEX (%slogs_time) WHERE Location IN(%s) "
-									"AND (Added & 1) = 0 AND Time > UNIX_TIMESTAMP(NOW()) - 28800 AND LEFT(Source, %d) = %s AND SUBSTRING(Source, %d) NOT "
-									"LIKE '%%/%%' ORDER BY Time DESC LIMIT 1", prefix, prefix, include, size, encStr, size+1)){
+									"AND (Added & 1) = 0 AND Time > UNIX_TIMESTAMP(NOW()) - 28800 AND Source LIKE %s AND Source NOT LIKE %s "
+									"ORDER BY Time DESC LIMIT 1", prefix, prefix, include, likeStr, notLikeStr)){
 						// get first record (should be the only record)
 						if(db_result_next_row(instance)){
 							name = db_result_get_field_by_name(instance, "Name", NULL);
@@ -1597,10 +1653,10 @@ char *traverseFolderListing(char **dir, char *pre, uint32_t modified,
 						}
 					}
 					if(strlen(name) == 0){
-					// perform the sql query function: Get last PLAYED file name in this directory
+						// perform the sql query function: Get last PLAYED file name in this directory
 						if(!db_queryf(instance, "SELECT Time, Source AS Name FROM %slogs USE INDEX (%slogs_time) WHERE Location IN(%s) "
-										"AND (Added & 1) <> 1 AND LEFT(Source, %d) = %s AND SUBSTRING(Source, %d) NOT LIKE '%%/%%' "
-										"ORDER BY Time DESC LIMIT 1", prefix, prefix, include, size, encStr, size+1)){
+										"AND (Added & 1) <> 1 AND Source LIKE %s AND Source NOT LIKE %s "
+										"ORDER BY Time DESC LIMIT 1", prefix, prefix, include, likeStr, notLikeStr)){
 							// get first record (should be the only record)
 							if(db_result_next_row(instance)){
 								name = db_result_get_field_by_name(instance, "Name", NULL);
@@ -1609,19 +1665,17 @@ char *traverseFolderListing(char **dir, char *pre, uint32_t modified,
 							}
 						}
 					}
-					// free the string we allocated
-					if(encStr){
-						free(encStr);
-						encStr = NULL;
-					}
 					
-					if((int)strlen(name) > size){
+					if(strlen(name)){
 						// decode url encoding of the last played/added file url
-						tmp = uriDecode(name + size);
-						if(tmp)
-							sub_name = tmp;
-						else		
-							str_setstr(&sub_name, "");
+						str_setstr(&sub_name, "");
+						tmp = uriDecode(name);
+						if(tmp){
+							char *sub;
+							if(sub = strrchr(tmp, '/'))
+								str_setstr(&sub_name, sub+1);
+							free(tmp);
+						}
 						
 						if(strlen(sub_name)){
 							// check if this file is in the directory listing
@@ -1638,8 +1692,8 @@ char *traverseFolderListing(char **dir, char *pre, uint32_t modified,
 					// check if item is readable
 					if(strlen(sub_name)){
 						// encode as uri
-						tmp = uriEncodeKeepSlash(*dir);
 						str_setstr(&result, "file://");
+						tmp = uriEncodeKeepSlash(*dir);
 						str_appendstr(&result, tmp);
 						free(tmp);
 						tmp = uriEncodeKeepSlash(sub_name);
@@ -1658,15 +1712,7 @@ char *traverseFolderListing(char **dir, char *pre, uint32_t modified,
 				}
 				
 				if(seq){			// sequencial first if true (non-zero)
-					// set directory as URL
-					tmp = uriEncodeKeepSlash(*dir);
-					str_setstr(&encStr, "file://");
-					str_appendstr(&encStr, tmp);
-					free(tmp);
-					size = strlen(encStr);
 					db_set_errtag(instance, "traverseFolderListingSequencial");
-					// encode URL in db format
-					db_quote_string(instance, &encStr);
 					// get end time of last item in list
 					int listSize;
 					listSize = queueCount();
@@ -1675,9 +1721,9 @@ char *traverseFolderListing(char **dir, char *pre, uint32_t modified,
 						// perform the sql query function: Get last ADDED file name in this directory 
 						// looking back over the most recent items in the log no further than the current list length
 						if(!db_queryf(instance, "SELECT Time, Name FROM (SELECT Time, Source AS Name FROM %slogs "
-										"USE INDEX (%slogs_time) WHERE Location IN(%s) AND (Added & 1) = 1 ORDER BY Time DESC LIMIT %d) As inqueue "
-										"WHERE LEFT(Name, %d) = %s AND SUBSTRING(Name, %d) NOT LIKE '%%/%%' ORDER BY Time DESC LIMIT 1", 
-										prefix, prefix, include, listSize, size, encStr, size+1)){
+										"USE INDEX (%slogs_time) WHERE Location IN(%s) AND (Added & 1) = 1 ORDER BY Time DESC LIMIT %d) "
+										"As inqueue WHERE Name LIKE %s AND Name NOT LIKE %s ORDER BY Time DESC LIMIT 1", 
+										prefix, prefix, include, listSize, likeStr, notLikeStr)){
 													// get first record (should be the only record)
 							if(db_result_next_row(instance)){
 								name = db_result_get_field_by_name(instance, "Name", NULL);
@@ -1689,8 +1735,8 @@ char *traverseFolderListing(char **dir, char *pre, uint32_t modified,
 					if(strlen(name) == 0){
 						// perform the sql query function: Get last PLAYED file name in this directory
 						if(!db_queryf(instance,  "SELECT Time, Source AS Name FROM %slogs USE INDEX (%slogs_time) WHERE Location IN(%s) "
-										"AND (Added & 1) <> 1 AND LEFT(Source, %d) = %s AND SUBSTRING(Source, %d) NOT LIKE '%%/%%' "
-										"ORDER BY Time DESC LIMIT 1", prefix, prefix, include, size, encStr, size+1)){
+										"AND (Added & 1) <> 1 AND Source LIKE %s AND Source NOT LIKE %s "
+										"ORDER BY Time DESC LIMIT 1", prefix, prefix, include, likeStr, notLikeStr)){
 							// get first record (should be the only record)
 							if(db_result_next_row(instance)){
 								name = db_result_get_field_by_name(instance, "Name", NULL);
@@ -1699,19 +1745,17 @@ char *traverseFolderListing(char **dir, char *pre, uint32_t modified,
 							}
 						}
 					}
-					// free old stuff
-					if(encStr){ 
-						free(encStr);NULL;
-						encStr = NULL;
-					}
 					
-					if((int)strlen(name) > size){
+					if(strlen(name)){
 						// decode url encoding of the last played/added file url
-						tmp = uriDecode(name + size);
-						if(tmp)
-							sub_name = tmp;	
-						else		
-							str_setstr(&sub_name, "");
+						str_setstr(&sub_name, "");
+						tmp = uriDecode(name);
+						if(tmp){
+							char *sub;
+							if(sub = strrchr(tmp, '/'))
+								str_setstr(&sub_name, sub+1);
+							free(tmp);
+						}
 						
 						if(strlen(sub_name)){
 							// find next item, if any
@@ -1764,6 +1808,21 @@ char *traverseFolderListing(char **dir, char *pre, uint32_t modified,
 					// random if sequencial has failed or was false and random is non-zero
 					while(locBlock.count > 0){
 						index = (int)((locBlock.count - 1) * RandomNumber());
+						// create db search string for this item
+						if(ppre){
+							// prefixable, wilcard prefix an use path.
+							str_setstr(&encStr, path);
+							str_appendstr(&encStr, locBlock.entList[index]->d_name);
+							encStr = uriEncodeKeepSlash(encStr);
+							folderPathLikeStringEncode(&encStr, 1, 1, instance);	// prefix wild card, match to end
+						}else{
+							// no prefix, full path
+							str_setstr(&encStr, *dir);
+							str_appendstr(&encStr, locBlock.entList[index]->d_name);
+							encStr = uriEncodeKeepSlash(encStr);
+							folderPathLikeStringEncode(&encStr, 0, 1, instance);	// no prefix wild card, no match to end
+						}
+						// create result for thsi selected item
 						tmp = uriEncodeKeepSlash(*dir);
 						str_setstr(&result, "file://");
 						str_appendstr(&result, tmp);
@@ -1776,28 +1835,27 @@ char *traverseFolderListing(char **dir, char *pre, uint32_t modified,
 						if(strlen(result) > 0){
 							// check past play history, see if it qualifies
 							db_set_errtag(instance, "traverseFolderListingRandomLimit");
-							// encode URL in db format
-							encStr = strdup(result);
-							db_quote_string(instance, &encStr);
 							// perform the sql query function: Get Time this file was last played
 							last = 0;
 							if(!db_queryf(instance,  "SELECT Time AS Time FROM %slogs USE INDEX (%slogs_time) WHERE Location IN(%s) "
-										"AND Source = %s ORDER BY Time DESC LIMIT 1", prefix, prefix, include, encStr)){
+										"AND Source LIKE %s ORDER BY Time DESC LIMIT 1", prefix, prefix, include, encStr)){
 								// get first record (should be the only record)
 								if(db_result_next_row(instance)){
 									if(sval = db_result_get_field_by_name(instance, "Time", NULL))
 										last = atoll(sval);
 								}
 							}
-							// free the c-string we allocated
-							if(encStr) 
-								free(encStr);
 							if(((time(NULL) - last) / 3600) < (signed int)randlim){
 								// played too recently
 								str_setstr(&result, "");
 							}
 						}
-							
+						// free the c-string we allocated
+						if(encStr){
+							free(encStr);
+							encStr = NULL;
+						}
+						
 						if(strlen(result) == 0){
 							// not a valid pick... shift the list down and try again
 							free(locBlock.entList[index]);
@@ -1828,10 +1886,18 @@ cleanup:
 	db_set_errtag(instance, NULL);
 	db_result_free(instance);
 	pthread_cleanup_pop(1);
+	if(ppre)
+		free(ppre);
 	if(prefix)
 		free(prefix);
+	if(path)
+		free(path);
 	if(include)
 		free(include);
+	if(notLikeStr)
+		free(notLikeStr);
+	if(likeStr)
+		free(likeStr);
 	return result;
 }
 
@@ -1853,7 +1919,7 @@ void folderPick(taskRecord *parent){
 	dir = GetMetaData(parent->UID, "Path", 0);
 	prefix = GetMetaData(parent->UID, "Prefix", 0);
 	if(strlen(dir) == 0){
-		// Path is empty, use leggecy Folder absolute path
+		// Path is empty, use legacy Folder absolute path
 		free(dir);
 		dir = GetMetaData(parent->UID, "Folder", 0);
 		// make sure prefix is empty... as it should be with the old method
@@ -2206,7 +2272,6 @@ uint32_t dbGetNextScheduledItem(void **result, time_t *targetTime, short *priori
 		// perform the sql query function
 		if(db_query(instance, sql)){
 			goto cleanup;
-fprintf(stderr, "fill db error on query-> %s/n", sql);
 		}
 	}
 	// get next row from query result
@@ -2827,7 +2892,7 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, unsigned char markMissing){
 		free(adjPathStr);
 		adjPathStr = NULL;
 	}
-
+	
 	// path is Full Path, pathStr is the relative path, if any
 	// i.e. path = /longer/path/to/mount/some/file
 	// and  pathStr = mount/some/file
@@ -2965,14 +3030,27 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, unsigned char markMissing){
 				db_quote_string(instance, &pre);
 				rem = GetMetaData(UID, "Path", 0);
 				db_quote_string(instance, &rem);
-//				newURL = GetMetaData(UID, "URL", 0);	For coexistance with old v.3, we will not change the URL
-//				db_quote_string(instance, &newURL);		All commented code below is to keep the URL unchanged for now.
+				newURL = GetMetaData(UID, "URL", 0);
+				db_quote_string(instance, &newURL);
 				tmp = GetMetaData(UID, "Hash", 0);
 				db_quote_string(instance, &tmp);
 				// do the update
-/*				db_queryf(instance, 
-					"UPDATE %sfile SET Missing = 0, Hash = %s, Path = %s,  Prefix = %s, URL = %s WHERE ID = %lu", 
-					 prefix, tmp, rem, pre, newURL, recID);
+				
+/*				// for no, don't change Mount and URL, for coexistance with old v.3, we will not change the URL
+				// Old OSX: Mount -> Prefix + mountName (first dir in path) 
+				// if path=/some/path, mountName = /
+				// if path=some/path, mountName = some/
+				if(tmp = strstr(rem, "/")){
+					str_setstr(&mountName, pre);
+					if(tmp = str_substring(rem, 0, len){
+						str_appendstr(&mountName, tmp);
+						free(tmp);
+					}
+				}else
+					str_setstr(&mountName, "");
+				db_queryf(instance, 
+					"UPDATE %sfile SET Missing = 0, Hash = %s, Mount = %s, Path = %s,  Prefix = %s, URL = %s WHERE ID = %lu", 
+					 prefix, tmp, rem, pre, mountName, newURL, recID);
 */
 				db_queryf(instance, 
 					"UPDATE %sfile SET Missing = 0, Hash = %s, Path = %s,  Prefix = %s WHERE ID = %lu", 
@@ -3459,8 +3537,9 @@ void dbFileSearch(ctl_session *session, unsigned char silent, const char *Path, 
 	char *prefix;
 	char *tmp;
 	char *path = NULL;
+	char *adjmountName = NULL;
 	char buf[4096]; // send data buffer
-	int tx_length, i, p, listSize;
+	int tx_length, i, p, c, listSize;
 	char *prefixList;
 	const char *mountName;
 	glob_t globbuf;
@@ -3488,6 +3567,19 @@ void dbFileSearch(ctl_session *session, unsigned char silent, const char *Path, 
 				// with in looking for files with Hash codes that match in the dtatabse and are missing.
 				p = 0;
 				i = 0;
+				c = 0;
+				// Copy the string and change the case of the first letter, if it's a letter
+				// for an alternate comparison on systems that change the case of the mount
+				str_setstr(&adjmountName, mountName);
+				if(isupper(*adjmountName))
+					*adjmountName = tolower(*adjmountName);
+				else if(islower(*adjmountName))
+					*adjmountName = toupper(*adjmountName);
+				else{
+					// not case changable
+					free(adjmountName);
+					adjmountName = NULL;
+				}
 				prefixList = GetMetaData(0, "file_prefixes", 0);
 				listSize = str_CountFields(prefixList, ",") + 1;
 				while(p < listSize){
@@ -3496,7 +3588,15 @@ void dbFileSearch(ctl_session *session, unsigned char silent, const char *Path, 
 					if(tmp){
 						if(strlen(tmp)){
 							str_setstr(&path, tmp);
-							str_appendstr(&path, mountName);
+							if(adjmountName && c){
+								// trying the version with case adjustment
+								str_appendstr(&path, adjmountName);
+								c = 0; // go back to original case next time
+							}else{
+								str_appendstr(&path, mountName);
+								if(adjmountName)
+									c = 1; // try case change next time
+							}
 							i = 0;
 							if(!glob(path, GLOB_NOSORT, NULL, &globbuf)){
 								while(i < globbuf.gl_pathc){
@@ -3512,7 +3612,8 @@ void dbFileSearch(ctl_session *session, unsigned char silent, const char *Path, 
 							globfree(&globbuf);
 						}
 						free(tmp);
-						p++;
+						if(!c)
+							p++;
 					}else
 						break;
 				}
