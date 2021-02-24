@@ -164,8 +164,9 @@ char *str_substring(char *string, unsigned int from, unsigned int length){
 		return NULL;
 	if(len < (length + from))	// limit to end of source string
 		length = len - from;
-	result = calloc(1, length);
-	memcpy(result, string+from, length);
+	result = calloc(1, length+1);
+	if(length)
+		memcpy(result, string+from, length);
 	return result;
 }
 

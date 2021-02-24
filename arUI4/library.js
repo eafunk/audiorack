@@ -709,7 +709,7 @@ function getFilePrefixPoint(file){
 	return result;
 }
 
-async function resolveFileFromProperties(properties, update){
+async function resolveFileFromProperties(properties){
 	// check file related properties in db against the file itself... find file if needed.
 	// use file as final authority for properties.  Start with these 2 assumptions:
 	let changed = 0;
@@ -1766,7 +1766,7 @@ function deleteID(request, response, params, dirs){
 															console.log("Failed to get library properties for file item #"+ID+", to delete the file."); 
 														}else if(results && results.length){
 															// require that the file is prefixed, for security reasons
-															resolveFileFromProperties(results[0], false).then(result => {
+															resolveFileFromProperties(results[0]).then(result => {
 																if(result.Missing == 0){
 																	let fullpath = result.Prefix + result.Path;
 																	fs.unlink(fullpath, (err) => {
@@ -2260,7 +2260,7 @@ function getItem(request, response, params, dirs){
 										let final = results[0];
 										if(params.resolve){
 											// handle file type resolve option
-											resolveFileFromProperties(subresults[0], false).then(result => {
+											resolveFileFromProperties(subresults[0]).then(result => {
 												final[type] = result;
 												response.status(201);
 												response.json(final);
@@ -2413,7 +2413,7 @@ function getDownload(request, response, params, dirs){
 								}else if(results[0]){
 									if(results && Array.isArray(results) && results[0].Prefix && results[0].Prefix.length && results[0].Path && results[0].Path.length){
 										// require that the file is prefixed, for security reasons
-										resolveFileFromProperties(results[0], false).then(result => {
+										resolveFileFromProperties(results[0]).then(result => {
 											if(result.Missing == 0){
 												let fullpath = result.Prefix + result.Path;
 												if(params.save && (params.save != 0))
@@ -3039,7 +3039,7 @@ async function importFileIntoLibrary(path, params){
 						return pass;
 					}
 					// try to delete original file
-					result = await resolveFileFromProperties(dupInfo, false);
+					result = await resolveFileFromProperties(dupInfo);
 					if(!result.Missing){
 						let ok = await deleteFile(result.Path + result.Prefix);
 						if(ok)
@@ -3070,12 +3070,12 @@ async function importFileIntoLibrary(path, params){
 					// Old OSX: Mount -> Prefix + mountName (first dir in path) 
 					// if path=/some/path, mountName = /
 					// if path=some/path, mountName = some/
-					let idx = meta.Path.indexOf("/");
-					let Mount = "";
-					if(idx > -1)
-						Mount = meta.Prefix + meta.Path.substring(0, idx+1);
-					else
-						Mount = meta.Prefix + meta.Path;
+					let Mount = "/";
+					if(pre.prefix.length){
+						let idx = meta.Path.indexOf("/");
+						if(idx > 0)
+							Mount = meta.Prefix + meta.Path.substring(0, idx);
+					}
 					if(dupmode == 1){ //insert new file row
 						let insert = "INSERT INTO "+locConf['prefix']+"file "
 						let colstr = "";
@@ -3216,6 +3216,29 @@ function importFile(request, response, params, dirs){
 	}
 }
 
+function getPrefix(request, response, params){
+	if(params.path && params.path.length){
+		let path = params.path;
+		if((request.session.permission != "admin") &&  (request.session.permission != "manage")){
+			response.status(401);
+			response.end();
+			return;
+		}
+		let result = getFilePrefixPoint(path);
+		if(result){
+			response.status(200); 
+			response.json(result);
+			response.end();
+		}else{
+			response.status(400);
+			response.end();
+		}
+	}else{
+		response.status(400);
+		response.end();
+	}
+}
+
 function getLibraryFingerprint(){
 	libpool.getConnection((err, connection) => {
 		if(err){
@@ -3346,6 +3369,8 @@ module.exports = {
 																		// note: if id is set, type of new and origin must match.  For files, only 
 																		// 		file properties and duration are changed, with the new file replacing
 																		//			the old at the old file's location.
+		}else if(dirs[2] == 'getprefix'){
+			getPrefix(request, response, params);			// /getprefix?path=the/path/to/find/prefix/of/if/any
 		}else{
 			response.status(400);
 			response.end();
@@ -3374,7 +3399,7 @@ con.connect(function(err) {
 });
  
 
-unsigned char db_initialize(dbInstance *db){
+async function db_initialize(conn, conf){
 	dbInstance *newinst;
 	char *dbName;
 	char *sqlstr = NULL;
@@ -3385,24 +3410,36 @@ unsigned char db_initialize(dbInstance *db){
 	FILE *fp;
 	char line[4096];
 	
-	newinst = NULL; // used as a flag to clean up new db at the end ofthe  first call of the call recursive chain
+	newinst = NULL; // used as a flag to clean up new db at the end of the first call of the call recursive chain
 	fp = NULL;
 	typeStr = GetMetaData(0, "db_type", 0);
 	dbName = GetMetaData(0, "db_name", 0);
 	if(!strlen(typeStr) || !strlen(dbName))
 		goto cleanup;
 
-	if(!db){
-		// set up a db instance and connection, independent of the thread associated db instance,
-		// so we can start the connection off unassociated with a particular named database.  This
-		// is required so we can connect, and THEN see if the named database exists, creating it if 
-		// needed.  If we start off connecing with the named database, and the database doesn't exist
-		// yet, the entire connection will fail.
-		db = calloc(1, sizeof(dbInstance));
-		db_set_errtag(db, "dbInitialize");
-		newinst = db;  // this sets the flag that we are the first call of the call recursive chain
-		if(!db_connection_setup(db, 0))
-			goto cleanup;
+	if(!conn){
+		var mysql = require('mysql');
+		* 
+		* "type": "mysql",
+			"host": "127.0.0.1",
+			"user": "root",
+			"password": "wlvs1035fm",
+			"database": "mtnmedia",
+			"prefix": "ar_"
+		* 
+		* 
+		* 
+		var con = mysql.createConnection({
+			host: conf['host'],
+			user: conf['user'],
+			password: conf['password']
+		});
+
+		con.connect(function(err) {
+			if(err) 
+				throw err;
+			console.log("Connected!");
+		}
 	}
 	
 	if(!db_use_database(db, dbName))

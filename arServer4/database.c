@@ -3036,29 +3036,31 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, unsigned char markMissing){
 				db_quote_string(instance, &tmp);
 				// do the update
 				
-/*				// for no, don't change Mount and URL, for coexistance with old v.3, we will not change the URL
 				// Old OSX: Mount -> Prefix + mountName (first dir in path) 
 				// if path=/some/path, mountName = /
 				// if path=some/path, mountName = some/
-				if(tmp = strstr(rem, "/")){
-					str_setstr(&mountName, pre);
-					if(tmp = str_substring(rem, 0, len){
-						str_appendstr(&mountName, tmp);
-						free(tmp);
+				// mount = prefix + mountName
+				str_setstr(&mountName, "/");
+				if(strlen(pre)){
+					if((tmp = strstr(rem, "/")) && (tmp != rem)){
+						if(tmp = str_substring(rem, 0, (tmp - rem))){
+							str_setstr(&mountName, pre);
+							str_appendstr(&mountName, tmp);
+							free(tmp);
+						}
 					}
-				}else
-					str_setstr(&mountName, "");
+				}
 				db_queryf(instance, 
-					"UPDATE %sfile SET Missing = 0, Hash = %s, Mount = %s, Path = %s,  Prefix = %s, URL = %s WHERE ID = %lu", 
+					"UPDATE %sfile SET Missing = 0, Hash = %s, Mount = %s, Path = %s, Prefix = %s, URL = %s WHERE ID = %lu", 
 					 prefix, tmp, rem, pre, mountName, newURL, recID);
-*/
-				db_queryf(instance, 
-					"UPDATE %sfile SET Missing = 0, Hash = %s, Path = %s,  Prefix = %s WHERE ID = %lu", 
-					 prefix, tmp, rem, pre, recID);
+
+//db_queryf(instance, 
+//					"UPDATE %sfile SET Missing = 0, Hash = %s, Path = %s,  Prefix = %s WHERE ID = %lu", 
+//					 prefix, tmp, rem, pre, recID);
 				free(tmp);
 				free(rem);
 				free(pre);
-//				free(newURL);
+				free(newURL);
 			}
 		}
 	}

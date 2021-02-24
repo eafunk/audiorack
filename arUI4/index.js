@@ -1,3 +1,4 @@
+// node.js versio 14 or later required
 var crypto = require('crypto');
 var express = require('express');
 var session = require('express-session');
@@ -152,7 +153,7 @@ function clearTmpDirAgedFilesFunc(){
 								});
 							}else if(stats.isDirectory()){
 								// recursivly remove directory and contents regardless of contents age
-								fs.rmdir(thisFile, {recursive: true}, (error) =>{ 
+								fs.rmdir(thisFile, {recursive: true}, function (err){ 
 									if(err)
 										console.log("aged tempMediaDir directory remove failed: " + file + "err="+ err);
 									else

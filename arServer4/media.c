@@ -194,23 +194,27 @@ char *GetFileHash(const char *path){
 				snprintf(buf, sizeof(buf), "%02x", md5Ptr[i]);
 				str_appendstr(&str, buf);
 			}	
-			return str;				
+			return str;
 		}
 		free(str);
 	}
-	return NULL;	
+	return NULL;
 }
 
-unsigned char CheckFileHashMatch(const char *path, const char *hash){	
+unsigned char CheckFileHashMatch(const char *path, const char *hash){
 	unsigned char md5Ptr[16];
 	char buf[32];
 	char *fHash;
 	
 	if(hash == NULL)
 		return 0;
-	if(strlen(hash) == 0)	// ignore hash check for items with empy hash property
-		return 1;
 	if(fHash = GetFileHash(path)){
+		if(strlen(hash) == 0){
+			// ignore hash check for items with empy hash property
+			// but only after we check to make sure a file is actual at this path
+			free(fHash);
+			return 1;
+		}
 		if(strcmp(hash, fHash) == 0){
 			// Hash code agrees with database
 			free(fHash);
