@@ -1,10 +1,27 @@
+/*
+ Copyright (c) 2021 Ethan Funk
+ 
+ Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
+ documentation files (the "Software"), to deal in the Software without restriction, including without limitation 
+ the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, 
+ and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+ 
+ The above copyright notice and this permission notice shall be included in all copies or substantial portions 
+ of the Software.
+ 
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED 
+ TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL 
+ THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF 
+ CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+ DEALINGS IN THE SOFTWARE.
+*/
 const DefLimit = 50;
 
 var mysql = require('mysql');
 const _= require('lodash');
 var fs = require('fs');
 var path = require('path');
-const readline = require('readline');
+var linereader = require('line-reader');
 var crypto = require('crypto');
 const crc = require('node-crc');
 const url = require('url');
@@ -16,6 +33,7 @@ var libpool = undefined;
 var locConf = undefined;
 var tmpDir = "";
 var mediaDir = "";
+var supportDir = "";
 var dbFingerprint = "";
 
 function hasWhiteSpace(str) {
@@ -129,7 +147,7 @@ function replaceQueryMacros(query, params, clearlf){
 				let end = subs.indexOf("]");
 				if(end > -1){
 					end = start + end;
-					query = replaceRangeWithString(query, start, end, params.prompt[prtIdx]);
+					query = replaceRangeWithString(query, start, end, libpool.escape(params.prompt[prtIdx]));
 					prtIdx++;
 				}
 			}else
@@ -146,7 +164,7 @@ function replaceQueryMacros(query, params, clearlf){
 				let end = subs.indexOf("]");
 				if(end > -1){
 					end = start + end;
-					query = replaceRangeWithString(query, start, end, params.select[selIdx]);
+					query = replaceRangeWithString(query, start, end, libpool.escape(params.select[selIdx]));
 					selIdx++;
 				}
 			}else
@@ -155,11 +173,11 @@ function replaceQueryMacros(query, params, clearlf){
 	}
 	
 	if(params && params.locid)
-		query = query.replaceAll("[loc-id]", params.locid);
+		query = query.replaceAll("[loc-id]", libpool.escape(params.locid));
 	query = query.replace("[!loc-id]", "[loc-id]");
 
 	if(params && params.fingerprint)
-		query = query.replaceAll("[fingerprint]", params.fingerprint);
+		query = query.replaceAll("[fingerprint]", libpool.escape(params.fingerprint));
 	query = query.replaceAll("[!fingerprint]", "[fingerprint]");
 	return query;
 }
@@ -169,7 +187,7 @@ function buildSetString(setStr, key, value){
 		setStr += "SET ";
 	else
 		setStr += ", ";
-	setStr += key+" = "+libpool.escape(value);
+	setStr += libpool.escapeId(key)+" = "+libpool.escape(value);
 	return setStr;
 }
 
@@ -178,7 +196,7 @@ function buildInsColumnString(colStr, key){
 		colStr += "(";
 	else
 		colStr += ", ";
-	colStr += key;
+	colStr += libpool.escapeId(key);
 	return colStr;
 }
 
@@ -197,9 +215,9 @@ function buildWhereString(whereStr, table, key, value){
 	else
 		whereStr += "AND ";
 	if(value.indexOf("%") == -1)
-		whereStr += locConf['prefix']+table+"."+key+"="+libpool.escape(value)+" ";
+		whereStr += libpool.escapeId(locConf['prefix']+table)+"."+libpool.escapeId(key)+"="+libpool.escape(value)+" ";
 	else
-		whereStr += locConf['prefix']+table+"."+key+" LIKE "+libpool.escape(value)+" ";
+		whereStr += libpool.escapeId(locConf['prefix']+table)+"."+libpool.escapeId(key)+" LIKE "+libpool.escape(value)+" ";
 	return whereStr;
 }
 
@@ -208,12 +226,12 @@ function buildWhereDate(whereStr, table, key, dateStr){
 		whereStr += "WHERE ";
 	else
 		whereStr += "AND ";
-	whereStr += "DATE(FROM_UNIXTIME("+locConf['prefix']+table+"."+key+"))="+libpool.escape(dateStr)+" ";
+	whereStr += "DATE(FROM_UNIXTIME("+libpool.escapeId(locConf['prefix']+table)+"."+libpool.escapeId(key)+"))="+libpool.escape(dateStr)+" ";
 	return whereStr;
 }
 
 function buildFromString(fromStr, table){
-	table = locConf['prefix']+table;
+	table = libpool.escapeId(locConf['prefix']+table);
 	if(fromStr.indexOf(table) == -1){
 		if(fromStr.length == 0)
 			fromStr += "FROM (";
@@ -418,9 +436,9 @@ function restQueryRequest(connection, request, response, select, from, where, ta
 				let j = str.search("-");
 				if(j > -1){
 					str = str.substring(j+1);
-					str += " DESC";
-				}
-				tail += str;
+					tail += libpool.escapeId(str)+" DESC";
+				}else
+					tail += libpool.escapeId(str);
 			}
 			tail += " ";
 		}
@@ -573,22 +591,36 @@ function closeFileDescriptor(fd){
 	});
 }
 
-async function fileLineByLine(file, params, linecb){
-	try{
-		const fileStream = fs.createReadStream(file);
-		let rl = readline.createInterface({
-			input: fileStream,
-			crlfDelay: Infinity
+function createReadStream(filename){
+	return new Promise(function(resolve, reject){
+		function onError(err){
+			reject(err);
+		}
+		function onReadable(){
+			cleanup();
+			resolve(stream);
+		}
+		function cleanup(){
+			stream.removeListener('error', onError);
+			stream.removeListener('readable', onReadable);
+		}
+		
+		var stream = fs.createReadStream(filename);
+		stream.on('error', onError);
+		stream.on('readable', onReadable);    // <-- small correction
+	});
+}
+
+function processFileLines(filename, options, params, linecb){
+	return new Promise(function(resolve, reject) {
+		linereader.eachLine(filename, options, linecb.bind({params: params}), function(err){
+			if(err){
+				reject(err);
+			}else{
+				resolve(true);
+			}
 		});
-		rl.on('line', (line) => {
-			linecb(line, params);
-		});
-		await once(rl, 'close');
-		return true;
-	}catch(err){
-		console.error("fileLineByLine error: "+err);
-		return false;
-	}
+	});
 }
 
 async function getFileHash(path){
@@ -911,9 +943,9 @@ function getFrom(request, response, params, dirs){
 								// columns can't have white spaced... skip if it does
 								continue;
 							if(select.length == 0)
-								select = "SELECT DISTINCT "+dstr;
+								select = "SELECT DISTINCT "+libpool.escapeId(dstr);
 							else
-								select += ", "+valstr;
+								select += ", "+libpool.escapeId(dstr);
 						}
 						select += " ";
 					}else{
@@ -921,7 +953,7 @@ function getFrom(request, response, params, dirs){
 							// columns can't have white spaced... skip if it does
 							select = "SELECT * ";
 						else
-							select = "SELECT DISTINCT "+dstr+" ";
+							select = "SELECT DISTINCT "+libpool.escapeId(dstr)+" ";
 					}
 					delete params.distinct;
 					
@@ -929,7 +961,7 @@ function getFrom(request, response, params, dirs){
 					select = "SELECT * ";
 				}
 				
-				let from = "FROM "+locConf['prefix']+table+" ";
+				let from = "FROM "+libpool.escapeId(locConf['prefix']+table)+" ";
 				let where = "";
 				let tail = "";
 
@@ -2534,7 +2566,8 @@ function execShellCommand(cmd, params) {
 	});
 }
 
-function fplLineInterp(line, params){
+function fplLineInterp(line, last, donecb){
+	// params inherited from processFileLines function via this.params
 	let pos = line.indexOf("\t");
 	let key = "";
 	let val = "";
@@ -2544,36 +2577,42 @@ function fplLineInterp(line, params){
 			val = line.substring(pos+1);
 	}
 	if(key.length){
-		if(params.index){	// playlist item level properties
-			if(params.props.filepl == undefined)
-				params.props.filepl = [];
-			if(params.props.filepl[params.index-1] == undefined)
-				params.props.filepl[params.index-1] = {};
-			params.props.filepl[params.index-1][key] = val;
+		if(this.params.index){	// playlist item level properties
+			if(this.params.props.filepl == undefined)
+				this.params.props.filepl = [];
+			if(this.params.props.filepl[this.params.index-1] == undefined)
+				this.params.props.filepl[this.params.index-1] = {};
+			this.params.props.filepl[this.params.index-1][key] = val;
 		}else{		// top level playlist properties
-			params.props[key] = val;
+			this.params.props[key] = val;
 		}
 	}else if(line.length == 0){
 		// empty line...
-		params.index++;
+		this.params.index++;
 	}
+	donecb();
 }
 
 async function filePLGetMetaForFile(filepl, props){
 	var index = 0;	// start at zero for parent level.  1, 2,.. are item indexes in the playlist
-	let params ={index: 0, props: props};
-	let status = await fileLineByLine(filepl, params, fplLineInterp);
-	if(status = true){
+	var status = false;
+	let params = {index: 0, props: props};
+	try{
+		status = await processFileLines(filepl, {}, params, fplLineInterp);
+	}catch(err){
+		status = false;
+	}
+	if(status == true){
 		return props;
 	}else{
 		return false
 	}
 }
 
-
 async function getFileMeta(tmpDirFileName){
 	const trans = {Duration: "Duration", title: "Name", artist: "Artist", album: "Album", "track number": "Track", composer: "Composer", audio: "Audio", Seekable: "Seekable"};
 	let obj = {};
+	let full = false;
 	if(tmpDir.length){
 		let path = tmpDir+tmpDirFileName;
 		let params = [path];
@@ -2588,7 +2627,11 @@ async function getFileMeta(tmpDirFileName){
 				if(str == "Type\tfilepl"){
 					// we have an audiorack playlist file
 					obj.Type = "filepl";
-					let full = await filePLGetMetaForFile(path, obj);
+					try{
+						full = await filePLGetMetaForFile(path, obj);
+					}catch(err){
+						full = false;
+					}
 					if(full)
 						return full;	// all results
 					else
@@ -2730,6 +2773,8 @@ async function checkDupFileHash(connection, Hash){
 async function findAddNameTable(connection, table, name){
 	// find or if missing, and new table entry with the given name (i.e. Artist, Album, etc.)
 	let result = false;
+	if(name.length == 0)
+		name = "[NONE]";
 	// search...
 	let query = "SELECT ID FROM "+locConf['prefix']+table+" WHERE Name = "+libpool.escape(name)+";";
 	try{
@@ -3216,6 +3261,147 @@ function importFile(request, response, params, dirs){
 	}
 }
 
+function sqlInitLineInterp(line, last, donecb){
+	// params is inherited from processFileLines function via this.params
+	line = line.replaceAll("[prefix]", this.params.prefix);
+	line = line.replaceAll("[!loc-id]", "[loc-id]");
+	line = line.replaceAll("[!loc-ids]", "[loc-ids]");
+	line = line.replaceAll("[!prefix]", "[prefix]");
+	line = line.replaceAll("[!thisID]", "[thisID]");
+	line = line.replaceAll("\\n", "\n");
+	asyncQuery(this.params.connection, line).then(result => {
+		donecb();
+	}).catch(function(err){
+		this.params.err = err;	// so we can check for errors down the line
+		donecb(false);	// finishes, but doesn't note error down the line.
+	}.bind({params: this.params}));
+}
+
+async function db_initialize(conn, params){
+	let versionStr = "";
+	let iniFile = "";
+	let result = false;
+	
+	try{
+		result = await asyncQuery(conn, "USE "+params.database+";");
+		result = await asyncQuery(conn, "SELECT Value FROM "+locConf['prefix']+"info WHERE Property = 'Version'");
+		versionStr = result[0].Value;
+	}catch(err){
+		versionStr = "";
+	}
+	if(versionStr && versionStr.length){
+		// this is an upgrade to an existing database
+		iniFile += supportDir + "/" + params.type + versionStr + ".dbi";
+	}else{
+		// create new database if one with the given name doesn't already exist
+		try{
+			result = await asyncQuery(conn, "CREATE DATABASE IF NOT EXISTS "+params.database+";");
+			iniFile += supportDir + "/" + params.type + ".dbi";
+		}catch(err){
+			return {error: err};
+		}
+		// use the new db
+		try{
+			result = await asyncQuery(conn, "USE "+params.database+";");
+		}catch(err){
+			return {error: err};
+		}
+	}
+	
+	params.connection = conn; // this is how we pass the db-connection to the sqlInitLineInterp callback
+	try{
+		result = await processFileLines(iniFile, {}, params, sqlInitLineInterp);
+	}catch(err) {
+		result = err;
+	}
+	if(result != true){
+		if(versionStr && versionStr.length && (result.errno == -2)) // trap missing file... no further upgardes.
+			// if we can't open the file, maybe we are already up to date to the latest version.
+			// return current version
+			return {version: versionStr, oldVersion: versionStr};
+		return {error: status};
+	}else if(params.err)
+		return {error: params.err};
+		
+	if(versionStr && versionStr.length){
+		// re-enter for another go-around so we upgrade
+		// all they way to the latest version.
+		return db_initialize(conn, params);
+	}
+	// get the new version number string
+	try{
+		result = await asyncQuery(conn, "SELECT Value FROM "+locConf['prefix']+"info WHERE Property = 'Version'");
+		return {version: result[0].Value, oldVersion: "0.0"};
+	}catch(err){
+		return {error: err};
+	}
+}
+
+function handleDbInit(request, response, params){
+	if(request.session.permission != "admin"){
+		response.status(401);
+		response.end();
+		return;
+	}
+	if(supportDir && supportDir.length){
+		// setup singleton db connection: the db connection pool, and given db might not exist yet.
+		if(params.type && params.host && params.user && params.password && params.database && (hasWhiteSpace(params.database) == false) && params.prefix){
+			if(params.type == "mysql"){
+				var conn = mysql.createConnection({
+					host: params.host,
+					port: params.port,
+					user: params.user,
+					password: params.password,
+					dateStrings: true
+				});
+				conn.connect(function(err) {
+					if(err){
+						response.status(500);
+						response.send(err);
+						response.end();
+					}else{
+						conn.beginTransaction(function (err, result) {
+							if(err){
+								response.status(500);
+								response.send(err);
+								response.end();
+							}else{
+								db_initialize(conn, params).then(result => {
+									if(result.version){
+										conn.commit(function(){
+											conn.end();
+										});
+										response.status(200); 
+										response.json(result);
+										response.end();
+									}else{
+										conn.rollback(function(){
+											conn.end();
+											//Failure
+										});
+										response.status(400);
+										response.send(result.error);
+										response.end();
+									}
+								});
+							}
+						});
+					}
+				});
+			}else{
+				response.status(400);
+				response.end("unsupported database server type");
+			}
+		}else{
+			response.status(400);
+			response.end("missing or bad parameter");
+		}
+	}else{
+		response.status(400);
+		response.end("Support director path not configured");
+	}
+}
+
 function getPrefix(request, response, params){
 	if(params.path && params.path.length){
 		let path = params.path;
@@ -3284,6 +3470,10 @@ module.exports = {
 			mediaDir = config['mediaDir'];
 		else
 			mediaDir = "";
+		if(config['supportDir'] && config['supportDir'].length)
+			supportDir = config['mediaDir'];
+		else
+			supportDir = "/opt/audiorack/support";
 		let libc = config['library'];
 		if(libc){
 			if(_.isEqual(libc, locConf) == false){
@@ -3298,6 +3488,7 @@ module.exports = {
 						multipleStatements: true,
 						host: libc['host'],
 						user: libc['user'],
+						port: libc['port'],
 						password: libc['password'],
 						database: libc['database'],
 						dateStrings: true
@@ -3371,152 +3562,20 @@ module.exports = {
 																		//			the old at the old file's location.
 		}else if(dirs[2] == 'getprefix'){
 			getPrefix(request, response, params);			// /getprefix?path=the/path/to/find/prefix/of/if/any
+		}else if(dirs[2] == 'dbinit'){
+			handleDbInit(request, response, params);		// initdb?type=mysql&host=thehostadr&user=dbuser&password=thepassword&database=dbname&prefix=tableprefix (ar_ is typical)
+																		// port=port-number is optional
 		}else{
 			response.status(400);
 			response.end();
 		}
 		
+		// download: add export support
+		
 		// dbSync
 		
 		// dbSearch
-				
-		// initdb - name
+		
 	}
 };
-/*
-// singleton db access:
-var mysql = require('mysql');
 
-var con = mysql.createConnection({
-	host: locConf['host'],
-	user: locConf['user'],
-	password: locConf['password']
-});
-
-con.connect(function(err) {
-  if (err) throw err;
-  console.log("Connected!");
-});
- 
-
-async function db_initialize(conn, conf){
-	dbInstance *newinst;
-	char *dbName;
-	char *sqlstr = NULL;
-	char *typeStr;
-	char *versionStr = NULL;
-	char *ini_file_path = NULL;
-	char *tmp = NULL;
-	FILE *fp;
-	char line[4096];
-	
-	newinst = NULL; // used as a flag to clean up new db at the end of the first call of the call recursive chain
-	fp = NULL;
-	typeStr = GetMetaData(0, "db_type", 0);
-	dbName = GetMetaData(0, "db_name", 0);
-	if(!strlen(typeStr) || !strlen(dbName))
-		goto cleanup;
-
-	if(!conn){
-		var mysql = require('mysql');
-		* 
-		* "type": "mysql",
-			"host": "127.0.0.1",
-			"user": "root",
-			"password": "wlvs1035fm",
-			"database": "mtnmedia",
-			"prefix": "ar_"
-		* 
-		* 
-		* 
-		var con = mysql.createConnection({
-			host: conf['host'],
-			user: conf['user'],
-			password: conf['password']
-		});
-
-		con.connect(function(err) {
-			if(err) 
-				throw err;
-			console.log("Connected!");
-		}
-	}
-	
-	if(!db_use_database(db, dbName))
-		versionStr = dbGetInfo("Version");
-	if(versionStr && strlen(versionStr)){
-		// this is an upgrade to an existing database
-		str_setstr(&ini_file_path, AppSupportDirectory);
-		str_appendstr(&ini_file_path, typeStr);
-		str_appendstr(&ini_file_path, versionStr);
-		str_appendstr(&ini_file_path, ".dbi");
-	}else{
-		// create new database if one with the given name doesn't already exist
-		str_setstr(&ini_file_path, AppSupportDirectory);
-		str_appendstr(&ini_file_path, typeStr);
-		str_appendstr(&ini_file_path, ".dbi");
-		str_setstr(&sqlstr, "CREATE DATABASE IF NOT EXISTS ");
-		str_appendstr(&sqlstr, dbName);
-		
-		if(db_query(db, sqlstr))
-			goto cleanup;
-		if(db_use_database(db, dbName))
-			goto cleanup;
-	}
-	
-	if((fp = fopen(ini_file_path, "r")) == NULL){
-		if(!versionStr || !strlen(versionStr)){
-			str_setstr(&tmp, "[database] dbInitialize- template file '");
-			str_appendstr(&tmp, ini_file_path);
-			str_appendstr(&tmp, "': Could not open file for reading");
-			serverLogMakeEntry(tmp);
-			free(tmp); 
-		}else
-			db_set_errtag(db, "dbInitialize");
-		goto cleanup;
-	}
-	
-	db_set_errtag(db, "dbInitialize");
-	while(fgets(line, sizeof line, fp) != NULL){
-		// each line in the .dbi file is an sql command to execute
-		str_setstr(&sqlstr, line);
-		dbMacroReplace(&sqlstr);
-		if(!db_query(db, sqlstr))
-			db_result_free(db);
-	}
-	if(versionStr && strlen(versionStr))
-		// re-enter for another go-around so we upgrade
-		// all they way to the latest version.
-		db_initialize(db);
-	
-cleanup:
-	free(dbName);
-	free(typeStr);
-	if(sqlstr)
-		free(sqlstr);
-	if(ini_file_path)
-		free(ini_file_path);
-	if(fp)
-		fclose(fp);
-	if(!db->errRec.flag){
-		versionStr = dbGetInfo("Version");
-		str_setstr(&tmp, " [database] dbInitialize-");
-		str_appendstr(&tmp, dbName);
-		str_appendstr(&tmp, ": initialized/updated to version ");
-		str_appendstr(&tmp, versionStr);
-		serverLogMakeEntry(tmp);
-		free(dbName);
-		free(versionStr);
-		if(newinst)
-			db_instance_free(newinst);
-		return 1;
-	}
-	if(versionStr)
-		free(versionStr);
-	if(dbName)
-		free(dbName);
-	if(newinst)
-		db_instance_free(newinst);
-	return 0;
-}
-*/

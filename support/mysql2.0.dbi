@@ -1,2 +1,0 @@
-ALTER TABLE [prefix]file ADD Intro float default NULL;
-UPDATE [prefix]info SET Value = '2.1' WHERE Property = 'Version';
