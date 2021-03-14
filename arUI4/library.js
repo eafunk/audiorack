@@ -15,6 +15,9 @@
  CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
  DEALINGS IN THE SOFTWARE.
 */
+
+"use strict"; // prevents accidental global var creation when a variable is assigned but not previously declared.
+
 const DefLimit = 50;
 
 var mysql = require('mysql');
@@ -27,6 +30,8 @@ const crc = require('node-crc');
 const url = require('url');
 var glob = require('glob');
 const { once } = require('events');
+var archiver = require('archiver');
+var sse = require('./sse.js');
 
 var prefix_list = [];
 var libpool = undefined;
@@ -35,6 +40,8 @@ var tmpDir = "";
 var mediaDir = "";
 var supportDir = "";
 var dbFingerprint = "";
+
+var dbSyncRunning = false;	// set to a function if dbSync is running in the background, otherwise false
 
 function hasWhiteSpace(str) {
   return /\s/g.test(str);
@@ -117,8 +124,8 @@ async function sequencialQuery(connection, queries){	// given array of query str
 }
 
 String.prototype.replaceAll = function(search, replacement){
-    var target = this;
-    return target.split(search).join(replacement);
+	var target = this;
+	return target.split(search).join(replacement);
 };
 
 function replaceRangeWithString(original, start, end, replace){
@@ -522,7 +529,6 @@ function copyFileToDir(fromFile, intoDir){
 	}); 
 }
 
-
 function deleteFile(path){
 	return new Promise(function (resolve){
 		fs.unlink(path, function (err){
@@ -637,9 +643,9 @@ async function getFileHash(path){
 		return "";
 	}
 	let result = false;
-	len = Math.floor(size/3);
-	b1 = Math.floor(len / 4096) * 4096;
-	b2 = Math.floor(len / 2048) * 4096;
+	let len = Math.floor(size/3);
+	let b1 = Math.floor(len / 4096) * 4096;
+	let b2 = Math.floor(len / 2048) * 4096;
 	result = await readFileIntoBuffer(fd, b1, 4096, buf, 0);
 	if(!result){
 		closeFileDescriptor(fd);
@@ -657,7 +663,7 @@ async function getFileHash(path){
 	len = Math.floor(size / 4);
 	b1 = Math.floor(len / 4096) * 4096;
 	b2 = Math.floor(len / 2048) * 4096;
-	b3 = Math.floor(3 * len / 4096) * 4096;
+	let b3 = Math.floor(3 * len / 4096) * 4096;
 	len = size & 0xffffffff;
 	hash += len.toString(16).padStart(8, '0');
 	result = await readFileIntoBuffer(fd, b1, 4096, buf, 0);
@@ -678,6 +684,7 @@ async function getFileHash(path){
 		return "";
 	}
 	hash += crc.crc32(buf).toString('hex').padStart(8, '0');
+	closeFileDescriptor(fd);
 	return hash;
 }
 
@@ -687,7 +694,7 @@ async function CheckFileHashMatch(path, hash){
 			return true;
 		let fHash = await getFileHash(path);
 		if(fHash.toLowerCase() === hash.toLowerCase())
-				return true;
+			return true;
 		return false;
 	}else
 		// ignore hash check for items with NULL hash property
@@ -742,8 +749,15 @@ function getFilePrefixPoint(file){
 }
 
 async function resolveFileFromProperties(properties){
-	// check file related properties in db against the file itself... find file if needed.
-	// use file as final authority for properties.  Start with these 2 assumptions:
+	// Check file related properties in db against the file itself... find file if needed.
+	// use file as final authority for properties. This function may modify the properties object.
+	// Returns a status of 0 for unchanged, 1 for updated/fixed, 2 for lost, 3 for found.
+	// Start with these 2 assumptions:
+	
+	if(typeof properties.Missing === 'string')
+		properties.Missing = parseInt(properties.Missing);
+
+	let status = 0;
 	let changed = 0;
 	let missing = 1;
 	let listSize = prefix_list.length;
@@ -820,9 +834,9 @@ async function resolveFileFromProperties(properties){
 	// path is Full Path, pathStr is the relative path, if any
 	// i.e. path = /longer/path/to/mount/some/file
 	// and  pathStr = mount/some/file
-	i = 0;
-	p = 0;
-	c = 0;
+	let i = 0;
+	let p = 0;
+	let c = 0;
 	let results = [];
 	do{
 		if(await CheckFileHashMatch(path, properties.Hash)){
@@ -870,40 +884,48 @@ async function resolveFileFromProperties(properties){
 				}
 			}
 		}while(p < listSize);
-		
 	}while(missing && plen && (p <= listSize));
-	
 	if(missing){
 		// can't find it
-		// set missing metadata flag
-		properties.Missing = 1;
-		stat = -2;
+		if(properties.Missing)
+			status = 0; // was missing, still is: no change
+		else{
+			// set missing metadata flag
+			properties.Missing = 1;
+			status = 2; // was not missing, is now: lost
+		}
 	}else{
 		// found it... set URL if not set or if changed
-		if(changed || ((properties.URL.length) == 0)){
-			// re-encode URL
+		if(properties.URL.length == 0)
+			changed = 1;	// fix missing URL
+		if(changed){
+			// re-encode URL from path change or from being missing
 			properties.URL = url.pathToFileURL(path).href;
-		}
+			status = 1;
+		}else
+			status = 0;
 
 		let pre = getFilePrefixPoint(path);
 		properties.Prefix = pre.prefix;
 		properties.Path = pre.path;
 		// Old OSX: Mount -> Prefix + mountName (first dir in path) 
 		// if path=/some/path, mountName = /
-		// if path=some/path, mountName = some/
+		// if path=some/path, mountName = Some/
 		let idx = pre.path.indexOf("/");
 		let Mount = "";
-		if(idx > -1)
-			Mount = pre.prefix + pre.path.substring(0, idx+1);
-		if(properties.Missing)
-			// was flag as missing, but it's not really missing... nothing else is different
-			changed = 1;
-		
+		if(idx > -1){
+			let mountName = pre.path.substring(0, idx+1);
+			mountName = mountName[0].toUpperCase() + mountName.substr(1);
+			Mount = pre.prefix + mountName;
+		}
+		if(properties.Missing){
+			// was missing, but has been found... 
+			status = 3; // missing now found
+		}
 		// unset missing metadata flag
 		properties.Missing = 0;
-		stat = 0;
 	}
-	return properties;
+	return status;
 }
 
 // getFrom -> get/table{/ID}?key1=, key2, ...
@@ -1026,7 +1048,9 @@ function setIn(request, response, params, dirs){
 				response.send(err.code);
 				response.end();
 			}else{
-				// NOTE: client is responsable for calculating Total Playlist duration, and update when changes are made.
+				// NOTE: client is responsable for updating Total Playlist duration, and update when changes are made.
+				// after all moves, additions and deletions are done, use the get item's calcDur property (recalculated duration) 
+				// to then update the item's duration property
 				if(dirs[4]){
 					// we have an ID... update the row with the specified ID
 					let update = "UPDATE "+locConf['prefix']+table+" ";
@@ -1206,7 +1230,7 @@ function setIn(request, response, params, dirs){
 						connection.release(); // return the connection to pool
 						return;
 					}
-
+					
 					for(let i=0; i < keys.length; i++){
 						let key = keys[i];
 						if(hasWhiteSpace(key)){
@@ -1793,14 +1817,15 @@ function deleteID(request, response, params, dirs){
 												}
 												// removing the file here too, if it's a file, as a side task.
 												if((type == "file") && params.remove && (params.remove != 0)){
-													connection.query("SELECT Hash, Path, Prefix, URL, Mount FROM "+locConf['prefix']+"file WHERE ID = "+ID+";", function(err, results){
+													connection.query("SELECT Hash, Path, Prefix, URL, Mount, Missing FROM "+locConf['prefix']+"file WHERE ID = "+ID+";", function(err, results){
 														if(err){
 															console.log("Failed to get library properties for file item #"+ID+", to delete the file."); 
 														}else if(results && results.length){
 															// require that the file is prefixed, for security reasons
-															resolveFileFromProperties(results[0]).then(result => {
-																if(result.Missing == 0){
-																	let fullpath = result.Prefix + result.Path;
+															let properties = results[0];
+															resolveFileFromProperties(properties).then(result => {
+																if(properties.Missing == 0){
+																	let fullpath = properties.Prefix + properties.Path;
 																	fs.unlink(fullpath, (err) => {
 																		if(err){
 																			console.log(err+"-Failed to delete the file for item #"+ID+", at "+fullpath); 
@@ -2293,7 +2318,7 @@ function getItem(request, response, params, dirs){
 										if(params.resolve){
 											// handle file type resolve option
 											resolveFileFromProperties(subresults[0]).then(result => {
-												final[type] = result;
+												final[type] = subresults[0];
 												response.status(201);
 												response.json(final);
 												connection.release();
@@ -2361,7 +2386,7 @@ function getItem(request, response, params, dirs){
 									}
 								});
 							}else{
-								connection.query("SELECT * FROM "+locConf['prefix']+type+" WHERE ID = "+ID+";", function(err, subresults){
+								connection.query("SELECT * FROM "+locConf['prefix']+libpool.escapeId(type)+" WHERE ID = "+ID+";", function(err, subresults){
 									if(err){
 										response.status(304);
 										response.send(err.code);
@@ -2402,6 +2427,233 @@ function getItem(request, response, params, dirs){
 	}
 }
 
+function calcLPLDuration(request, response, dirs){
+	let ID = 0;
+	if(dirs[3]  && (ID = parseInt(dirs[3], 10))){
+		if((request.session.permission != "admin") &&  (request.session.permission != "manage")){
+			response.status(401);
+			response.end();
+			return;
+		}
+		libpool.getConnection((err, connection) => {
+			if(err){
+				response.status(400);
+				response.send(err.code);
+				response.end();
+				return;
+			}else{
+				connection.query("SELECT Position, Property, Value FROM "+locConf['prefix']+"playlist WHERE ID = "+ID+" ORDER BY Position ASC;", function(err, results){
+					if(err){
+						response.status(304);
+						response.send(err.code);
+						connection.release();
+						response.end();
+						return;
+					}else{
+						let re = [];
+						let pos = -1;
+						let obj = {};
+						for(let i=0; i < results.length; i++){
+							if(results[i].Position != pos){
+								pos = results[i].Position;
+								obj = {};
+								re[pos] = obj;
+							}
+							obj[results[i].Property] = results[i].Value;
+						}
+						let dur = calcFPLDuration(re, 0);
+						response.status(201);
+						response.json(dur);
+						connection.release();
+						response.end();
+					}
+				});
+			}
+		});
+	}else{
+		response.status(400);
+		response.end();
+	}
+}
+
+function calcFPLDuration(plprops, offsetAdj){
+	// this also addes/updates the Offset property + offsetAdj if it doesn't exist or offsetAdj is not zero
+	let duration = 0.0;
+	let last = 0.0;
+	let offset = 0.0;
+	let calDur = 0.0;
+	let next = 0.0;
+	if(plprops && plprops.length){
+		// use Duration, Offset, SegIn, SegOut and FadeOut properties
+		for(let i=0; i<plprops.length; i++){
+			// possibly readjust the start time
+			if(plprops[i].Offset)
+				duration = parseFloat(plprops[i].Offset); // override time to last item with start of this one
+				
+			last = duration;
+			// and add the next items offset or this item's duration for the end time
+			if(((i+1) < plprops.length) && (plprops[i+1].Offset)){
+				next = parseFloat(plprops[i+1].Offset) // use offset of next item, if present
+				// add a duration if missing
+				if((plprops[i].Duration == undefined) || (plprops[i].Duration == null) || (parseFloat(plprops[i].Duration) == 0)){
+					let dur = next - last;
+					// adjust for seg values, etc.
+					if(plprops[i].SegIn)
+						dur = dur +parseFloat(plprops[i].SegIn);
+					if(plprops[i].FadeOut)
+						dur = dur + parseFloat(plprops[i].FadeOut);
+					else if(plprops[i].SegOut)
+						dur = dur + parseFloat(plprops[i].SegOut);
+					else
+						dur = dur + 5.0; // default segout time
+					plprops[i].Duration = dur;
+				}
+				duration = next;
+			}else if(plprops[i].Duration){
+				duration = duration + parseFloat(plprops[i].Duration);
+				if(plprops[i].SegIn)
+					duration = duration - parseFloat(plprops[i].SegIn);
+				if(plprops[i].FadeOut)
+					duration = duration - parseFloat(plprops[i].FadeOut);
+				else if(plprops[i].SegOut)
+					duration = duration - parseFloat(plprops[i].SegOut);
+				else
+					duration = duration - 5.0; // default segout time
+			}
+			// Add an offset value, if missing
+			if(offsetAdj || (plprops[i].Offset == undefined) || (plprops[i].Offset == null) || (parseFloat(plprops[i].Offset) == 0))
+				plprops[i].Offset = last + offsetAdj;
+		}
+	}
+	return duration;
+}
+
+
+function createFilePlaylistBuffer(name, properties, offsetAdj){
+	// properties is an object with over all peroperties as key value pairs,
+	// and a single "playlist" array for each playlist item.
+	// playlist items are themselves, objects of key value pairs.
+	
+	// calculate total duration and set Offset property, if missing
+	let duration = calcFPLDuration(properties.playlist, offsetAdj);
+	let plist = properties.playlist;
+	// set header
+	let fdata = "Type\tfilepl\nName\t" + name + "\nDuration\t" + duration + "\n";
+	fdata += "Fingerprint\t" + properties.Fingerprint + "\nRevision\t1.0\n";
+	// build item list
+	for(let i = 0; i < plist.length; i++){
+		let keys = Object.keys(plist[i]);
+		let vals = Object.values(plist[i]);
+		fdata += "\n";
+		for(let j=0; j<keys.length; j++){
+			//exclude old properties we no longer care about
+			if(['MD5', 'FPL', 'Missing', 'FileID', 'Memory'].includes(keys[j]) == false){
+				fdata += keys[j] + "\t" + vals[j] + "\n";
+			}
+		}
+	}
+	return fdata;
+}
+
+function cueSheetTimeString(seconds){
+	let negative = false;
+	if(seconds < 0){
+		seconds = -seconds;
+		negative = true;
+	}
+	let mins = Math.floor(seconds / 60);
+	let rem = seconds - mins * 60;
+	let secs = Math.floor(rem);
+	let frames = Math.floor((rem - secs) * 75.0);
+	
+	let result = "";
+	if(negative)
+		result = "-";
+	
+	if(mins < 10)
+		result += "0";
+	result += mins;
+	
+	if(secs < 10)
+		result += ":0";
+	else
+		result += ":";
+	result += secs;
+	
+	if(frames < 10)
+		result += ":0";
+	else
+		result +=":";
+	result += frames;
+	
+	return result;
+}
+
+function createCuePlaylistBuffer(name, properties, offsetAdj){
+	// properties is an object with over all peroperties as key value pairs,
+	// and a single "playlist" array for each playlist item.
+	// playlist items are themselves, objects of key value pairs.
+	
+	// calculate total duration and set Offset property, if missing
+	let duration = calcFPLDuration(properties.playlist, offsetAdj);
+	let plist = properties.playlist;
+	// set header
+	let fdata = "FILE \"" + name.replaceAll("\"", "'") + "\"\n";
+
+	for(let i = 0; i < plist.length; i++){
+		let entry = plist[i];
+		if(i < 9)
+			fdata += "\tTRACK 0";
+		else
+			fdata += "\tTRACK ";
+		fdata += (i+1) + " AUDIO\n";
+		let title = entry.Name;
+		let perf = entry.Artist;
+		fdata += "\t\tTITLE \"";
+		if(title)
+			fdata += title.replaceAll("\"", "'");
+		fdata += "\"\n\t\tPERFORMER \"";
+		if(perf)
+			fdata += perf.replaceAll("\"", "'");
+		fdata += "\"\n";
+		
+		fdata += "\t\tINDEX 01 " + cueSheetTimeString(entry.Offset) + "\n";
+	}
+	return fdata;
+}
+
+async function pathForID(connection, ID){
+	let result = false;
+	try{
+		result = await asyncQuery(connection, "SELECT Path, Prefix, Hash, URL, Mount, Missing FROM "+locConf['prefix']+"file WHERE ID = "+ID+";");
+	}catch(err){
+		return "";
+	}
+	if(result[0]){
+		if(result && Array.isArray(result) && result[0].Prefix && result[0].Prefix.length && result[0].Path && result[0].Path.length){
+			// require that the file is prefixed, for security reasons
+			let properties = result[0];
+			await resolveFileFromProperties();
+			if(properties.Missing == 0)
+				return properties.Prefix + properties.Path;
+		}
+	}
+	return "";
+}
+
+async function pathForProperties(connection, props){
+	await resolveFileFromProperties(props);
+	if(props.Missing == 0)
+		// found it from the given properties
+		return props.Prefix + props.Path;
+	if(props.ID){
+		// didn't find it. It has a database ID: try using that to get the path via current properties
+		let result = await pathForID(connection, props.ID);
+		return result;
+	}
+	// can't find the file
+	return "";
+}
 // download/ID{?save=1}	if download is specified, then the file is downlaoded, no just sent
 function getDownload(request, response, params, dirs){
 	if(dirs[3]){
@@ -2425,7 +2677,7 @@ function getDownload(request, response, params, dirs){
 				return;
 			}else{
 				// check for type = file or playlist and handle accordingly
-				connection.query("SELECT Type FROM "+locConf['prefix']+"toc WHERE ID = "+ID+";", function(err, tresults){
+				connection.query("SELECT * FROM "+locConf['prefix']+"toc WHERE ID = "+ID+";", function(err, tresults){
 					if(err){
 						response.status(404);
 						response.send(err.code);
@@ -2435,46 +2687,105 @@ function getDownload(request, response, params, dirs){
 					}
 					if(tresults && Array.isArray(tresults) && tresults.length){
 						if(tresults[0].Type == "file"){
-							connection.query("SELECT Path, Prefix, Hash, URL, Mount FROM "+locConf['prefix']+"file WHERE ID = "+ID+";", function(err, results){
-								if(err){
-									response.status(404);
-									response.send(err.code);
-									connection.release();
-									response.end();
+							pathForID(connection, ID).then(result => {
+								connection.release();
+								if(result.length){
+									if(params.save && (params.save != 0))
+										response.download(result);
+									else
+										response.sendFile(result);
 									return;
-								}else if(results[0]){
-									if(results && Array.isArray(results) && results[0].Prefix && results[0].Prefix.length && results[0].Path && results[0].Path.length){
-										// require that the file is prefixed, for security reasons
-										resolveFileFromProperties(results[0]).then(result => {
-											if(result.Missing == 0){
-												let fullpath = result.Prefix + result.Path;
-												if(params.save && (params.save != 0))
-													response.download(fullpath);
-												else
-													response.sendFile(fullpath);
-												return;
-											}else{
-												response.status(400);
-												response.end();
-												connection.release();
-												return;
-											}
-										});
-									}else{
-										response.status(400);
-										response.end();
-										connection.release();
-										return;
-									}
 								}else{
-									response.status(404);
-									connection.release();
+									response.status(400);
 									response.end();
 									return;
 								}
 							});
 						}else if(tresults[0].Type == "playlist"){
-							//!! exprot params type
+							connection.query("SELECT Position, Property, Value FROM "+locConf['prefix']+"playlist WHERE ID = "+ID+" ORDER BY Position ASC;", function(err, subresults){
+								if(err){
+									response.status(304);
+									response.send(err.code);
+									connection.release();
+									response.end();
+									return;
+								}else{
+									let final = tresults[0];
+									if(dbFingerprint.length)
+										final["Fingerprint"] = dbFingerprint;
+									else
+										final["Fingerprint"] = "0";
+									let re = [];
+									let pos = -1;
+									for(let i=0; i < subresults.length; i++){
+										if(subresults[i].Position != pos){
+											pos = subresults[i].Position;
+											re[pos] = {};
+										}
+										re[pos][subresults[i].Property] = subresults[i].Value;
+									}
+									final["playlist"] = re;
+									if(!params.export || (params.export == "fpl")){
+										let data = createFilePlaylistBuffer(final.Name, final, 0.0);
+										response.set({
+											'Cache-Control': 'no-cache',
+											'Content-Type': 'text/plain',
+											'Content-Length': Buffer.byteLength(data, 'utf8'),
+											'Content-Disposition': 'attachment; filename=' + final.Name + '.fpl'
+										});
+										response.status(201);
+										response.send(data);
+										connection.release();
+										response.end();
+									}else if(params.export == "fplmedia"){
+										var archive = archiver('zip');
+										let data = createFilePlaylistBuffer(final.Name, final, 0.0);
+										response.attachment(final.Name+".zip");
+										archive.pipe(response);
+										// add the .fpl data as a file to the zip root
+										archive.append(data, {name: final.Name + ".fpl"});
+										// add file media to the media subdirectory
+										let dir = final.Name + "_media/";
+										let itemsProcessed = 0;
+										let rpt = "";
+										final.playlist.forEach((item, index, array) => {
+											pathForProperties(connection, item).then(result => {
+												if(result.length){
+													archive.file(result, {name: dir + path.basename(result)});
+													rpt += "item "+index+" added to media directory\n";
+												}else{
+													rpt += "item "+index+" failed to add to media directory\n";
+												}
+												itemsProcessed++;
+												if(itemsProcessed === array.length){
+													connection.release();
+													// add the report as a file to media directory
+													archive.append(rpt, {name: dir + "report.txt"});
+													archive.finalize();
+												}
+											});
+										});
+									}else if(params.export == "cue"){
+										let data = createCuePlaylistBuffer(final.Name, final, 0.0);
+										response.set({
+											'Cache-Control': 'no-cache',
+											'Content-Type': 'text/plain',
+											'Content-Length': Buffer.byteLength(data, 'utf8'),
+											'Content-Disposition': 'attachment; filename=' + final.Name + '.cue'
+										});
+										response.status(201);
+										response.send(data);
+										connection.release();
+										response.end();
+									}else{
+										// bad export type
+										response.status(404);
+										connection.release();
+										response.end();
+										return;
+									} 
+								}
+							});
 						}else{
 							// Missing Type, or not a file or playlist
 							response.status(404);
@@ -2701,32 +3012,6 @@ async function mkMediaDirs(){
 	return "";
 }
 
-function calcPLDuration(plprops){
-	let duration = 0.0;
-	let offset = 0.0;
-	let calDur = 0.0;
-	if(plprops && plprops.length){
-		// use Duration, Offset, SegIn, SegOut and FadeOut properties
-		for(let i=0; i<plprops.length; i++){
-			if(plprops[i].Offset)
-				duration = plprops[i].Offset; // override time to last item with start of this one
-			if(plprops[i].Duration){
-				duration = duration + plprops[i].Duration;
-				if(plprops[i].SegIn)
-					duration = duration - plprops[i].SegIn;
-				if(plprops[i].FadeOut)
-					duration = duration - plprops[i].FadeOut;
-				else if(plprops[i].SegOut)
-					duration = duration - plprops[i].SegOut;
-				else
-					duration = duration - 5.0; // default segout time
-			}else if(((i+1) < plprops.length) && (plprops[i+1].Offset))
-					duration = plprops[i+1].Offset // use offset of next item, if present
-		}
-	}
-	return duration;
-}
-
 async function checkTypeMatch(connection, newType, oldID){
 	let result = false;
 	if(newType && oldID){
@@ -2875,7 +3160,7 @@ async function importFileIntoLibrary(path, params){
 				if(meta.Duration)
 					dur = parseFloat(meta.Duration);	// use the top level Duration, if provided
 				if(dur == 0.0)
-					dur = calcPLDuration(meta.filepl);
+					dur = calcFPLDuration(meta.filepl, 0);
 				// convert into a library playlist
 				if(conn == false){ // we don't have a db connection yet
 					conn = await asyncGetDBConnection();
@@ -3084,13 +3369,13 @@ async function importFileIntoLibrary(path, params){
 						return pass;
 					}
 					// try to delete original file
-					result = await resolveFileFromProperties(dupInfo);
-					if(!result.Missing){
-						let ok = await deleteFile(result.Path + result.Prefix);
+					await resolveFileFromProperties(dupInfo);
+					if(!dupInfo.Missing){
+						let ok = await deleteFile(dupInfo.Prefix + dupInfo.Path);
 						if(ok)
-							console.log("replace file: deleteed original file " + result.Path + result.Prefix);
+							console.log("replace file: deleteed original file " + dupInfo.Prefix + dupInfo.Path);
 						else
-							console.log("replace file: failed to delete original file " + result.Path + result.Prefix);
+							console.log("replace file: failed to delete original file " + dupInfo.Prefix + dupInfo.Path);
 					}
 				}
 				if(dupmode != 2){	// add new file to media dir and refernce it in the file properties
@@ -3451,6 +3736,118 @@ function getLibraryFingerprint(){
 	});
 }
 
+async function dbFileSync(connection, mark){
+	let num = 0;
+	let statistics = {running: true, remaining: 0, missing: 0, updated: 0, lost: 0, found: 0, error: 0};
+	let results = false;
+	try{
+		results = await asyncQuery(connection, "SELECT ID, Hash, Path, Prefix, URL, Mount, Missing FROM "+locConf['prefix']+"file ORDER BY ID;");
+	}catch(err){
+		console.log("Failed to get file list for dbSync."); 
+		console.log(err); 
+		return err;
+	}
+	if(results && results.length){
+		// create timer to send 5 second progress messages 
+		const msgtmr = setInterval(() => {
+				let msg = {dbsync: statistics};
+				sse.postSSEvent(false, JSON.stringify(msg));
+			}, 5000);
+		let properties = false;
+		num = results.length;
+		statistics.remaining = num;
+		for(let i = 0; i < num; i++){
+			if(!dbSyncRunning)
+				// abort requested
+				break;
+			properties = results[i];
+			let stat = await resolveFileFromProperties(properties);
+			if(stat){
+				if(stat == 1){
+					// updated
+					statistics.updated++
+				}else if(stat == 2){
+					// lost
+					statistics.lost++;
+					if(!mark)
+						stat = 0; // do not mark missing files
+				}else if(stat == 3){
+					// found
+					statistics.found++
+				}
+				if(stat){
+					// update record in library
+					let query = "UPDATE "+locConf['prefix']+"file ";
+					query += "SET Hash = "+libpool.escape(properties.Hash)+" ";
+					query += ", Path = "+libpool.escape(properties.Path)+" ";
+					query += ", Prefix = "+libpool.escape(properties.Prefix)+" ";
+					query += ", URL = "+libpool.escape(properties.URL)+" ";
+					query += ", Mount = "+libpool.escape(properties.Mount)+" ";
+					query += ", Missing = "+properties.Missing+" ";
+					query += "WHERE ID = "+properties.ID+";";
+					try{
+						await asyncQuery(connection, query);
+					}catch(err){
+console.log(err);
+						statistics.error++;
+					}
+				}
+			}
+			if(properties.Missing){
+				// lost, or not found
+				statistics.missing++;
+			}
+			statistics.remaining--;
+		}
+		// stop progress timer/messages
+		clearInterval(msgtmr);
+		// send final message
+		statistics.running = false;
+		let msg = {dbsync: statistics};
+		sse.postSSEvent(false, JSON.stringify(msg));
+	}
+}
+
+function startDbFileSync(request, response, params){
+	if(!dbSyncRunning){
+		libpool.getConnection((err, connection) => {
+			if(err){
+				response.status(500);
+				response.send(err.code);
+				response.end();
+			}else{
+				let mark = false;
+				if(params.mark)
+					mark = true;
+				dbSyncRunning = dbFileSync(connection, mark).then(() => {
+					// done running: clear the dbSyncRunning variable
+					dbSyncRunning = false;
+					connection.release();
+				});
+				response.status(200);
+				response.end();
+			}
+		});
+	}else{
+		// already running
+		response.status(400);
+		response.end("Already running");
+	}
+}
+
+function abortDbFileSync(request, response){
+	if(dbSyncRunning){
+		// clear the dbSyncRunning variable... task will stop on next loop iteration
+		dbSyncRunning = false;
+		response.status(200);
+		response.end();
+	}else{
+		// alrady stopped
+		response.status(400);
+		response.end("Already stopped");
+	}
+}
+
 module.exports = {
 	configure: function (config) {
 		let prx_list = config['prefixes'];
@@ -3512,7 +3909,7 @@ module.exports = {
 			response.end();
 			return;
 		}
-		dirs = request.path.split('/');
+		let dirs = request.path.split('/');
 		if(dirs[2] == 'get'){
 			getFrom(request, response, params, dirs);	// /get/table/{ID/}?column=value1&...
 		}else if(dirs[2] == 'set'){
@@ -3539,10 +3936,13 @@ module.exports = {
 													// missing will be re-writen making use of local prefix search settings.
 													// Use separate get queries for last played/history and schedule entries
 			getItem(request, response, params, dirs);
+		}else if(dirs[2] == 'pldurcalc'){				// pldurcalc/ID -> returns the calculated duration from the actual list in seconds
+			calcLPLDuration(request, response, dirs);
 		}else if(dirs[2] == 'download'){
-			getDownload(request, response, params, dirs);	// /download/ID	triggers a download  of the file associated with the file type item
+			getDownload(request, response, params, dirs);	// /download/ID	triggers a download of the file associated with the file type item
 																	//			?save=1 to save the file instead of showing contents in page
-																	//			?export=[fpl,fplmedia,cue,pls,m3u] convert playlist to type
+																	//			?export=[fpl(default),fplmedia,cue] convert playlist to type, &save=1 is assumed and
+																	//			&offset=sec is optional to add sec to start times of items in the list.
 		}else if(dirs[2] == 'query'){
 			executeQuery(request, response, params, dirs);	// /query/ID?select=[selval1, selval2,..]&prompt=[promptval1, promptval2,..]
 																			//		runs the specified query number, replacing macros [select(...)],
@@ -3552,6 +3952,7 @@ module.exports = {
 																			//		It is the clients job to ensure that matching parameters for macros are set.
 		}else if(dirs[2] == 'info'){
 			getFileInfo(request, response, params, dirs);	// /info/filename{/possible/sub/directory/filename}
+																			// NOTE: file name is within the temporary media directory.
 		}else if(dirs[2] == 'import'){
 			importFile(request, response, params, dirs);	// /import/filename{/possible/sub/directory/filename}{?catid=id-of-cat}
 																		//						{&dup=[skip,catset,replace(delete old),update(if missing)]}
@@ -3565,17 +3966,18 @@ module.exports = {
 		}else if(dirs[2] == 'dbinit'){
 			handleDbInit(request, response, params);		// initdb?type=mysql&host=thehostadr&user=dbuser&password=thepassword&database=dbname&prefix=tableprefix (ar_ is typical)
 																		// port=port-number is optional
+		}else if(dirs[2] == 'dbsync'){
+			startDbFileSync(request, response, params);		// /dbsync?mark=1 starts a dbSync process running in the background
+																// if mark is true (nonzero), files that can't be found will be marked as missing
+																// one fixed or found files will be updated, not lost files. 
+		}else if(dirs[2] == 'synchalt'){
+			abortDbFileSync(request, response);		// stops a dbSync process running in the background
 		}else{
 			response.status(400);
 			response.end();
 		}
 		
-		// download: add export support
-		
-		// dbSync
-		
 		// dbSearch
 		
 	}
 };
-

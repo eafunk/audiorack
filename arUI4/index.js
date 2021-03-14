@@ -16,22 +16,34 @@
  CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
  DEALINGS IN THE SOFTWARE.
 */
+
+"use strict"; // prevents accidental global var creation when a variable is assigned but not previously declared.
+
 var crypto = require('crypto');
+const os = require('os');
 var express = require('express');
 var session = require('express-session');
+var fileStore = require('session-file-store')(session);
+var sessionStore = new fileStore({path: os.homedir()+"/.audiorack/uisessions"});
 var bodyParser = require('body-parser');
+var http = require('http');
+var https = require('https');
 var fs = require('fs');
 var path = require('path');
-const os = require('os');
 const _= require('lodash');
 const multer = require('multer');
 var slug = require('slug');
-const extract = require('extract-zip')
+const extract = require('extract-zip');
+var sse = require('./sse.js');
 var lib = require('./library');
+//var studio = require('./studio');
 
+var httpServer = false;
+var httpsServer = false;
 var config = false;
 var tmpDirIntervalObj = false;
 var storage = false;
+var sessionUse = false;
 
 /********** Search For Object Functions **********/
 
@@ -67,7 +79,15 @@ function checkPwdHash(salt, clearpw, hashedpw){
 /********** Configuration Functions **********/
 
 /* config file jason structure:
-{	
+{	"
+	"http":{
+		"http_port": 4000,	// delete this propety to disable http server
+		"https_certfile": "/path/to/ssl/certfile",	// optional: required for enabling https server
+		"https_keyfile": "/path/to/ssl/keyfile",	// optional: required for enabling https server
+		"https_port": 8888,	// optional: required for enabling https server
+		"ses_store": {},	// session storage settings, if any
+		"ses_secret": ""	// session storage secret for client encryption.  Will be set randomy and saved if missing.
+	}
 	"prefixes": ["prefixpattern1", "prefixpattern2", "prefixpattern3"],	// optional to override the default prefix patterns for the OS
  	"tmpMediaDir": "/some/tmp/dir/",
 	"tmpMediaAgeLimitHrs": 12.0,
@@ -195,6 +215,48 @@ function cleanFileNameForUpload(file){
 	return dots.join(".");
 }
 
+function applySettingsToApp(conf){
+	if(conf.http.https_port && conf.http.https_keyfile && conf.http.https_certfile){
+		fs.readFile(conf.http.https_keyfile, 'utf8', function(err, data){ 
+			if(!err){
+				console.log("failed to read https key file: "+conf.http.https_keyfile);
+			}else{
+				let privateKey = data;
+				fs.readFile(conf.http.https_keyfile, 'utf8', function(err, data){ 
+					if(!err){
+						console.log("failed to read https key file: "+conf.http.https_keyfile);
+					}else{
+						let certificate = data;
+						let credentials = {key: privateKey, cert: certificate};
+						httpsServer = https.createServer(credentials, app);
+						httpsServer.listen(conf.http.https_port);
+						console.log("https server listening on port "+conf.http.https_port);
+					}
+				});
+			}
+		});
+	}else{
+		httpsServer = false;
+		console.log("no parameters for https server");
+	}
+	
+	if(conf.http.http_port){
+		httpServer = http.createServer(app);
+		httpServer.listen(conf.http.http_port);
+		console.log("http server listening on port "+conf.http.http_port);
+	}else{
+		httpServer = false;
+		console.log("http server listening on port "+conf.http.httsp_port);
+	}
+	
+	sessionUse = session({
+		store: sessionStore,
+		secret: conf.http.ses_secret,
+		resave: false,
+		saveUninitialized: false
+	});	// this sets/changes the sessionUse dynamic var referenced in the initial session setup
+}
+
 function handleConfigChanges(conf){
 	lib.configure(conf);
 	let tmpDir = conf['tmpMediaDir'];
@@ -210,7 +272,6 @@ function handleConfigChanges(conf){
 			// stop temp media dir cleanout 
 			clearInterval(tmpDirIntervalObj);
 			tmpDirIntervalObj = false;
-			
 		}
 		storage = multer.diskStorage({
 			destination: function (req, file, cb){
@@ -227,6 +288,7 @@ function handleConfigChanges(conf){
 		clearInterval(tmpDirIntervalObj);
 		tmpDirIntervalObj = false;
 	}
+	applySettingsToApp(conf);
 }
 
 function loadConfiguration(){
@@ -244,11 +306,14 @@ function loadConfiguration(){
 		}else{
 			console.log('No configuration found. Creating minimal configuarion file.');
 			let hash = generatePwdHash("configure");
-			let str = "{ \"users\": [ {\"name\": \"admin\", \"salt\": \"";
+			
+			let str = "{ \"http\": {\"http_port\": 3000, \"ses_secret\": \""+crypto.randomBytes(64).toString('base64')+"\"} ";
+			str += " \"users\": [ {\"name\": \"admin\", \"salt\": \"";
 			str += hash.salt;
 			str += "\", \"password\": \""
 			str += hash.hash;
 			str += "\", \"permission\": \"admin\" } ] }";
+			
 			saveConfiguration(JSON.parse(str));
 		}
 	});
@@ -268,8 +333,8 @@ function saveConfiguration(conf){
 			console.log("An error occured while writing JSON Object to File.");
 		}else{
 			console.log("Configuration file has been saved.");
-			handleConfigChanges(conf);
 			config = conf;
+			handleConfigChanges(conf);
 		}
 	});
 }
@@ -313,19 +378,22 @@ function getConf(request, response){
 
 /********** Main Program and event callback dispatchers **********/
 
+function sessionDispatcher(req, res, next){
+	// this let us change the sessionUse function dynamically
+	if(!sessionUse)
+		next();
+	else
+		sessionUse(req, res, next);
+}
+
 // Read config file 
 loadConfiguration();
 
 var app = express();
 
-app.use(session({
-	secret: crypto.randomBytes(64).toString('base64'),
-	resave: true,
-	saveUninitialized: true
-}));
-
 app.use(bodyParser.urlencoded({extended : true}));
 app.use(bodyParser.json());
+app.use(sessionDispatcher);
 
 /* HTML response codes:
 	200 - OK
@@ -500,6 +568,111 @@ app.post('/tmpupload', function(req, res){
 	}
 });
 
+// open an sse stream for event messages - login session SID ensures single stream/client
+app.get('/ssestream', function(req, res){
+	if(req.sessionID){
+		let client = sse.clients[req.sessionID];
+		if(client){
+			if(client.response){
+				res.status(400);
+				res.end("Already connected");
+			}else{
+				// reconnecting
+				client.response = res;
+				req.on("close", function () {
+					delete client.response;
+				});
+				// start the stream
+				res.writeHead(200, {
+					'Content-Type': 'text/event-stream',
+					'Cache-Control': 'no-cache',
+					'Connection': 'keep-alive'
+				});
+				res.write('\n');
+			}
+		}else{
+			// new entry
+			client = {response: res, registered: []};
+			sse.clients[req.sessionID] = client;
+			req.on("close", function () {
+				delete client.response;
+			});
+			res.writeHead(200, {
+				'Content-Type': 'text/event-stream',
+				'Cache-Control': 'no-cache',
+				'Connection': 'keep-alive'
+			});
+			res.write('\n');
+		}
+	}else{
+		res.status(401);
+		res.end("Not autherized");
+		return;
+	}
+});
+
+// add an event type to receive via above sse stream
+app.get('/sseadd/\*', function(req, res){
+	if(req.session.id){
+		let client = sse.clients[req.sessionID];
+		if(client.response){
+			let dirs = request.path.split('/');
+			if(dirs[2].length){
+				let i = client.registered.indexOf(dirs[2]);
+				if(i > -1){
+					res.status(400);
+					res.end("Already registered");
+				}else{
+					client.registered.push(dirs[2]);
+					res.status(200);
+					res.end("Added");
+				}
+			}else{
+				res.status(400);
+				res.end("Bad request");
+			}
+		}else{
+			res.status(400);
+			res.end("No stream connected");
+		}
+	}else{
+		res.status(401);
+		res.end("Not autherized");
+		return;
+	}
+});
+
+// remove an event type to receive via above sse stream
+app.get('/sserem/\*', function(req, res){
+	if(req.sessionID){
+		let client = sse.clients[req.sessionID];
+		if(client.response){
+			let dirs = request.path.split('/');
+			if(dirs[2].length){
+				let i = client.registered.indexOf(dirs[2]);
+				if(i > -1){
+					client.registered.splice(i,i);
+					res.status(200);
+					res.end("Removed");
+				}else{
+					res.status(400);
+					res.end("Bad request");
+				}
+			}else{
+				res.status(400);
+				res.end("Bad request");
+			}
+		}else{
+			res.status(400);
+			res.end("No stream connected");
+		}
+	}else{
+		res.status(401);
+		res.end("Not autherized");
+		return;
+	}
+});
+
 // the following loads the main ui application in a browser when the browser URL is an empty path
 app.get('/', function(request, response){
 	response.redirect('/app.html');
@@ -509,5 +682,7 @@ app.get('/', function(request, response){
 // everything else assumed to be requests from the client directory
 app.use('/', express.static('client'));
 
-app.listen(3000);
+// periodically check for removing sseClient when logged out
+sse.startSessionClearing(sessionStore, 60000);
+
 
