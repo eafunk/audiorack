@@ -1,10 +1,11 @@
 {
-  "name": "arui4",
-  "version": "1.0.0",
+  "name": "arui-server",
+  "version": "4.0.0",
   "description": "Web-based user interface server for audiorack4",
-  "main": "index.js",
+  "main": "uiserver.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "install": "echo \"Error: no install specified\""
   },
   "author": "Ethan Funk",
   "license": "MIT",
@@ -18,6 +19,7 @@
     "express-session": "^1.17.1",
     "extract-zip": "^2.0.1",
     "fs": "0.0.1-security",
+    "generic-pool": "^3.7.2",
     "glob": "^7.1.6",
     "line-reader": "^0.4.0",
     "lodash": "^4.17.21",

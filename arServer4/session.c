@@ -232,7 +232,7 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 	session->errMSG = "";
 	if((arg == NULL) || !strlen(arg))
 		goto finish;
-	session->errMSG = "Huh?\n";	
+	session->errMSG = "Huh?\n";
 	// Check the arguments
 	if(!strcmp(arg, "close")){
 		// first parameter, connection number is in save_pointer
@@ -603,8 +603,8 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 		data.reference = 0;
 		data.senderID = 0;
 		data.value.iVal = 0;
-		notifyMakeEntry(nType_status, &data, sizeof(data));	
-		result = rNone;		
+		notifyMakeEntry(nType_status, &data, sizeof(data));
+		result = rNone;
 		goto finish;
 	}
 	if(!strcmp(arg, "stat")) {
@@ -996,11 +996,11 @@ void* sessionThread(ctl_session *session){
 			if(strlen(command)){
 				if(processCommand(session, command, NULL))
 					goto finish;
-				// send prompt
-				tx_length = strlen(constPrompt);
-				if(my_send(session, constPrompt, tx_length, 0) < 0) 
-					goto finish;
 			}
+			// send prompt
+			tx_length = strlen(constPrompt);
+			if(my_send(session, constPrompt, tx_length, 0) < 0) 
+				goto finish;
 			*command = 0;
 		}
 		// no delimitor left in the string... save whats left, the delimitor my show up in the next round
@@ -4676,6 +4676,12 @@ unsigned char handle_recgain(ctl_session *session){
 				if(!strcmp(tmp, "encoder")){		
 					if(queueControlOutPacket(mixEngine, cPeer_recorder | cType_vol, uid, 4, (char *)&(val.iVal))){
 						session->lastUID = uid;
+						// send out notifications
+						notifyData	data;
+						data.senderID = 0;
+						data.reference = htonl(uid);
+						data.value.iVal = val.iVal;
+						notifyMakeEntry(nType_rgain, &data, sizeof(data));
 						return rOK; 
 					}
 					free(tmp);

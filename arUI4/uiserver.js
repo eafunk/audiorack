@@ -23,8 +23,8 @@ var crypto = require('crypto');
 const os = require('os');
 var express = require('express');
 var session = require('express-session');
+var sessionStore = {store: false}; // will be set later
 var fileStore = require('session-file-store')(session);
-var sessionStore = new fileStore({path: os.homedir()+"/.audiorack/uisessions"});
 var bodyParser = require('body-parser');
 var http = require('http');
 var https = require('https');
@@ -36,7 +36,7 @@ var slug = require('slug');
 const extract = require('extract-zip');
 var sse = require('./sse.js');
 var lib = require('./library');
-//var studio = require('./studio');
+var studio = require('./studio');
 
 var httpServer = false;
 var httpsServer = false;
@@ -111,16 +111,17 @@ function checkPwdHash(salt, clearpw, hashedpw){
 		"database": "databasename",
 		"prefix": "ar_"
 	},
-	"studios": [
-		{	"name": "Studio A",
+	"studios": { 
+		"StudioA": {	// no spaces for easy URL passing
 			"host": "localhost",
 			"port": 9550,
 			"dbloc": 1,
 			"run": "/opt/audiorack/bin/arServer4 -k"
-		},{
-				additional studio locations
+		},
+		"StudioB": {
+				additional studio settings
 		}
-	]
+	}
 }
 */
 
@@ -229,7 +230,10 @@ function applySettingsToApp(conf){
 						let certificate = data;
 						let credentials = {key: privateKey, cert: certificate};
 						httpsServer = https.createServer(credentials, app);
-						httpsServer.listen(conf.http.https_port);
+						if(conf.http.https_bind)
+							httpsServer.listen(conf.http.https_port, conf.http.https_bind);
+						else
+							httpsServer.listen(conf.http.https_port);
 						console.log("https server listening on port "+conf.http.https_port);
 					}
 				});
@@ -242,16 +246,22 @@ function applySettingsToApp(conf){
 	
 	if(conf.http.http_port){
 		httpServer = http.createServer(app);
-		httpServer.listen(conf.http.http_port);
+		if(conf.http.http_bind)
+			httpServer.listen(conf.http.http_port, conf.http.http_bind);
+		else
+			httpServer.listen(conf.http.http_port);
 		console.log("http server listening on port "+conf.http.http_port);
 	}else{
 		httpServer = false;
-		console.log("http server listening on port "+conf.http.httsp_port);
+		console.log("no parameters for http server");
 	}
-	
+	if(!conf.http.ses_ttl)
+		conf.http.ses_ttl = 86400;	// default session time to live is 1 day
+	sessionStore.store = new fileStore({ttl: conf.http.ses_ttl, path: os.homedir()+"/.audiorack/uisessions"});
 	sessionUse = session({
-		store: sessionStore,
+		store: sessionStore.store,
 		secret: conf.http.ses_secret,
+		ttl: conf.http.ses_ttl,
 		resave: false,
 		saveUninitialized: false
 	});	// this sets/changes the sessionUse dynamic var referenced in the initial session setup
@@ -259,6 +269,7 @@ function applySettingsToApp(conf){
 
 function handleConfigChanges(conf){
 	lib.configure(conf);
+	studio.configure(conf);
 	let tmpDir = conf['tmpMediaDir'];
 	let tmpAge = conf['tmpMediaAgeLimitHrs'];
 	if(tmpDir && tmpDir.length){
@@ -476,9 +487,13 @@ app.post('/auth', function(request, response){
 				getConf(request, response);
 			}else{
 				response.status(401);
+				response.end("Bad username and password combination");
+				return;
 			}
 		}else{
 			response.status(401);
+			response.end("Bad username and password combination");
+			return;
 		}
 	}else{
 		response.status(400);
@@ -487,6 +502,15 @@ app.post('/auth', function(request, response){
 });
 
 app.post('/unauth', function(request, response){
+	if(request.session.loggedin){
+		request.session.destroy();
+		response.status(201);
+	}else
+		response.status(401);
+	response.end();
+});
+
+app.get('/unauth', function(request, response){
 	if(request.session.loggedin){
 		request.session.destroy();
 		response.status(201);
@@ -513,14 +537,33 @@ app.post('/library/\*', function(request, response){
 	}
 });
 
+app.get('/studio/\*', function(request, response){
+	if(request.session.loggedin)
+		studio.handleRequest(request, response);
+	else{
+		response.status(401);
+		response.end();
+	}
+});
+
+app.post('/studio/\*', function(request, response){
+	if(request.session.loggedin)
+		studio.handleRequest(request, response);
+	else{
+		response.status(401);
+		response.end();
+	}
+});
+
 app.get('/who', function(request, response){
 	//request.query.property
 	if(request.session.loggedin){
-		response.send('Welcome back, ' + request.session.username + '.');
+		response.send(request.session.username);
+		response.status(201);
 	}else{
-		response.send('You are not logged in.');
+		response.send('Not logged in');
+		response.status(401);
 	}
-	response.status(201);
 	response.end();
 });
 
@@ -611,16 +654,33 @@ app.get('/ssestream', function(req, res){
 	}
 });
 
+// list an event types your sesdion is subscribed to
+app.get('/sseget', function(req, res){
+	if(req.session.id){
+		let client = sse.clients[req.sessionID];
+		if(client && client.response){
+			res.status(201);
+			res.json(client.registered);
+		}else{
+			res.status(400);
+			res.end("No stream connected");
+		}
+	}else{
+		res.status(401);
+		res.end("Not autherized");
+	}
+});
+
 // add an event type to receive via above sse stream
 app.get('/sseadd/\*', function(req, res){
 	if(req.session.id){
 		let client = sse.clients[req.sessionID];
-		if(client.response){
-			let dirs = request.path.split('/');
+		if(client && client.response){
+			let dirs = req.path.split('/');
 			if(dirs[2].length){
 				let i = client.registered.indexOf(dirs[2]);
 				if(i > -1){
-					res.status(400);
+					res.status(200);
 					res.end("Already registered");
 				}else{
 					client.registered.push(dirs[2]);
@@ -638,7 +698,6 @@ app.get('/sseadd/\*', function(req, res){
 	}else{
 		res.status(401);
 		res.end("Not autherized");
-		return;
 	}
 });
 
@@ -646,8 +705,8 @@ app.get('/sseadd/\*', function(req, res){
 app.get('/sserem/\*', function(req, res){
 	if(req.sessionID){
 		let client = sse.clients[req.sessionID];
-		if(client.response){
-			let dirs = request.path.split('/');
+		if(client && client.response){
+			let dirs = req.path.split('/');
 			if(dirs[2].length){
 				let i = client.registered.indexOf(dirs[2]);
 				if(i > -1){

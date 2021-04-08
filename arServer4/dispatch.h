@@ -37,19 +37,20 @@ extern "C"
 #include "utilities.h"
 #include "mix_engine.h"
 
-#define 	nType_vol		0x01	// player volume change
+#define 	nType_vol		0x01	// player or output volume change, ref=0xC0000000 + index for output or 0x00 + index for input/player
 #define 	nType_bal		0x02	// player balance change
-#define 	nType_bus		0x03	// player bus change
+#define 	nType_bus		0x03	// player or output  bus change
 #define 	nType_pstat		0x04	// player status change
 #define 	nType_status	0x05	// over all status change - use stat to get info
 #define 	nType_mstat		0x06	// meta data record change - use dumpmeta to syncronize
 #define 	nType_rstat		0x07	// recorder status change - use rstat to get info
 #define 	nType_vu			0x08	// vu levels packet
-#define 	nType_rgain		0x09	// recorder gain changed
+#define 	nType_rgain		0x09	// recorder gain changed, ref=UID
 #define 	nType_pos		0x0a	// player position change
-#define 	nType_del		0x0b	// item deleted
+#define 	nType_del		0x0b	// item deleted, ref=UID
 #define 	nType_dly		0x0c	// delay setting changed - sync with current delay setting
-
+#define 	nType_load		0x10	// Processor load, cVal[0] = % realtime JACK load, 0.8 format
+									
 // the following are no longer used in audiorack4 
 
 #define 	nType_fxparam	0x0d	// AudioUnit effects processing parameter changed - notifyFXParam struct sent
@@ -59,9 +60,7 @@ extern "C"
 #define 	nType_fxcue		0x0f	// Audio effects cue change - use fxslots to get info.
 									//	iVal = bus number
 									//	reference = UID/OID of item or zero for fxcue disable
-#define 	nType_load		0x10	// Processor load
-									// cVal[0] = % realtime JACK load, 0.8 format
-#define 	nType_outvol	0x11	// Change made to output volume
+#define 	nType_outvol	0x11	// Change made to output volume use dumpout to update
 
 
 // cType (control packet) real-time packets are handled directly

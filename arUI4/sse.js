@@ -33,15 +33,15 @@ module.exports = {
 					// specific event name
 					if(client.registered.indexOf(event) > -1){
 						res.write("retry: 10000");
-						res.write("id: "+sseID+"\n");
+						res.write("id: "+sseID.toString()+"\n");
 						res.write("event: "+event+"\n");
 						res.write("data: "+data+"\n\n");
 					}
 				}else{
 					// general message 
 					res.write("retry: 10000");
-					res.write("event: message\n");
 					res.write("id: "+sseID.toString()+"\n");
+					res.write("event: msg\n");
 					res.write("data: "+data+"\n\n");
 				}
 			}
@@ -49,15 +49,17 @@ module.exports = {
 	},
 	startSessionClearing: function (sessionStore, interval){
 		setInterval(function (){
-			for(const sid in sseClients){
-				this.store.get(sid, function(error, session){
-					if(!session){
-						if(sseClients[sid].res)
-							sseClients[sid].res.end();
-						delete sseClients[sid];
-					}
-				});
+			if(this.sstore.store){
+				for(const sid in sseClients){
+					this.sstore.store.get(sid, function(error, session){
+						if(!session){
+							if(sseClients[sid].res)
+								sseClients[sid].res.end();
+							delete sseClients[sid];
+						}
+					});
+				}
 			}
-		}.bind({store: sessionStore}), interval);
+		}.bind({sstore: sessionStore}), interval);
 	}
 }

@@ -42,6 +42,7 @@ var supportDir = "";
 var dbFingerprint = "";
 
 var dbSyncRunning = false;	// set to a function if dbSync is running in the background, otherwise false
+var dbSearchRunning = false;	// set to a function if dbSearch is running in the background, otherwise false
 
 function hasWhiteSpace(str) {
   return /\s/g.test(str);
@@ -508,12 +509,12 @@ function restObjectRequest(response, object){
 	response.end();
 }
 
-function mkRecursiveDir(path){
+function mkRecursiveDir(fpath){
 	return new Promise(function (resolve){
-		fs.mkdir(path, {recursive: true}, (err) => {
+		fs.mkdir(fpath, {recursive: true}, (err) => {
 			if(err)
 				resolve("");
-			resolve(path);	// this is the full path to the deepest directory, with trailing slash
+			resolve(fpath);	// this is the full path to the deepest directory, with trailing slash
 		});
 	});
 }
@@ -529,9 +530,9 @@ function copyFileToDir(fromFile, intoDir){
 	}); 
 }
 
-function deleteFile(path){
+function deleteFile(fpath){
 	return new Promise(function (resolve){
-		fs.unlink(path, function (err){
+		fs.unlink(fpath, function (err){
 			if(err){
 				resolve(false);
 			}else{
@@ -541,9 +542,9 @@ function deleteFile(path){
 	});
 }
 
-function openFile(path){
+function openFile(fpath){
 	return new Promise(function (resolve){
-		fs.open(path, 'r', function(err, fd){
+		fs.open(fpath, 'r', function(err, fd){
 			if(err){
 				resolve(0);
 			}else{
@@ -629,12 +630,12 @@ function processFileLines(filename, options, params, linecb){
 	});
 }
 
-async function getFileHash(path){
+async function getFileHash(fpath){
 	// MD5 portion first
 	let buf = new Buffer(4096);
 	let md5sum = crypto.createHash('md5');
 	
-	let fd = await openFile(path);
+	let fd = await openFile(fpath);
 	if(fd == 0)
 		return "";
 	let size = await sizeOfFile(fd);
@@ -688,11 +689,11 @@ async function getFileHash(path){
 	return hash;
 }
 
-async function CheckFileHashMatch(path, hash){
+async function CheckFileHashMatch(fpath, hash){
 	if(hash){
 		if(hash.length == 0)	// ignore hash check for items with empy hash property
 			return true;
-		let fHash = await getFileHash(path);
+		let fHash = await getFileHash(fpath);
 		if(fHash.toLowerCase() === hash.toLowerCase())
 			return true;
 		return false;
@@ -761,7 +762,7 @@ async function resolveFileFromProperties(properties){
 	let changed = 0;
 	let missing = 1;
 	let listSize = prefix_list.length;
-	let path = "";
+	let fpath = "";
 	let pathStr = "";
 	let adjPathStr = "";
 	let plen = 0;
@@ -773,21 +774,21 @@ async function resolveFileFromProperties(properties){
 		if(properties.Prefix){
 			plen = properties.Prefix.length;
 			if(plen)
-				path = properties.Prefix;
+				fpath = properties.Prefix;
 			else
-				path = "";
+				fpath = "";
 		}
 		pathStr = properties.Path;
-		path += pathStr;
+		fpath += pathStr;
 	}else if(properties.URL && properties.Mount){
 		// use old mount & URL method of searching for files. if sucessful,
 		// set path & prefix properties to use new method next time.
 		if(properties.URL.length == 0){
 			// bad URL string and/or Mount string
 			changed = 1; // missing flag is already set
-			path = "";
+			fpath = "";
 		}else{
-			path = url.fileURLToPath(properties.URL);
+			fpath = url.fileURLToPath(properties.URL);
 			if(properties.Mount && (properties.Mount.length > 1)){
 				//  convert /a/path/with/mount -> mount
 				let mountParts = properties.Mount.split("/");
@@ -795,9 +796,9 @@ async function resolveFileFromProperties(properties){
 				if(mountParts.length > 1)
 					mountName = mountParts[mountParts.length - 1];
 				if(mountName.length){
-					let i = path.search(mountName);
+					let i = fpath.search(mountName);
 					if(i > 0){ 
-						// given path = /longer/path/to/mount/some/file
+						// given fpath = /longer/path/to/mount/some/file
 						// and Mount = mount
 						// pathStr -> mount/some/file */
 						pathStr = path.substring(i);
@@ -831,7 +832,7 @@ async function resolveFileFromProperties(properties){
 				adjPathStr += pathStr.substring(1);
 		}
 	}
-	// path is Full Path, pathStr is the relative path, if any
+	// fpath is Full Path, pathStr is the relative path, if any
 	// i.e. path = /longer/path/to/mount/some/file
 	// and  pathStr = mount/some/file
 	let i = 0;
@@ -839,7 +840,7 @@ async function resolveFileFromProperties(properties){
 	let c = 0;
 	let results = [];
 	do{
-		if(await CheckFileHashMatch(path, properties.Hash)){
+		if(await CheckFileHashMatch(fpath, properties.Hash)){
 			// Hash code agrees with database, not missing
 			missing = 0;
 			break;
@@ -850,27 +851,27 @@ async function resolveFileFromProperties(properties){
 		do{
 			if(i < results.length){
 				// next path in glob list
-				path = results[i];
+				fpath = results[i];
 				i++;
 				break;
 			}else{
 				let tmp = prefix_list[p];
 				if(tmp && pathStr.length){
-					path = tmp;
+					fpath = tmp;
 					if(adjPathStr.length && c){
 						// trying the pathStr version with case adjustment
-						path += adjPathStr;
+						fpath += adjPathStr;
 						c = 0; // go back to original case next time
 					}else{
-						path += pathStr;
+						fpath += pathStr;
 						if(adjPathStr.length)
 							c = 1; // try case change next time
 					}
 					i = 0;
-					results = await globSearch(path);
+					results = await globSearch(fpath);
 					if(results.length){
 						// found a path in new glob list
-						path = results[0];
+						fpath = results[0];
 						i++;
 						if(!c)
 							p++;
@@ -900,23 +901,25 @@ async function resolveFileFromProperties(properties){
 			changed = 1;	// fix missing URL
 		if(changed){
 			// re-encode URL from path change or from being missing
-			properties.URL = url.pathToFileURL(path).href;
+			properties.URL = url.pathToFileURL(fpath).href;
 			status = 1;
 		}else
 			status = 0;
 
-		let pre = getFilePrefixPoint(path);
+		let pre = getFilePrefixPoint(fpath);
 		properties.Prefix = pre.prefix;
 		properties.Path = pre.path;
 		// Old OSX: Mount -> Prefix + mountName (first dir in path) 
-		// if path=/some/path, mountName = /
-		// if path=some/path, mountName = Some/
-		let idx = pre.path.indexOf("/");
-		let Mount = "";
-		if(idx > -1){
-			let mountName = pre.path.substring(0, idx+1);
-			mountName = mountName[0].toUpperCase() + mountName.substr(1);
-			Mount = pre.prefix + mountName;
+		// if fpath=/some/path, mountName = /
+		// if fpath=some/path, mountName = Some, Mount = /Volumes/Some
+		properties.Mount = "/";
+		if(pre.prefix.length){
+			let idx = pre.path.indexOf("/");
+			if(idx > 0){
+				let mountName = pre.path.substring(0, idx);
+				mountName = mountName[0].toUpperCase() + mountName.substr(1);
+				properties.Mount = "/Volumes/" + mountName;
+			}
 		}
 		if(properties.Missing){
 			// was missing, but has been found... 
@@ -2925,10 +2928,10 @@ async function getFileMeta(tmpDirFileName){
 	let obj = {};
 	let full = false;
 	if(tmpDir.length){
-		let path = tmpDir+tmpDirFileName;
-		let params = [path];
+		let fpath = tmpDir+tmpDirFileName;
+		let params = [fpath];
 		// check for playlist types
-		let fd = await openFile(path);
+		let fd = await openFile(fpath);
 		if(fd > -1){
 			let buf = new Buffer(11);
 			let result = await readFileIntoBuffer(fd, 0, 11, buf, 0);
@@ -2939,7 +2942,7 @@ async function getFileMeta(tmpDirFileName){
 					// we have an audiorack playlist file
 					obj.Type = "filepl";
 					try{
-						full = await filePLGetMetaForFile(path, obj);
+						full = await filePLGetMetaForFile(fpath, obj);
 					}catch(err){
 						full = false;
 					}
@@ -2986,9 +2989,9 @@ async function getFileMeta(tmpDirFileName){
 		}
 		if(hasAudio){
 			if((obj.Name == undefined) || (obj.Name.length == 0))
-				obj.Name = path.basename(path, path.extname(path));
-			obj.Hash = await getFileHash(path);
-			let pre = getFilePrefixPoint(path);
+				obj.Name = path.basename(fpath, path.extname(fpath));
+			obj.Hash = await getFileHash(fpath);
+			let pre = getFilePrefixPoint(fpath);
 			obj.Prefix = pre.prefix;
 			obj.Path = pre.path;
 			return obj;	// OK -> send results
@@ -3005,9 +3008,9 @@ async function mkMediaDirs(){
 		var year = present.getFullYear();
 		var month = present.getMonth();
 		var date = present.getDate();
-		let path = mediaDir+zeroPad(year, 2)+"/"+zeroPad(month, 2)+"/"+zeroPad(date, 2)+"/";		// Format: YYYY/MM/DD/
+		let fpath = mediaDir+zeroPad(year, 2)+"/"+zeroPad(month, 2)+"/"+zeroPad(date, 2)+"/";		// Format: YYYY/MM/DD/
 		// recursively create multiple directories
-		return await mkRecursiveDir(path); // this returns the full path to the deepest directory, with trailing slash, or empty if we failed
+		return await mkRecursiveDir(fpath); // this returns the full path to the deepest directory, with trailing slash, or empty if we failed
 	}
 	return "";
 }
@@ -3112,7 +3115,7 @@ async function addToCatID(connection, ItemID, catIDs){
 	return true;
 }
 
-async function importFileIntoLibrary(path, params){
+async function importFileIntoLibrary(fpath, params){
 	let pass = {id:0, status:-2}; // status=-3 file copy failed, -2, bad file, -1 error, 0 skipped, 1 new/added, 2 cat update existing, 3 replaced existing, 4 fixed existing
 	let ID = 0;
 	let result = {};
@@ -3127,12 +3130,12 @@ async function importFileIntoLibrary(path, params){
 		else if(params.dup == "replace") dupmode = 3;
 		else if(params.dup == "update") dupmode = 4;
 
-		meta = await getFileMeta(path);
+		meta = await getFileMeta(fpath);
 		if(meta && Object.keys(meta).length){
 			let conn = false;
 			// valid meta data.  Handle according to type
 			if((meta.Name == undefined) || (meta.Name.length == 0))
-				meta.Name = basename(path, path.extname(path));
+				meta.Name = path.basename(fpath, path.extname(fpath));
 				
 			if(params.id){ // handle forced replace of specified item
 				conn = await asyncGetDBConnection();
@@ -3381,10 +3384,10 @@ async function importFileIntoLibrary(path, params){
 				if(dupmode != 2){	// add new file to media dir and refernce it in the file properties
 					let newPath = await mkMediaDirs();
 					if(newPath.length){
-						path = tmpDir+path;
-						newPath = await copyFileToDir(path, newPath);
+						fpath = tmpDir+fpath;
+						newPath = await copyFileToDir(fpath, newPath);
 						// attempt to copy an associated fileplaylist as well, if it exists.
-						await copyFileToDir(path+".fpl", newPath);
+						await copyFileToDir(fpath+".fpl", newPath);
 					}
 					if(newPath.length == 0){
 						// copy failed!
@@ -3398,13 +3401,16 @@ async function importFileIntoLibrary(path, params){
 					meta.Path = pre.path;
 					meta.URL = url.pathToFileURL(newPath).href;
 					// Old OSX: Mount -> Prefix + mountName (first dir in path) 
-					// if path=/some/path, mountName = /
-					// if path=some/path, mountName = some/
+					// if fpath=/some/path, mountName = /
+					// if fpath=some/path, mountName = Some, Mount = /Volumes/Some
 					let Mount = "/";
 					if(pre.prefix.length){
-						let idx = meta.Path.indexOf("/");
-						if(idx > 0)
-							Mount = meta.Prefix + meta.Path.substring(0, idx);
+						let idx = pre.path.indexOf("/");
+						if(idx > 0){
+							let mountName = pre.path.substring(0, idx);
+							mountName = mountName[0].toUpperCase() + mountName.substr(1);
+							Mount = "/Volumes/" + mountName;
+						}
 					}
 					if(dupmode == 1){ //insert new file row
 						let insert = "INSERT INTO "+locConf['prefix']+"file "
@@ -3490,18 +3496,18 @@ async function importFileIntoLibrary(path, params){
 }
 
 function getFileInfo(request, response, params, dirs){
-	let path = "";
+	let fpath = "";
 	let tailIdx = request.path.search(dirs[2]+"/");
 	let tailLen = request.path.length-tailIdx-(dirs[2].length)-1;
 	if((tailIdx < 0) || (tailLen > 0)){
-		path = request.path.substring(tailIdx + dirs[2].length+1);
-		path = decodeURIComponent(path);
+		fpath = request.path.substring(tailIdx + dirs[2].length+1);
+		fpath = decodeURIComponent(fpath);
 		if((request.session.permission != "admin") &&  (request.session.permission != "manage")){
 			response.status(401);
 			response.end();
 			return;
 		}
-		getFileMeta(path).then(result => {
+		getFileMeta(fpath).then(result => {
 			if(result && Object.keys(result).length){
 				response.status(200);
 				response.json(result);
@@ -3518,18 +3524,18 @@ function getFileInfo(request, response, params, dirs){
 }
 
 function importFile(request, response, params, dirs){
-	let path = "";
+	let fpath = "";
 	let tailIdx = request.path.search(dirs[2]+"/");
 	let tailLen = request.path.length-tailIdx-(dirs[2].length)-1;
 	if((tailIdx < 0) || (tailLen > 0)){
-		path = request.path.substring(tailIdx + dirs[2].length+1);
-		path = decodeURIComponent(path);
+		fpath = request.path.substring(tailIdx + dirs[2].length+1);
+		fpath = decodeURIComponent(fpath);
 		if((request.session.permission != "admin") &&  (request.session.permission != "manage")){
 			response.status(401);
 			response.end();
 			return;
 		}
-		importFileIntoLibrary(path, params).then(result => {
+		importFileIntoLibrary(fpath, params).then(result => {
 			if(result){
 				response.status(200); 
 				response.json(result);
@@ -3689,13 +3695,13 @@ function handleDbInit(request, response, params){
 
 function getPrefix(request, response, params){
 	if(params.path && params.path.length){
-		let path = params.path;
+		let fpath = params.path;
 		if((request.session.permission != "admin") &&  (request.session.permission != "manage")){
 			response.status(401);
 			response.end();
 			return;
 		}
-		let result = getFilePrefixPoint(path);
+		let result = getFilePrefixPoint(fpath);
 		if(result){
 			response.status(200); 
 			response.json(result);
@@ -3738,6 +3744,7 @@ function getLibraryFingerprint(){
 
 async function dbFileSync(connection, mark){
 	let num = 0;
+	let msgtmr = false;
 	let statistics = {running: true, remaining: 0, missing: 0, updated: 0, lost: 0, found: 0, error: 0};
 	let results = false;
 	try{
@@ -3747,9 +3754,9 @@ async function dbFileSync(connection, mark){
 		console.log(err); 
 		return err;
 	}
-	if(results && results.length){
+	if(results && Array.isArray(results) && results.length){
 		// create timer to send 5 second progress messages 
-		const msgtmr = setInterval(() => {
+		msgtmr = setInterval(() => {
 				let msg = {dbsync: statistics};
 				sse.postSSEvent(false, JSON.stringify(msg));
 			}, 5000);
@@ -3788,7 +3795,6 @@ async function dbFileSync(connection, mark){
 					try{
 						await asyncQuery(connection, query);
 					}catch(err){
-console.log(err);
 						statistics.error++;
 					}
 				}
@@ -3809,6 +3815,11 @@ console.log(err);
 }
 
 function startDbFileSync(request, response, params){
+	if(request.session.permission != "admin"){
+		response.status(401);
+		response.end();
+		return;
+	}
 	if(!dbSyncRunning){
 		libpool.getConnection((err, connection) => {
 			if(err){
@@ -3836,9 +3847,191 @@ function startDbFileSync(request, response, params){
 }
 
 function abortDbFileSync(request, response){
+	if(request.session.permission != "admin"){
+		response.status(401);
+		response.end();
+		return;
+	}
 	if(dbSyncRunning){
 		// clear the dbSyncRunning variable... task will stop on next loop iteration
 		dbSyncRunning = false;
+		response.status(200);
+		response.end();
+	}else{
+		// alrady stopped
+		response.status(400);
+		response.end("Already stopped");
+	}
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+} 
+
+async function crawlDirectory(connection, fpath, pace, passStat){
+	let files = false;
+	let finfo = false;
+	let statistics = false;
+	let msgtmr = false; 
+	const fsPromises = fs.promises;
+	if(passStat)
+		statistics = passStat;
+	else
+		statistics = {running: true, curPath: "", checked: 0, found: 0, error: 0};
+		
+	try{
+		files = await fsPromises.readdir(fpath);
+	}catch(err){
+		if(passStat == false){
+			// send final message
+			statistics.running = false;
+			let msg = {dbsearch: statistics};
+			sse.postSSEvent(false, JSON.stringify(msg));
+		}
+		return;
+	}
+	if(passStat == false){
+		// we are the root directory.  Start status report timer
+		msgtmr = setInterval(() => {
+				let msg = {dbsearch: statistics};
+				sse.postSSEvent(false, JSON.stringify(msg));
+			}, pace * 10 * 1000);
+	}
+	// loop through dir entries
+	for(let i=0; i<files.length; i++){
+		if(!dbSearchRunning)
+				// abort requested
+				break;
+		// wait pace seconds
+		await sleep(pace * 1000);
+		let file = files[i];
+		let thisFile = path.join(fpath, file);
+		try{
+			finfo = await fsPromises.stat(thisFile);
+		}catch (err){
+			// skip any entry that creates an error
+			continue;
+		}
+		if(finfo.isDirectory()){
+			// recurse up down directory tree.  We pass statistics so they can be updates and so recusive calls 
+			// know not to start a status  message time... it's already running
+			await crawlDirectory(connection, thisFile, pace, statistics);
+		}else{
+			// check file for matching hash and missing status in library
+			statistics.curPath = thisFile;
+			statistics.checked++;
+			let fhash = await getFileHash(thisFile);
+			if(fhash && fhash.length){
+				let matches = false;
+				try{
+					matches = await asyncQuery(connection, "SELECT ID FROM "+locConf['prefix']+"file WHERE Hash = "+libpool.escape(fhash)+" AND Missing > 0 ORDER BY ID;");
+				}catch(err){
+					console.log(err); 
+					return err;
+				}
+				if(matches && Array.isArray(matches) && matches.length){
+					let pre = getFilePrefixPoint(thisFile);
+					let newURL = url.pathToFileURL(thisFile).href;
+					// Old OSX: Mount -> Prefix + mountName (first dir in path) 
+					// if fpath=/some/path, mountName = /
+					// if fpath=some/path, mountName = Some, Mount = /Volumes/Some
+					let Mount = "/";
+					if(pre.prefix.length){
+						let idx = pre.path.indexOf("/");
+						if(idx > 0){
+							let mountName = pre.path.substring(0, idx);
+							mountName = mountName[0].toUpperCase() + mountName.substr(1);
+							Mount = "/Volumes/" + mountName;
+						}
+					}
+					let query = "UPDATE "+locConf['prefix']+"file ";
+					query += "SET Path = "+libpool.escape(pre.path)+" ";
+					query += ", Prefix = "+libpool.escape(pre.prefix)+" ";
+					query += ", URL = "+libpool.escape(newURL)+" ";
+					query += ", Mount = "+libpool.escape(Mount)+" ";
+					query += ", Missing = 0 ";
+					query += "WHERE ID = "+matches[0].ID+";";
+					try{
+						let update = await asyncQuery(connection, query);
+						if(update.changedRows)
+							statistics.found++;
+					}catch(err){
+						statistics.error++;
+						console.log(err);
+					}					
+					
+				}
+			}
+		}
+	}
+	if(msgtmr){
+		// stop progress timer/messages
+		clearInterval(msgtmr);
+		
+		// send final message
+		statistics.running = false;
+		statistics.curPath = "";
+		let msg = {dbsearch: statistics};
+		sse.postSSEvent(false, JSON.stringify(msg));
+	}
+}
+
+function startDbFileSearch(request, response, params){
+	if(request.session.permission != "admin"){
+		response.status(401);
+		response.end();
+		return;
+	}
+	if(!dbSearchRunning){
+		libpool.getConnection((err, connection) => {
+			if(err){
+				response.status(500);
+				response.send(err.code);
+				response.end();
+			}else{
+				let pace = 1.0;
+				if(params.pace && params.pace.length){
+					pace = parseFloat(params.pace);
+					if(pace == 0.0){
+						response.status(400);
+						response.end("pace can not be zero.");
+						return;
+					}
+				}
+				let fpath = mediaDir;
+				if(params.path && params.path.length)
+					fpath = params.path;
+				if(fpath.length == 0){
+					response.status(400);
+					response.end("no default mediaDir path setting, or specific path set");
+				}
+				dbSearchRunning = crawlDirectory(connection, fpath, pace, false).then(() => {
+					// done running: clear the dbSearchRunning variable
+					dbSearchRunning = false;
+					connection.release();
+				});
+				response.status(200);
+				response.end();
+			}
+		});
+	}else{
+		// already running
+		response.status(400);
+		response.end("Already running");
+	}
+}
+
+function abortDbFileSearch(request, response){
+	if(request.session.permission != "admin"){
+		response.status(401);
+		response.end();
+		return;
+	}
+	if(dbSearchRunning){
+		// clear the dbSearchRunning variable... task will stop on next loop iteration
+		dbSearchRunning = false;
 		response.status(200);
 		response.end();
 	}else{
@@ -3894,7 +4087,8 @@ module.exports = {
 			}
 			console.log('Lib Configuration done.');
 		}
-		getLibraryFingerprint();
+		if(libpool)
+			getLibraryFingerprint();
 		return true;
 	},
 	
@@ -3972,12 +4166,16 @@ module.exports = {
 																// one fixed or found files will be updated, not lost files. 
 		}else if(dirs[2] == 'synchalt'){
 			abortDbFileSync(request, response);		// stops a dbSync process running in the background
+		}else if(dirs[2] == 'crawl'){
+			startDbFileSearch(request, response, params);		// /crawl?path=the/path/to/crawl&pace=0.5
+																				// pace is in seconds, and defaults to 1.0
+																				// if no path is specified, the mediaDir setting path is used
+		}else if(dirs[2] == 'crawlhalt'){
+			abortDbFileSearch(request, response);		// stops a dbFileSearch process running in the background
 		}else{
 			response.status(400);
 			response.end();
 		}
-		
-		// dbSearch
-		
 	}
 };
+

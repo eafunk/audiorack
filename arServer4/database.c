@@ -3038,12 +3038,13 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, unsigned char markMissing){
 				
 				// Old OSX: Mount -> Prefix + mountName (first dir in path) 
 				// if path=/some/path, mountName = /
-				// if path=some/path, mountName = some/
+				// if path=some/path, mountName = Some/
 				// mount = prefix + mountName
 				str_setstr(&mountName, "/");
 				if(strlen(pre)){
 					if((tmp = strstr(rem, "/")) && (tmp != rem)){
 						if(tmp = str_substring(rem, 0, (tmp - rem))){
+							*tmp = toupper(*tmp);
 							str_setstr(&mountName, pre);
 							str_appendstr(&mountName, tmp);
 							free(tmp);
@@ -3054,7 +3055,8 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, unsigned char markMissing){
 					"UPDATE %sfile SET Missing = 0, Hash = %s, Mount = %s, Path = %s, Prefix = %s, URL = %s WHERE ID = %lu", 
 					 prefix, tmp, rem, pre, mountName, newURL, recID);
 
-//db_queryf(instance, 
+				// for now, don't modify old v4 URL and Mount properties, due to v4 lacking Mount name case sensitivity
+//				db_queryf(instance, 
 //					"UPDATE %sfile SET Missing = 0, Hash = %s, Path = %s,  Prefix = %s WHERE ID = %lu", 
 //					 prefix, tmp, rem, pre, recID);
 				free(tmp);
@@ -3313,7 +3315,7 @@ void dbFileSync(ctl_session *session, unsigned char silent){
 	prefix = GetMetaData(0, "db_prefix", 0);
 	
 	// perform the sql query function
-	if(!db_queryf(instance, "SELECT ID, URL, Path FROM %sfile ORDER BY URL", prefix)){
+	if(!db_queryf(instance, "SELECT ID, URL, Path FROM %sfile ORDER BY ID", prefix)){
 		sendCount = 1;
 		count = db_result_get_result_rows(instance);
 		while(db_result_next_row(instance) && (sendCount > 0)){ 

@@ -589,7 +589,7 @@ void *playerChangeWatcher(void *refCon){
 					data.value.fVal = instance->vol;
 					data.value.iVal = htonl(data.value.iVal);
 					notifyMakeEntry(nType_vol, &data, sizeof(data));
-				}				
+				}
 				if(changed & change_bal){
 					data.senderID = 0;
 					data.reference = htonl(i);
@@ -905,14 +905,14 @@ void *playerChangeWatcher(void *refCon){
 					data.senderID = 0;
 					data.reference = htonl((i & 0x00ffffff) | 0xC0000000);
 					data.value.iVal = htonl(outstance->bus);
-					notifyMakeEntry(nType_bus, &data, sizeof(data));					
+					notifyMakeEntry(nType_bus, &data, sizeof(data));
 				}
 				if(changed & change_vol){
 					data.senderID = 0;
 					data.reference = htonl((i & 0x00ffffff) | 0xC0000000);
 					data.value.fVal = outstance->vol;
 					data.value.iVal = htonl(data.value.iVal);
-					notifyMakeEntry(nType_vol, &data, sizeof(data));					
+					notifyMakeEntry(nType_vol, &data, sizeof(data));
 				}
 				/* all handled: clear flags */
 				outstance->changed = 0;
@@ -1203,7 +1203,7 @@ void *notifyWatcher(void *refCon){
 				isVU = 1;
 			else
 				isVU = 0;
-			noticeSend((const char *)&record->container, size, isVU);		
+			noticeSend((const char *)&record->container, size, isVU);
 			free(record);
 
 			pthread_mutex_lock(&notifyQueueLock);
@@ -1231,12 +1231,12 @@ void* metersUpdateThread(void *refCon){
 	unsigned char delay;
 
 	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
-    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 
 	size = 0;
 		
-	delay = 10;
-    while(dispRun && vuRecord){
+	delay = 0;
+	while(dispRun && vuRecord){
 		/* handle sending VU meters data to all clients registered for it.
 		 * Start by counting the total number of ins & out buses, and
 		 * associated channels */
@@ -1281,9 +1281,9 @@ void* metersUpdateThread(void *refCon){
 		size = (char *)instance - (char *)vuRecord;
 		notifyMakeEntry(nType_vu, vuRecord, size);
 		
-		// send realtime render CPU load info every second
+		// send realtime render CPU load info every 10 seconds
 		if(--delay == 0){
-			delay = 10;
+			delay = 100;
 			notifyData	data;
 			data.senderID = 0;
 			data.reference = 0;
@@ -1291,7 +1291,7 @@ void* metersUpdateThread(void *refCon){
 			total = jack_cpu_load(mixEngine->client);
 			pthread_mutex_unlock(&mixEngine->jackMutex);
 			data.value.iVal = 0;
-			data.value.cVal[0] = (unsigned char)roundf(100. * total);
+			data.value.cVal[0] = (uint8_t)roundf(total);
 			notifyMakeEntry(nType_load, &data, sizeof(data));
 		}
 		

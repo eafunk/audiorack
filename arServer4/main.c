@@ -495,10 +495,14 @@ int main(int argc, const char *argv[])
 			i = i + 1;
 	}
 	if(geteuid() == 0){
+		// for root user, create lock file so only one server can run at a time on a given port
+		// This isn't really needed since binding to the TCP listening port will fail
+		// when subsequent processes try to run.
+
 		// set created file permissions: r/w/x user, group, enyone (for the lock file)
 		umask(000); 
 		
-		// create lock file so only one server can run at a time on a given port
+		// create the lock file with the pid as decimal text as it's contents
 		snprintf(command, sizeof command, "%sars%d.pid", lock_path, tcpPort);
 		i = open(command, O_RDWR|O_CREAT, 0666);
 		if(i < 0){
@@ -510,7 +514,7 @@ int main(int argc, const char *argv[])
 		if(lockf(i, F_TLOCK,0)<0){
 			// failed to lock lock file
 			snprintf(command, sizeof command, "Audio Rack Server (ars) is already running on port %d.\n", tcpPort);
-			write(STDERR_FILENO, command, strlen(command)); 	
+			write(STDERR_FILENO, command, strlen(command));
 			goto fail;
 		}
 		

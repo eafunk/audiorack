@@ -135,15 +135,9 @@ typedef struct __attribute__((packed)){
 typedef struct __attribute__((packed)){		/* top level structure of notify packet */
 	int8_t				marker;	// NULL value as a packet marker in session text stream
 	int8_t				type;
-	uint16_t			dataSize;
+	uint16_t			dataSize;	// excluding the 4 bytes of this header
 	int8_t				data[1];
 }notifyConatiner;
-
-typedef struct {		/* entry in notify queue */
-	void *next;			// next record in list, or NULL for end
-	int32_t				spare;
-	notifyConatiner		container;
-}notifyEntry;
 
 typedef struct __attribute__((packed)){	
 	uint32_t			senderID;
@@ -157,7 +151,7 @@ typedef struct __attribute__((packed)){
 
 typedef struct __attribute__((packed)){
 	// values are saclar magnitude
-	uint8_t			count;
+	uint8_t			count;	// number of vuInstances in data
 	int8_t			data[1];
 }vuNContainer;
 
@@ -172,6 +166,12 @@ typedef struct __attribute__((packed)){		/* data structures for each channel ins
 	uint8_t	peak;		// value is 255 times the sqrt of scalar magnitude (VU metere like scaling)
 	uint8_t	avr;		// value is 255 times the sqrt of scalar magnitude (VU metere like scaling)
 }vuNData; 
+
+typedef struct {		/* entry in notify queue */
+	void *next;			// next record in list, or NULL for end
+	int32_t				spare;
+	notifyConatiner		container;
+}notifyEntry;
 
 /* Global Variables */
 extern const char *versionStr;	// set in main.c

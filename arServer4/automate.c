@@ -168,7 +168,7 @@ uint32_t AddItem(int pos, char *URLstr, char *adder, uint32_t adderUID){
 		data.reference = 0;
 		data.senderID = getSenderID();
 		data.value.iVal = 0;
-		notifyMakeEntry(nType_status, &data, sizeof(data));	
+		notifyMakeEntry(nType_status, &data, sizeof(data));
 		data.reference = htonl(newID);
 		notifyMakeEntry(nType_mstat, &data, sizeof(data));
 	}else{
@@ -956,21 +956,26 @@ void PlayListFiller(uint32_t *lastFillID, int *listPos){
 	taskCount = 0;
 	pthread_rwlock_rdlock(&taskLock);
 	task = (taskRecord *)&taskList;
+	
+	listSize = queueCount();
+	
 	while(task = (taskRecord *)getNextNode((LinkedListEntry *)task)){
 		if((task->pid == 0) && (task->timeOut)){
 			// NOT an external to arserver process and has a timeout time set
-			if((task->Proc == (void (*)(void *))dbPick) || (task->Proc == (void (*)(void *))folderPick))
+			if((task->Proc == (void (*)(void *))dbPick) || (task->Proc == (void (*)(void *))folderPick)){
 				// and if the task is a folder or database pick, count it as running
 				taskCount++;
+				if(listSize < 4)
+					task->started++;	// advance the start time so picks don't timeout until we have more than task limit items in the queue
+			}
 		}
 	}
 	pthread_rwlock_unlock(&taskLock);
 	
-	listSize = queueCount();
 	thresh = GetMetaInt(0, "auto_thresh", NULL);
 	if(!thresh)
 		thresh = 8;
-	/* fill until pick task count >=3 or queue is already filled to thresh count. */
+	/* fill until pick task count >= 3 or queue is already filled to thresh count. */
 	if(thresh <= listSize)
 		return;
 	if(taskCount > 2){
@@ -1110,6 +1115,7 @@ void AutomatorTask(void){
 	flags = GetMetaInt(0, "auto_live_flags", NULL);
 	if((autoState == auto_unatt) || ((autoState == auto_live) && (flags & live_fill))){
 		PlayListFiller(&lastFillID, &listPos);
+fprintf(stderr, "F");
 	}else{
 		pthread_rwlock_wrlock(&queueLock);
 		if(strlen(fillStr))
@@ -1120,11 +1126,14 @@ void AutomatorTask(void){
 	// Schedule Inserts
 	if(autoState == auto_unatt){
 		SchedulerInserter(&lastSchedTime, 0);
+fprintf(stderr, "Iu");
 	}else if(autoState == auto_live){
 		if(flags & live_schedule){
 			SchedulerInserter(&lastSchedTime, 0);
+fprintf(stderr, "Il");
 		}else{ 
 			SchedulerInserter(&lastSchedTime, 1);
+fprintf(stderr, "Ih");
 		}
 	}else{
 		// not doing schedule checks...
@@ -1172,7 +1181,7 @@ void QueManagerTask(unsigned char *stop){
 
 	initAutomator();
 
-	// loop until st
+	// loop until stop
 	while(!(*stop)){
 		// check for auto-live mode timeout
 		if(autoLiveTimeout == 0)
@@ -1220,7 +1229,7 @@ void QueManagerTask(unsigned char *stop){
 		
 		if(plRunning){
 			// stuff to do while the play list is running
-			if(queueCount() < 1){	
+			if(queueCount() == 0){
 				plRunning = 0;
 				// send out notifications
 				notifyData	data;
@@ -1228,6 +1237,7 @@ void QueManagerTask(unsigned char *stop){
 				data.senderID = getSenderID();
 				data.value.iVal = 0; 
 				notifyMakeEntry(nType_status, &data, sizeof(data));
+				serverLogMakeEntry("[automation] -Queue is empty");
 			}else{
 				if(!lastState){
 					// playlist has started - log it.
@@ -1295,14 +1305,13 @@ void QueManagerTask(unsigned char *stop){
 					char buf[96];
 					snprintf(buf, sizeof buf, "[task] -%08x, thread sig# %08x: timed out.", (unsigned int)trec->UID, (unsigned int)trec->thread);
 					serverLogMakeEntry(buf); 
-					trec->timeOut = 0;
 				}
 			}
 			prevt = trec;
 		}
 		pthread_rwlock_unlock(&taskLock);
 
-		// check for external recorders that are no longer connected (probebly crashed)
+		// check for external recorders that are no longer connected (killed or crashed)
 		checkRecorders();
 		
 		// Wait for a signal to check the list again or a time out
