@@ -1,7 +1,7 @@
 # TOP PROJECT LEVEL Makefile
 # This will recursivly call the Makefile inside each of the following subdirectories
 
-SUBDIRS = arPlayer4 arRecorder4 arServer4
+SUBDIRS = arPlayer4 arRecorder4 arServer4 arUI4
 MAKE = make
 
 all:

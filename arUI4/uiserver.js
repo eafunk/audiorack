@@ -44,15 +44,91 @@ var config = false;
 var tmpDirIntervalObj = false;
 var storage = false;
 var sessionUse = false;
+var httpConf = false;
+
+const DefLimit = 50;
 
 /********** Search For Object Functions **********/
-
+// NOT USED
 function fineObjectWithValue(key, value, anArray){
 	for(let i=0; i < anArray.length; i++){
 		let obj = anArray[i];
 		if(obj[key] === value)
 			return obj;
 	}
+}
+
+/********** REST request for settings object or subobject array **********/
+
+function restObjectRequest(request, response, object, keysonly, parentkey){
+	// if parentkey is false, empty, etc., all keys in the source object will be rendered as a list 
+	// (array) of objects with "id" set to the key, and "value" set to the key's value, or if 
+	// the key is associated with another object, the list entry object will additionally inherit 
+	// all key/value pairs from the key's object instead of a single "value." 
+	
+	// If parentkey is set, an array with a single result object is returned with its "id" set the
+	// the specified key, and with the result object inheriting all key/value pairs from the object.
+	
+	// If keysonly is true, we do not send any values, to support low authurity user queries.
+	
+	let params = {};
+	if(request.method == 'GET')
+		params = request.query;
+	else if(request.method == 'POST')
+		params = request.body;
+		
+	// handle range request
+	let offset = 0;
+	let cnt = DefLimit;
+	if(params.range){
+		let parts = params.range;
+		offset = parts[0];
+		cnt = parts[1]-offset;
+	}
+	
+	let result = [];
+	let total = 0;
+	if(parentkey){
+		if(keysonly)
+			result.push({id: parentkey});
+		else{
+			if(typeof object !== 'object')
+				result.push({id: parentkey, value: object});
+			else
+				result.push({id: parentkey, ...object});
+		}
+	}else{
+		let keys = Object.keys(object);
+		for(let i = 0; i < keys.length; i++){
+			let key = keys[i];
+			let val = object[key];
+			if(keysonly){
+				result.push({id: key});
+			}else{
+				if(typeof val !== 'object')
+					result.push({id: key, value:val});
+				else{
+					result.push({id: key, ...val});
+				}
+			}
+		}
+	}
+
+	// size result for requested range
+	total = result.length;
+	if(cnt + offset > total)
+		cnt = total - offset;
+	result = result.slice(offset, offset + cnt);
+	
+	// handle items range response
+	let last = result.length-1;
+	if(last < 0)
+		last = 0;
+	let header = "items "+offset+"-"+last+"/"+total;
+	response.setHeader('Content-Range', header);
+	response.status(200);
+	response.json(result);
+	response.end();
 }
 
 /********** Authentication Functions **********/
@@ -67,8 +143,6 @@ function generatePwdHash(password){
 	return {salt: salt, hash: hash.digest('base64')};
 }
 
-//console.log(generatePwdHash("configure"));
-
 function checkPwdHash(salt, clearpw, hashedpw){
 	let hash = crypto.createHmac('sha512', salt);
 	hash.update(clearpw);
@@ -78,28 +152,30 @@ function checkPwdHash(salt, clearpw, hashedpw){
 
 /********** Configuration Functions **********/
 
-/* config file jason structure:
-{	"
+/* config file json structure:
+{
 	"http":{
 		"http_port": 4000,	// delete this propety to disable http server
 		"https_certfile": "/path/to/ssl/certfile",	// optional: required for enabling https server
 		"https_keyfile": "/path/to/ssl/keyfile",	// optional: required for enabling https server
 		"https_port": 8888,	// optional: required for enabling https server
-		"ses_store": {},	// session storage settings, if any
 		"ses_secret": ""	// session storage secret for client encryption.  Will be set randomy and saved if missing.
-	}
-	"prefixes": ["prefixpattern1", "prefixpattern2", "prefixpattern3"],	// optional to override the default prefix patterns for the OS
- 	"tmpMediaDir": "/some/tmp/dir/",
-	"tmpMediaAgeLimitHrs": 12.0,
-	"mediaDir": "/default/media/dir/,
-	"supportDir": "/path/to/audiorack/support/dir"  // optional to override the default /opt/audiorack/support location.
-	"users": [ 
-		{	"name": "admin",
+	},
+	"files": {
+		"prefixes": ["prefixpattern1", "prefixpattern2", "prefixpattern3"],	// optional to override the default prefix patterns for the OS
+		"tmpMediaDir": "/some/tmp/dir/",
+		"tmpMediaAgeLimitHrs": 12.0,
+		"mediaDir": "/default/media/dir/,
+		"supportDir": "/path/to/audiorack/support/dir"  // optional to override the default /opt/audiorack/support location.
+	},
+	"users": {
+		"admin": {
 			"salt": "abc123", 
 			"password": "configure", 
-			"permission": "admin" 		// user, manage, admin
-		},{
-				additional users
+			"permission": "admin" 		// air, manager, admin, traffic
+		},
+		"anotheruser": {
+				user settings...
 		}
 	],
 	"library": {
@@ -111,14 +187,14 @@ function checkPwdHash(salt, clearpw, hashedpw){
 		"database": "databasename",
 		"prefix": "ar_"
 	},
-	"studios": { 
+	"studios": {
 		"StudioA": {	// no spaces for easy URL passing
 			"host": "localhost",
 			"port": 9550,
 			"dbloc": 1,
 			"run": "/opt/audiorack/bin/arServer4 -k"
 		},
-		"StudioB": {
+		"StudioB": {	// no spaces for easy URL passing
 				additional studio settings
 		}
 	}
@@ -127,38 +203,45 @@ function checkPwdHash(salt, clearpw, hashedpw){
 
 function listTmpDirFilesFunc(request, response){
 	if(request.session.loggedin == true){
-		let tmpDir = config['tmpMediaDir'];
-		if(tmpDir && tmpDir.length){
-			let tail ="";
-			let tailIdx =request.path.search("/tmplist/");
-			if(tailIdx > -1){
-				tail = request.path.substring(tailIdx + 9);
-				tail = decodeURIComponent(tail);
-			}
-			tmpDir = tmpDir + tail;
-			fs.readdir(tmpDir, function(err, files){
-				if(err){
-					console.log("Error getting temporary media directory listing from " + tmpDir);
-					response.status(500);
-					response.end();
-				}else{
-					for(let  i=0; i<files.length; i++){
-						let file = files[i];
-						let thisFile = path.join(tmpDir, file);
-						let finfo = fs.statSync(thisFile);
-						let obj = {}; 
-						obj.name = file;
-						obj.isDir = finfo.isDirectory();
-						obj.size = finfo.size;
-						obj.created = finfo.ctime;
-						obj.modified = finfo.mtime;
-						files[i] = obj;
-					}
-					response.status(200);
-					response.send(files);
-					response.end();
+		let files = config['files'];
+		if(files){
+			let tmpDir = files['tmpMediaDir'];
+			if(tmpDir && tmpDir.length){
+				let tail ="";
+				let tailIdx =request.path.search("/tmplist/");
+				if(tailIdx > -1){
+					tail = request.path.substring(tailIdx + 9);
+					tail = decodeURIComponent(tail);
 				}
-			});
+				tmpDir = tmpDir + tail;
+				fs.readdir(tmpDir, function(err, files){
+					if(err){
+						console.log("Error getting temporary media directory listing from " + tmpDir);
+						response.status(500);
+						response.end();
+					}else{
+						for(let  i=0; i<files.length; i++){
+							let file = files[i];
+							let thisFile = path.join(tmpDir, file);
+							let finfo = fs.statSync(thisFile);
+							let obj = {}; 
+							obj.name = file;
+							obj.isDir = finfo.isDirectory();
+							obj.size = finfo.size;
+							obj.created = finfo.ctime;
+							obj.modified = finfo.mtime;
+							files[i] = obj;
+						}
+						response.status(200);
+						response.send(files);
+						response.end();
+					}
+				});
+			}else{
+				console.log("Error: tmpMediaDir not set. Can't get directory listing.");
+				response.status(500);
+				response.end();
+			}
 		}else{
 			console.log("Error: tmpMediaDir not set. Can't get directory listing.");
 			response.status(500);
@@ -171,40 +254,43 @@ function listTmpDirFilesFunc(request, response){
 }
 
 function clearTmpDirAgedFilesFunc(){
-	let tmpDir = config['tmpMediaDir'];
-	let tmpAge = config['tmpMediaAgeLimitHrs'];
-	if(tmpAge && tmpDir && tmpDir.length){
-		fs.readdir(tmpDir, function(err, files){
-			if(err){
-				console.log("Error getting temporary media directory listing from " + tmpDir);
-			}else{
-				files.forEach(function(file){
-					let thisFile = path.join(tmpDir, file);
-					fs.stat(thisFile, function(err, stats){
-						let diffHrs = (Date.now() - stats.ctime.getTime()) / (1000 * 60 * 60); // gives hour difference 
-						if(diffHrs > tmpAge){
-							if(stats.isFile()){
-								// delete this file, it's too old
-								fs.unlink(thisFile, function (err){
-									if(err)
-										console.log("aged tempMediaDir file remove failed: " + file + "err="+ err);
-									else
-										console.log("aged tempMediaDir file removed: " + file);
-								});
-							}else if(stats.isDirectory()){
-								// recursivly remove directory and contents regardless of contents age
-								fs.rmdir(thisFile, {recursive: true}, function (err){ 
-									if(err)
-										console.log("aged tempMediaDir directory remove failed: " + file + "err="+ err);
-									else
-										console.log("aged tempMediaDir directory removed: " + file);
-								});
+	let files = config['files'];
+	if(files){
+		let tmpDir = files['tmpMediaDir'];
+		let tmpAge = files['tmpMediaAgeLimitHrs'];
+		if(tmpAge && tmpDir && tmpDir.length){
+			fs.readdir(tmpDir, function(err, files){
+				if(err){
+					console.log("Error getting temporary media directory listing from " + tmpDir);
+				}else{
+					files.forEach(function(file){
+						let thisFile = path.join(tmpDir, file);
+						fs.stat(thisFile, function(err, stats){
+							let diffHrs = (Date.now() - stats.ctime.getTime()) / (1000 * 60 * 60); // gives hour difference 
+							if(diffHrs > tmpAge){
+								if(stats.isFile()){
+									// delete this file, it's too old
+									fs.unlink(thisFile, function (err){
+										if(err)
+											console.log("aged tempMediaDir file remove failed: " + file + "err="+ err);
+										else
+											console.log("aged tempMediaDir file removed: " + file);
+									});
+								}else if(stats.isDirectory()){
+									// recursivly remove directory and contents regardless of contents age
+									fs.rmdir(thisFile, {recursive: true}, function (err){ 
+										if(err)
+											console.log("aged tempMediaDir directory remove failed: " + file + "err="+ err);
+										else
+											console.log("aged tempMediaDir directory removed: " + file);
+									});
+								}
 							}
-						}
+						});
 					});
-				});
-			}
-		})
+				}
+			})
+		}
 	}
 }
 
@@ -217,24 +303,40 @@ function cleanFileNameForUpload(file){
 }
 
 function applySettingsToApp(conf){
+	if(_.isEqual(conf.http, httpConf))
+		return;
+	console.log('HTTP Configuration changed.');
+	httpConf = _.cloneDeep(conf.http);
 	if(conf.http.https_port && conf.http.https_keyfile && conf.http.https_certfile){
 		fs.readFile(conf.http.https_keyfile, 'utf8', function(err, data){ 
-			if(!err){
+			if(err){
 				console.log("failed to read https key file: "+conf.http.https_keyfile);
 			}else{
 				let privateKey = data;
-				fs.readFile(conf.http.https_keyfile, 'utf8', function(err, data){ 
-					if(!err){
+				fs.readFile(conf.http.https_certfile, 'utf8', function(err, data){ 
+					if(err){
 						console.log("failed to read https key file: "+conf.http.https_keyfile);
 					}else{
 						let certificate = data;
-						let credentials = {key: privateKey, cert: certificate};
-						httpsServer = https.createServer(credentials, app);
-						if(conf.http.https_bind)
-							httpsServer.listen(conf.http.https_port, conf.http.https_bind);
-						else
-							httpsServer.listen(conf.http.https_port);
-						console.log("https server listening on port "+conf.http.https_port);
+						let credentials = {key: privateKey, cert: certificate, requestCert: false, rejectUnauthorized: false};
+						if(httpsServer){
+							console.log("stopping existing https server");
+							httpsServer.close(() => {
+								httpsServer = https.createServer(credentials, app);
+								if(conf.http.https_bind)
+									httpsServer.listen(conf.http.https_port, conf.http.https_bind);
+								else
+									httpsServer.listen(conf.http.https_port);
+								console.log("https server listening on port "+conf.http.https_port);
+							});
+						}else{
+							httpsServer = https.createServer(credentials, app);
+							if(conf.http.https_bind)
+								httpsServer.listen(conf.http.https_port, conf.http.https_bind);
+							else
+								httpsServer.listen(conf.http.https_port);
+							console.log("https server listening on port "+conf.http.https_port);
+						}
 					}
 				});
 			}
@@ -245,12 +347,26 @@ function applySettingsToApp(conf){
 	}
 	
 	if(conf.http.http_port){
-		httpServer = http.createServer(app);
-		if(conf.http.http_bind)
-			httpServer.listen(conf.http.http_port, conf.http.http_bind);
-		else
-			httpServer.listen(conf.http.http_port);
-		console.log("http server listening on port "+conf.http.http_port);
+		if(httpServer){
+			console.log("stopping existing http server");
+			httpServer.close(() => {
+				httpServer = http.createServer(app);
+				if(conf.http.http_bind)
+					httpServer.listen(conf.http.http_port, conf.http.http_bind);
+				else{
+					httpServer.listen(conf.http.http_port);
+				}
+				console.log("http server listening on port "+conf.http.http_port);
+			});
+		}else{
+			httpServer = http.createServer(app);
+			if(conf.http.http_bind)
+				httpServer.listen(conf.http.http_port, conf.http.http_bind);
+			else{
+				httpServer.listen(conf.http.http_port);
+			}
+			console.log("http server listening on port "+conf.http.http_port);
+		}
 	}else{
 		httpServer = false;
 		console.log("no parameters for http server");
@@ -270,28 +386,37 @@ function applySettingsToApp(conf){
 function handleConfigChanges(conf){
 	lib.configure(conf);
 	studio.configure(conf);
-	let tmpDir = conf['tmpMediaDir'];
-	let tmpAge = conf['tmpMediaAgeLimitHrs'];
-	if(tmpDir && tmpDir.length){
-		if(tmpAge){
-			let interval = tmpAge * 3600 * 1000; // hours to mSec.
-			// check at 1/4 the age limit rate
-			tmpDirIntervalObj = setInterval(clearTmpDirAgedFilesFunc, interval/4);
-			// And fire it off right now too..
-			clearTmpDirAgedFilesFunc();
-		}else if(tmpDirIntervalObj){
+	let files = conf['files'];
+	if(files){
+		let tmpDir = files['tmpMediaDir'];
+		let tmpAge = files['tmpMediaAgeLimitHrs'];
+		if(tmpDir && tmpDir.length){
+			if(tmpAge){
+				let interval = tmpAge * 3600 * 1000; // hours to mSec.
+				// check at 1/4 the age limit rate
+				tmpDirIntervalObj = setInterval(clearTmpDirAgedFilesFunc, interval/4);
+				// And fire it off right now too..
+				clearTmpDirAgedFilesFunc();
+			}else if(tmpDirIntervalObj){
+				// stop temp media dir cleanout 
+				clearInterval(tmpDirIntervalObj);
+				tmpDirIntervalObj = false;
+			}
+			storage = multer.diskStorage({
+				destination: function (req, file, cb){
+					cb(null, tmpDir);
+				},
+				filename: function (req, file, cb){
+					cb(null, cleanFileNameForUpload(file.originalname));
+				}
+			})
+		}else{
+			// disable uploading
+			storage = false;
 			// stop temp media dir cleanout 
 			clearInterval(tmpDirIntervalObj);
 			tmpDirIntervalObj = false;
 		}
-		storage = multer.diskStorage({
-			destination: function (req, file, cb){
-				cb(null, tmpDir);
-			},
-			filename: function (req, file, cb){
-				cb(null, cleanFileNameForUpload(file.originalname));
-			}
-		})
 	}else{
 		// disable uploading
 		storage = false;
@@ -319,11 +444,11 @@ function loadConfiguration(){
 			let hash = generatePwdHash("configure");
 			
 			let str = "{ \"http\": {\"http_port\": 3000, \"ses_secret\": \""+crypto.randomBytes(64).toString('base64')+"\"} ";
-			str += " \"users\": [ {\"name\": \"admin\", \"salt\": \"";
+			str += " \"users\": { \"admin\": { \"salt\": \"";
 			str += hash.salt;
 			str += "\", \"password\": \""
 			str += hash.hash;
-			str += "\", \"permission\": \"admin\" } ] }";
+			str += "\", \"permission\": \"admin\" } } }";
 			
 			saveConfiguration(JSON.parse(str));
 		}
@@ -352,39 +477,139 @@ function saveConfiguration(conf){
 
 function getConf(request, response){
 	if(request.session.loggedin == true){
-		let loc = _.cloneDeep(config);	// copy object
-		loc['username'] = request.session.username;	// this and the next property are local to the 
-		loc['permission'] = request.session.permission;		// web client only
-		if(request.session.permission == "admin"){
-			// send full config data
-			response.status(200);
-			response.send(loc);
+		let dirs = request.path.split('/');
+		let obj = config;
+		if(dirs.length < 3){
+			// root list
+			restObjectRequest(request, response, obj, true, false);
+			return;
 		}else{
-			// remove private items for non-admin users
-			let sub = loc['library'];
-			if(sub){
-				delete sub['password'];
-				delete sub['user'];
-				delete sub['host'];
-			}
-			sub = loc['studios'];
-			if(sub){
-				for(let i=0; i<sub.length; i++) {
-					let obj = sub[i];
-					if(obj){
-						delete obj['host'];
-						delete obj['port'];
-					}
+			// travers to requested object
+			let i;
+			for(i = 2; i < dirs.length; i++){
+				obj = obj[dirs[i]];
+				if(!obj){
+					// requested object doesn't exists... return empty result
+					restObjectRequest(request, response, {}, true, false);
+					return;
 				}
 			}
-			delete loc['users'];
-			response.status(200);
-			response.send(loc);
+			
+			let parKey;
+			if(i > 3)
+				// flatten results past level 3, with id = directory name as the specified id
+				parKey = dirs[dirs.length-1];
+			if(request.session.permission == "admin"){
+				// full property access
+				restObjectRequest(request, response, obj, false, parKey);
+			}else{
+				// access list only
+				restObjectRequest(request, response, obj, true, parKey);
+			}
+			return;
 		}
 	}else{
 		response.status(403);
+		response.end("Unauthorized");
 	}
-	response.end();
+}
+
+function setConf(request, response){
+// examples:
+//		setconf/files/key?value=something
+//		setconf/studios/StudioB?host=something&port=something-else
+
+	if((request.session.loggedin == true) && (request.session.permission == 'admin')){
+		let params = undefined;
+		if(request.method == 'GET')
+			params = request.query;
+		else if(request.method == 'POST')
+			params = request.body;
+		if(params){
+			let dirs = request.path.split('/');
+			let locConf = _.cloneDeep(config);
+			let child = locConf;
+			let obj;
+			if(dirs.length < 4){
+				response.status(400);
+				response.end("Bad request");
+				return;
+			}else{
+				// travers to requested object
+				let i = 0;
+				for(i = 2; i < dirs.length; i++){
+					obj = child;
+					child = obj[dirs[i]];
+					if(!child){
+						// requested object doesn't exists... 
+						if(i == (dirs.length-1)){
+							// last dir: create it
+							child = {};
+							obj[dirs[i]] = child;
+						}else{
+							response.status(400);
+							response.end("Bad request");
+							return;
+						}
+					}
+				}
+				let value = params.value;
+				if(value)
+					obj[dirs[i-1]] = value;	// flat value
+				else{
+					delete params.id;	// remove the id object.
+					obj[dirs[i-1]] = {...child, ...params};	// merge/replace key/values
+				}
+				saveConfiguration(locConf);
+				response.status(201);
+				response.end();
+			}
+		}else{
+			response.status(400);
+			response.end("Bad request");
+		}
+	}else{
+		response.status(403);
+		response.end("Unauthorized");
+	}
+}
+
+function delConf(request, response){
+// examples:
+//		delconf/files/key
+//		delconf/users/StudioB
+
+	if((request.session.loggedin == true) && (request.session.permission == 'admin')){
+		let dirs = request.path.split('/');
+		let locConf = _.cloneDeep(config);
+		let child = locConf;
+		let obj;
+		if(dirs.length < 4){
+			response.status(400);
+			response.end("Bad request");
+			return;
+		}else{
+			// travers to requested object
+			let i = 0;
+			for(i = 2; i < dirs.length; i++){
+				obj = child;
+				child = obj[dirs[i]];
+				if(!child){
+					// requested object doesn't exists... create it
+					response.status(400);
+					response.end("Bad request");
+					return;
+				}
+			}
+			delete obj[dirs[i-1]];
+			saveConfiguration(locConf);
+			response.status(201);
+			response.end();
+		}
+	}else{
+		response.status(403);
+		response.end("Unauthorized");
+	}
 }
 
 /********** Main Program and event callback dispatchers **********/
@@ -419,28 +644,13 @@ app.use(sessionDispatcher);
 	500 - Internal Server Error
 */
 
-app.get('/getconf', getConf);
+app.get('/getconf\*', getConf);
 
-app.post('/getconf', getConf);
+app.post('/getconf\*', getConf);
 
-app.post('/setconf', function(request, response){
-	if((request.session.loggedin == true) && (request.session.permission == 'admin')){
-		let locConf = request.body.conf;
-		if(locConf){
-			delete locConf['username'];
-			delete locConf['permission'];
-			if(saveConfiguration(locConf))
-				response.status(201);
-			else
-				response.status(304);
-		}else{
-			response.status(400);
-		}
-	}else{
-		response.status(403);
-	}
-	response.end();
-});
+app.post('/setconf\*', setConf);
+
+app.post('/delconf\*', delConf);
 
 app.post('/genpass', function(request, response){
 	if((request.session.loggedin == true) && (request.session.permission == 'admin')){
@@ -448,7 +658,7 @@ app.post('/genpass', function(request, response){
 		if(password){
 			let tmp = generatePwdHash(password);
 			response.send(tmp);
-			response.status(201);
+			response.status(200);
 		}else{
 			response.status(400);
 		}
@@ -464,7 +674,7 @@ app.get('/genpass', function(request, response){
 		if(password){
 			let tmp = generatePwdHash(password);
 			response.send(tmp);
-			response.status(201);
+			response.status(200);
 		}else{
 			response.status(400);
 		}
@@ -478,13 +688,22 @@ app.post('/auth', function(request, response){
 	let username = request.body.username;
 	let password = request.body.password;
 	if(username && password){
-		let rec = fineObjectWithValue('name', username, config['users']);
-		if(rec){
-			if(checkPwdHash(String(rec.salt), password, String(rec.password))){
-				request.session.loggedin = true;
-				request.session.username = username;
-				request.session.permission = rec.permission;
-				getConf(request, response);
+		let userlist = config['users'];
+		if(userlist){
+			let rec = userlist[username];
+			if(rec){
+				if(checkPwdHash(String(rec.salt), password, String(rec.password))){
+					request.session.loggedin = true;
+					request.session.username = username;
+					request.session.permission = rec.permission;
+					let li = {username: username, permission: rec.permission};
+					response.status(200);
+					response.send(li);
+				}else{
+					response.status(401);
+					response.end("Bad username and password combination");
+					return;
+				}
 			}else{
 				response.status(401);
 				response.end("Bad username and password combination");
@@ -504,7 +723,7 @@ app.post('/auth', function(request, response){
 app.post('/unauth', function(request, response){
 	if(request.session.loggedin){
 		request.session.destroy();
-		response.status(201);
+		response.status(200);
 	}else
 		response.status(401);
 	response.end();
@@ -513,7 +732,7 @@ app.post('/unauth', function(request, response){
 app.get('/unauth', function(request, response){
 	if(request.session.loggedin){
 		request.session.destroy();
-		response.status(201);
+		response.status(200);
 	}else
 		response.status(401);
 	response.end();
@@ -558,11 +777,12 @@ app.post('/studio/\*', function(request, response){
 app.get('/who', function(request, response){
 	//request.query.property
 	if(request.session.loggedin){
-		response.send(request.session.username);
-		response.status(201);
+		let li = {username: request.session.username, permission: request.session.permission};
+		response.status(200);
+		response.send(li);
 	}else{
-		response.send('Not logged in');
 		response.status(401);
+		response.send({});
 	}
 	response.end();
 });
@@ -654,13 +874,14 @@ app.get('/ssestream', function(req, res){
 	}
 });
 
-// list an event types your sesdion is subscribed to
+// list an event types your session is subscribed to
 app.get('/sseget', function(req, res){
 	if(req.session.id){
 		let client = sse.clients[req.sessionID];
 		if(client && client.response){
-			res.status(201);
+			res.status(200);
 			res.json(client.registered);
+console.log("sseget");
 		}else{
 			res.status(400);
 			res.end("No stream connected");

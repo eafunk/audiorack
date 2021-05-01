@@ -71,7 +71,7 @@ class conFactory {
 							if(client.resTimer){
 								clearTimeout(client.resTimer);
 							}
-							let result = client.response.substr(0, idx+1);	// leave the tailing \n in the result
+							let result = client.response.substr(0, idx+1);	// leave the leading \n in the result
 							client.response = client.response.substr(idx+5);
 							delete client.respromise;
 							client.resolve(result);
@@ -93,7 +93,7 @@ class conFactory {
 		// return a promise that resolves to a boolean where true indicates the resource is still valid.
 		return new Promise(function(resolve, reject){
 			if(prepForResponse(client, 1000)){
-				client.write('??\n');
+				client.write('\n');
 				getResponse(client).then(function(result){
 						if(result){
 							resolve(true);
@@ -267,6 +267,8 @@ function handleNotifyDataRX(name, data){
 function createConnectionPool(name, host, port, maxval, minval){
 	console.log("new connection pool to studio: "+name);
 	// create connection pool (and notify connection)
+	if(!port || !host)
+		return;
 	let factory = new conFactory(host, port);
 	if(!maxval)
 		maxval = 5;
@@ -286,22 +288,26 @@ function createConnectionPool(name, host, port, maxval, minval){
 			nfSocket.setKeepAlive(true);
 			nfSocket.write('notify\n');
 			nfSocket.write('vuon\n');
+			console.log("connected to notice socket for studio: "+name);
 		});
-	nfSocket.on('error', function(err){
-			// delayed connection retry in 2 seconds
+	nfSocket.on('error', function(err){});
+
+	nfSocket.on('close', function(err){
+			// delayed connection retry in 10 seconds
 			let delay = setTimeout(() => {
-				nfSocket.connect(port, host, function(){
+				nfSocket.connect(port, host, {'force new connection': true }, function(){
 					nfSocket.setKeepAlive(true);
 					nfSocket.write('notify\n');
+					nfSocket.write('vuon\n');
+					console.log("reconnected to notice socket for studio: "+name);
 				});
-			}, 2000);
+			}, 10000);
 		});
 				
 	nfSocket.on('data', function(data){
 			handleNotifyDataRX(name, data);
 		});
 	poollist[name].nfSocket = nfSocket;
-
 }
 
 function removeConnectionPool(name){
@@ -312,6 +318,8 @@ function removeConnectionPool(name){
 		pool.drain().then(function(){
 			pool.clear();
 		});
+		pool.nfSocket.removeAllListeners('close');
+		pool.nfSocket.destroy();
 		// then remove from the list
 		delete poollist[name];
 	}
@@ -320,7 +328,7 @@ function removeConnectionPool(name){
 async function runLocalStudioServer(name, run){
 	console.log("starting studio server '"+name+"', with command: "+run);
 	try{
-		let cmdresult = await execShellCommand(run);
+		let cmdresult = await execShellCommand("/opt/audiorack/bin/"+run);
 		const lines = cmdresult.split('\n');
 		let last = lines.length-2;
 		if(last < 0)
@@ -341,7 +349,7 @@ function reconfigureStudios(curSettings, newSettings){
 		let key = keys[i];
 		let newer = newSettings[key];
 		if(newer){
-			// studio exists in new settings too: chack for changes
+			// studio exists in new settings too: check for changes
 			let older = vals[i];
 			if((newer.host != older.host) || (newer.port != older.port)){
 				// connection has changed... reconfigure connection pool

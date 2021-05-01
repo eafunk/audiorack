@@ -186,13 +186,14 @@ int noticeSend(const char *buf, int tx_length, unsigned char isVU){
 		recPtr = &sessionList[i];
 		if(recPtr->cs){
 			if((!isVU && recPtr->use_tcp) || (isVU && recPtr->notify_meters))
-				count = my_send(recPtr, buf, tx_length, 0);
+				// set the non-block flag, so the send is skipped if there isn't room in the send buffer.
+				count = my_send(recPtr, buf, tx_length, 0, MSG_DONTWAIT);
 		}
 	}
 	return count;
 }
 
-int my_send(ctl_session *session, const char *buf, int tx_length, unsigned char silent){
+int my_send(ctl_session *session, const char *buf, int tx_length, unsigned char silent, int flags){
 	int count = 0;
 
 	if(!silent){
@@ -202,7 +203,7 @@ int my_send(ctl_session *session, const char *buf, int tx_length, unsigned char 
 			return count;
 		}
 		else if(session->cs > 0){
-			count = send(session->cs, buf, tx_length, 0);
+			count = send(session->cs, buf, tx_length, flags);
 			return count;
 		}
 	}
@@ -914,12 +915,12 @@ finish:
 	if(result == rError){
 		if(arg && (strlen(arg) > 1)){
 			tx_length = snprintf(buf, sizeof buf, "%s", session->errMSG);
-			my_send(session, buf, tx_length, session->silent);
+			my_send(session, buf, tx_length, session->silent, 0);
 		}
 	}
 	if(result == rOK){
 		tx_length = snprintf(buf, sizeof buf, "OK\n");
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 	}
 	if(passResult)
 		*passResult = result;
@@ -957,23 +958,23 @@ void* sessionThread(ctl_session *session){
 	// display version
 	tx_length = snprintf(command, sizeof command, "AudioRack Server, version %s\n", versionStr);
 
-	if(my_send(session, command, tx_length, 0) < 0) goto finish;
+	if(my_send(session, command, tx_length, 0, 0) < 0) goto finish;
 	tx_length = snprintf(command, sizeof command, "Copyright (C) %s\n\n", versionCR);
-	if(my_send(session, command, tx_length, 0) < 0)goto finish;
+	if(my_send(session, command, tx_length, 0, 0) < 0)goto finish;
 	tx_length = snprintf(command, sizeof command, "AudioRack Server comes with ABSOLUTELY NO WARRANTY; for details\n");
-	if(my_send(session, command, tx_length, 0) < 0) goto finish;
+	if(my_send(session, command, tx_length, 0, 0) < 0) goto finish;
 	tx_length = snprintf(command, sizeof command, "type `info'.  This is free software, and you are welcome\n");
-	if(my_send(session, command, tx_length, 0) < 0) goto finish;
+	if(my_send(session, command, tx_length, 0, 0) < 0) goto finish;
 	tx_length = snprintf(command, sizeof command, "to redistribute it under certain conditions; See the\n");
-	if(my_send(session, command, tx_length, 0) < 0) goto finish;
+	if(my_send(session, command, tx_length, 0, 0) < 0) goto finish;
 	tx_length = snprintf(command, sizeof command, "GNU General Public License included with this program for details.\n\n");
-	if(my_send(session, command, tx_length, 0) < 0) goto finish;
+	if(my_send(session, command, tx_length, 0, 0) < 0) goto finish;
 	tx_length = snprintf(command, sizeof command, "==================================================================\n");
-	if(my_send(session, command, tx_length, 0) < 0) goto finish;
+	if(my_send(session, command, tx_length, 0, 0) < 0) goto finish;
 
 	// send prompt
 	tx_length = strlen(constPrompt);
-	if(my_send(session, constPrompt, tx_length, 0) < 0) goto finish;
+	if(my_send(session, constPrompt, tx_length, 0, 0) < 0) goto finish;
 	*command = 0;
 	
 	// wait for a client command to arrive
@@ -985,21 +986,34 @@ void* sessionThread(ctl_session *session){
 	
 	session->silent = 0;	
 	while(rx_length > 0){
-		// "\n" is our command delimitor
+		// "\n" is our command delimitor, but we need to handle \r too.
 		save_pointer = block;
 		while(fragment = strpbrk(save_pointer, "\n\r")){
-			// found end-of-line
+			// replace found /n or /r with null string termination
 			*fragment = 0;
 			strncat(command, save_pointer, sizeof(command) - (strlen(command) + 1));
-			save_pointer = fragment+1;
+			char nxt = *(fragment+1);
+			// It's possible that a /r/n set will be broken across a recvd block, and
+			// then we wont catch is as a pair.  Oh well.  Not likely, and would
+			// only result in a double prompt being sent the client.
+			if((nxt == '\n') || (nxt == '\r'))
+				// next char is also a \r or \n... move past it too
+				save_pointer = fragment+2;
+			else
+				// next char is not a \r or \n... just move past the first one
+				save_pointer = fragment+1;
 
 			if(strlen(command)){
 				if(processCommand(session, command, NULL))
 					goto finish;
+			}else{
+				// send \n
+				if(my_send(session, "\n", 1, 0, 0) < 0) 
+					goto finish;
 			}
 			// send prompt
 			tx_length = strlen(constPrompt);
-			if(my_send(session, constPrompt, tx_length, 0) < 0) 
+			if(my_send(session, constPrompt, tx_length, 0, 0) < 0) 
 				goto finish;
 			*command = 0;
 		}
@@ -1224,7 +1238,7 @@ unsigned char handle_help(ctl_session *session){
 		while(result = strchr(buf, '\r'))
 			// convert CR to LF chars
 			*result = '\n';
-		my_send(session, buf, strlen(buf), session->silent);
+		my_send(session, buf, strlen(buf), session->silent, 0);
 	}
 	fclose(fp);
 	return rNone;
@@ -1237,13 +1251,13 @@ unsigned char handle_clients(ctl_session *session){
 
 	// list the current connected clients
 	tx_length = snprintf(buf, sizeof buf - 1, "Connected clients\n");
-	my_send(session, buf, tx_length, session->silent);
+	my_send(session, buf, tx_length, session->silent, 0);
 	pthread_mutex_lock(&sMutex);
 	for(int cn=0; cn<sessionListSize; cn++){
 		if(sessionList[cn].cs > 0){
 			if(inet_ntop(AF_INET6, &sessionList[cn].client.sin6_addr, str, sizeof(str)))
 			tx_length = snprintf(buf, sizeof buf - 1, "#%d from %s\n", cn+1, str);
-			my_send(session, buf, tx_length, session->silent);
+			my_send(session, buf, tx_length, session->silent, 0);
 		}
 	}
 	pthread_mutex_unlock( &sMutex );
@@ -1258,7 +1272,7 @@ unsigned char handle_echo(ctl_session *session){
 		// first parameter, message to echo is in save_pointer
 		tx_length = snprintf(buf, sizeof buf, "%s\n", session->save_pointer);
 		// ignore silent... always echo.
-		my_send(session, buf, tx_length, 0);
+		my_send(session, buf, tx_length, 0, 0);
 	}
 	return rNone;
 }
@@ -1283,9 +1297,9 @@ unsigned char handle_info(ctl_session *session){
 	
 	if(!session->silent){
 		tx_length = snprintf(buf, sizeof buf, "AudioRack Server, version %s\n", versionStr);
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 		tx_length = snprintf(buf, sizeof buf, "Copyright (C) %s\n\n", versionCR);
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 		
 		
 		
@@ -1295,34 +1309,34 @@ unsigned char handle_info(ctl_session *session){
 					"\tJACK-Audio name = %s\n\n", 
 					mixEngine->mixerSampleRate, mixEngine->inCount, mixEngine->chanCount, 
 					mixEngine->busCount, mixEngine->chanCount, mixEngine->ourJackName);
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 		
 		tx_length = snprintf(buf, sizeof buf, "============================================================================\n");
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 		tx_length = snprintf(buf, sizeof buf, "This program is free software; you can redistribute it and/or\n");
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 		tx_length = snprintf(buf, sizeof buf, "modify it under the terms of the GNU General Public License\n");
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 		tx_length = snprintf(buf, sizeof buf, "as published by the Free Software Foundation; either version 2\n");
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 		tx_length = snprintf(buf, sizeof buf, "of the License, or (at your option) any later version.\n\n");
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 		tx_length = snprintf(buf, sizeof buf, "This program is distributed in the hope that it will be useful,\n");
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 		tx_length = snprintf(buf, sizeof buf, "but WITHOUT ANY WARRANTY; without even the implied warranty of\n");
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 		tx_length = snprintf(buf, sizeof buf, "MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n");
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 		tx_length = snprintf(buf, sizeof buf, "GNU General Public License for more details.\n\n");
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 		tx_length = snprintf(buf, sizeof buf, "You should have received a copy of the GNU General Public License\n");
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 		tx_length = snprintf(buf, sizeof buf, "with this program; if not, write to the Free Software Foundation, Inc.,\n");
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 		tx_length = snprintf(buf, sizeof buf, "59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.\n");
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 		tx_length = snprintf(buf, sizeof buf, "============================================================================\n");
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 	}
 	return rNone;
 }
@@ -1721,7 +1735,7 @@ unsigned char handle_pstat(ctl_session *session){
 
 	// player status
 	tx_length = snprintf(buf, sizeof buf, "pNum\tstatus\tmeta-UID\tRev\ttype\tvol\tbal\tbus\tpos\tdur\tbuff\tnext\tseg\tfade\n");
-	my_send(session, buf, tx_length, session->silent);
+	my_send(session, buf, tx_length, session->silent, 0);
 	for(i=0;i<mixEngine->inCount;i++){
 		instance = &mixEngine->ins[i];
 		if(instance->status & (status_standby | status_loading)){
@@ -1741,11 +1755,11 @@ unsigned char handle_pstat(ctl_session *session){
 				(instance->busses & 0x00ffffff), instance->pos, dur, btime, 
 				instance->segNext - 1, instance->posSeg, instance->fadePos);
 			free(type);
-			my_send(session, buf, tx_length, session->silent);
+			my_send(session, buf, tx_length, session->silent, 0);
 		}else{
 			// empty
 			tx_length = snprintf(buf, sizeof buf, "%u\t%d\n", (unsigned int)i, 0);
-			my_send(session, buf, tx_length, session->silent);
+			my_send(session, buf, tx_length, session->silent, 0);
 		}
 	}
 
@@ -1765,18 +1779,18 @@ unsigned char handle_meters(ctl_session *session){
 	chanWidth = mixEngine->chanCount;
 	max = chanWidth * mixEngine->busCount;
 	tx_length = snprintf(buf, sizeof buf, "bus\tchan\tavr\tpeak\n");
-	my_send(session, buf, tx_length, session->silent);
+	my_send(session, buf, tx_length, session->silent, 0);
 	for(i=0; i<max; i++){
 		tx_length = snprintf(buf, sizeof buf, "%u\t%u\t%.1f\t%.1f\n", 
 				i / chanWidth, i % chanWidth,
 				ftodb(mixEngine->mixbuses->VUmeters[i].avr), 
 				ftodb(mixEngine->mixbuses->VUmeters[i].peak));
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 	}
 
 	max = mixEngine->inCount;
 	tx_length = snprintf(buf, sizeof buf, "\nin\tchan\tavr\tpeak\n");
-	my_send(session, buf, tx_length, session->silent);
+	my_send(session, buf, tx_length, session->silent, 0);
 	
 	inPtr = &mixEngine->ins[i];
 	for(i=0; i<max; i++){
@@ -1786,7 +1800,7 @@ unsigned char handle_meters(ctl_session *session){
 				i, c,
 				ftodb(inPtr->VUmeters[c].avr), 
 				ftodb(inPtr->VUmeters[c].peak));
-			my_send(session, buf, tx_length, session->silent);
+			my_send(session, buf, tx_length, session->silent, 0);
 		}
 	}
 	return rNone;
@@ -2023,7 +2037,7 @@ unsigned char handle_showbus(ctl_session *session){
 		session->lastPlayer = aInt;
 		instance = &mixEngine->ins[aInt];
 		tx_length = snprintf(buf, sizeof buf, "%08x\n", instance->busses);
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 		return rNone;
 	}
 	session->errMSG = "Missing parameter.\n";
@@ -2193,43 +2207,43 @@ unsigned char handle_showmutes(ctl_session *session){
 		tx_length = snprintf(buf, sizeof buf, "Cue +\n");
 	else
 		tx_length = snprintf(buf, sizeof buf, "Cue -\n");
-	my_send(session, buf, tx_length, session->silent);
+	my_send(session, buf, tx_length, session->silent, 0);
 
 	if(mute & (1L << 25))
 		tx_length = snprintf(buf, sizeof buf, "MuteA +\n");
 	else
 		tx_length = snprintf(buf, sizeof buf, "MuteA -\n");
-	my_send(session, buf, tx_length, session->silent);
+	my_send(session, buf, tx_length, session->silent, 0);
 
 	if(mute & (1L << 26))
 		tx_length = snprintf(buf, sizeof buf, "MuteB +\n");
 	else
 		tx_length = snprintf(buf, sizeof buf, "MuteB -\n");
-	my_send(session, buf, tx_length, session->silent);
+	my_send(session, buf, tx_length, session->silent, 0);
 
 	if(mute & (1L << 27))
 		tx_length = snprintf(buf, sizeof buf, "MuteC +\n");
 	else
 		tx_length = snprintf(buf, sizeof buf, "MuteC -\n");
-	my_send(session, buf, tx_length, session->silent);
+	my_send(session, buf, tx_length, session->silent, 0);
 
 	if(mute & (1L << 29))
 		tx_length = snprintf(buf, sizeof buf, "TB0 +\n");
 	else
 		tx_length = snprintf(buf, sizeof buf, "TB0 -\n");
-	my_send(session, buf, tx_length, session->silent);
+	my_send(session, buf, tx_length, session->silent, 0);
 
 	if(mute & (1L << 30))
 		tx_length = snprintf(buf, sizeof buf, "TB1 +\n");
 	else
 		tx_length = snprintf(buf, sizeof buf, "TB1 -\n");
-	my_send(session, buf, tx_length, session->silent);
+	my_send(session, buf, tx_length, session->silent, 0);
 
 	if(mute & (1L << 31))
 		tx_length = snprintf(buf, sizeof buf, "TB2 +\n");
 	else
 		tx_length = snprintf(buf, sizeof buf, "TB2 -\n");
-	my_send(session, buf, tx_length, session->silent);
+	my_send(session, buf, tx_length, session->silent, 0);
 	return rNone;
 }
 
@@ -2397,7 +2411,7 @@ unsigned char handle_load(ctl_session *session){
 							session->lastUID = aLong;
 							session->lastPlayer = sInt;
 							tx_length = snprintf(buf, sizeof buf, "UID=%08x\n", (unsigned int)aLong);
-							my_send(session, buf, tx_length, session->silent);
+							my_send(session, buf, tx_length, session->silent, 0);
 							return rNone;
 						}
 					}
@@ -2451,7 +2465,7 @@ unsigned char handle_settings(ctl_session *session){
 			tx_length = snprintf(buf, sizeof buf, "%s=%s\n", keys[i], values[i]);
 			free(keys[i]);
 			free(values[i]);
-			my_send(session, buf, tx_length, session->silent);
+			my_send(session, buf, tx_length, session->silent, 0);
 		}
 		free(keys);
 		free(values);
@@ -2552,13 +2566,13 @@ unsigned char handle_metalist(ctl_session *session){
 	uidRecord *rec;
 
 	tx_length = snprintf(buf, sizeof buf, "meta-UID\tRev\tusers\n");
-	my_send(session, buf, tx_length, session->silent);
+	my_send(session, buf, tx_length, session->silent, 0);
 
 	pthread_rwlock_rdlock(&dataLock);
 	rec = (uidRecord *)&metaList;
 	while(rec = (uidRecord *)getNextNode((LinkedListEntry *)rec)){
 		tx_length = snprintf(buf, sizeof buf, "%08x\t%u\t%u\n", rec->UID, rec->rev, rec->refCnt);
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 	}
 	pthread_rwlock_unlock(&dataLock);
 	return rNone;
@@ -2597,12 +2611,12 @@ unsigned char handle_dumpmeta(ctl_session *session){
 		}
 		if(count = GetMetaKeysAndValues(aLong, &keys, &values)){
 			tx_length = snprintf(buf, sizeof buf, "rev=%u\n", GetMetaRev(aLong));
-			my_send(session, buf, tx_length, session->silent);
+			my_send(session, buf, tx_length, session->silent, 0);
 			for(i=0; i<count; i++){
 				tx_length = snprintf(buf, sizeof buf, "%s=%s\n", keys[i], values[i]);
 				free(keys[i]);
 				free(values[i]);
-				my_send(session, buf, tx_length, session->silent);
+				my_send(session, buf, tx_length, session->silent, 0);
 			}
 			free(keys);
 			free(values);
@@ -2779,11 +2793,11 @@ unsigned char handle_srcports(ctl_session *session){
 	pthread_mutex_unlock(&mixEngine->jackMutex);
 	if(ports){
 		tx_length = snprintf(buf, sizeof buf, "Client:Port\n");
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 		i=0;
 		while(port = ports[i]){
 			tx_length = snprintf(buf, sizeof buf, "%s\n", port);
-			my_send(session, buf, tx_length, session->silent);
+			my_send(session, buf, tx_length, session->silent, 0);
 			i++;
 		}
 		jack_free(ports);
@@ -2804,11 +2818,11 @@ unsigned char handle_dstports(ctl_session *session){
 	pthread_mutex_unlock(&mixEngine->jackMutex);
 	if(ports){
 		tx_length = snprintf(buf, sizeof buf, "Client:Port\n");
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 		i=0;
 		while(port = ports[i]){
 			tx_length = snprintf(buf, sizeof buf, "%s\n", port);
-			my_send(session, buf, tx_length, session->silent);
+			my_send(session, buf, tx_length, session->silent, 0);
 			i++;
 		}
 		free(ports);
@@ -2860,13 +2874,13 @@ unsigned char handle_dumpin(ctl_session *session){
 	
 	// dump all line-input definitions
 	tx_length = snprintf(buf, sizeof buf, "Name\tBus\tcontrols\tPort List\n");
-	my_send(session, buf, tx_length, session->silent);
+	my_send(session, buf, tx_length, session->silent, 0);
 
 	pthread_rwlock_rdlock(&inputLock);
 	rec = (inputRecord *)&inputList;
 	while(rec = (inputRecord *)getNextNode((LinkedListEntry *)rec)){
 		tx_length = snprintf(buf, sizeof buf,"%s\t%08x\t%06x\t%s\n", rec->Name, rec->busses, rec->controls, rec->portList);
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 	}
 	pthread_rwlock_unlock(&inputLock);
 	return rNone;
@@ -2882,12 +2896,12 @@ unsigned char handle_getin(ctl_session *session){
 	param = strtok_r(NULL, " ", &session->save_pointer);
 	if(param != NULL){
 		tx_length = snprintf(buf, sizeof buf, "Name\tBus\tControls\tPort List\n");
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 
 		pthread_rwlock_rdlock(&inputLock);
 		if(rec = getRecordForInput((inputRecord *)&inputList, param)){
 			tx_length = snprintf(buf, sizeof buf,"%s\t%08x\t%06x\t%s\n", rec->Name, rec->busses, rec->controls, rec->portList);
-			my_send(session, buf, tx_length, session->silent);
+			my_send(session, buf, tx_length, session->silent, 0);
 		}
 		pthread_rwlock_unlock(&inputLock);
 	}
@@ -3086,13 +3100,13 @@ unsigned char handle_dumpout(ctl_session *session){
 	
 	// dump all output group definitions 
 	tx_length = snprintf(buf, sizeof buf, "Name\tvolume\tMute\tBus\tPort List\n");
-	my_send(session, buf, tx_length, session->silent);
+	my_send(session, buf, tx_length, session->silent, 0);
 	instance = mixEngine->outs;
 	pthread_rwlock_rdlock(&mixEngine->outGrpLock);
 	for(i=0; i<mixEngine->outCount; i++){
 		if(instance->name){
 			tx_length = snprintf(buf, sizeof buf, "%s\t%.3f\t%08x\t%d\t%s\n", instance->name, instance->vol, instance->muteLevels, instance->bus, instance->portList);
-			my_send(session, buf, tx_length, session->silent);
+			my_send(session, buf, tx_length, session->silent, 0);
 		}
 		instance++;
 	}
@@ -3190,13 +3204,13 @@ unsigned char handle_getdly(ctl_session *session){
 	
 	// dump all output group definitions 
 	tx_length = snprintf(buf, sizeof buf, "Dest ID\t\tName\t\tDelay\n");
-	my_send(session, buf, tx_length, session->silent);	
+	my_send(session, buf, tx_length, session->silent, 0);	
 	instance = mixEngine->outs;
 	pthread_rwlock_rdlock(&mixEngine->outGrpLock);
 	for(i=0; i<mixEngine->outCount; i++){
 		if(instance->name){
 			tx_length = snprintf(buf, sizeof buf, "%s\t%s\t%.2f\n", instance->name, instance->name, instance->delay);
-			my_send(session, buf, tx_length, session->silent);
+			my_send(session, buf, tx_length, session->silent, 0);
 		}
 		instance++;
 	}
@@ -3290,12 +3304,12 @@ unsigned char handle_getout(ctl_session *session){
 										(!strcmp(name, instance->name))){
 					// found the record...
 					tx_length = snprintf(buf, sizeof buf, "Name\tvolume\tMute\tBus\tPort List\n");
-					my_send(session, buf, tx_length, session->silent);
+					my_send(session, buf, tx_length, session->silent, 0);
 					tx_length = snprintf(buf, sizeof buf, "%s\t%.3f\t%08x\t%d\t%s\n", instance->name, instance->vol, instance->muteLevels, instance->bus, instance->portList);
-					my_send(session, buf, tx_length, session->silent);
+					my_send(session, buf, tx_length, session->silent, 0);
 					
 					pthread_rwlock_unlock(&mixEngine->outGrpLock);
-					free(name);						
+					free(name);
 					return rOK;
 				}
 			}
@@ -3318,7 +3332,7 @@ unsigned char handle_jconlist(ctl_session *session){
 	unsigned char flag;
 
 	tx_length = snprintf(buf, sizeof buf, "connected\t(source)>(destination)\n");
-	my_send(session, buf, tx_length, session->silent);
+	my_send(session, buf, tx_length, session->silent, 0);
 	
 	pthread_rwlock_rdlock(&connLock);
 	rec = (connRecord *)&connList;
@@ -3343,7 +3357,7 @@ unsigned char handle_jconlist(ctl_session *session){
 			pthread_mutex_unlock(&mixEngine->jackMutex);
 		tx_length = snprintf(buf, sizeof buf, "%d\t%s>%s\n", 
 					flag, rec->src, rec->dest);
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 	}
 	pthread_rwlock_unlock(&connLock);
 	return rNone;
@@ -3467,12 +3481,12 @@ unsigned char handle_getmm(ctl_session *session){
 		if(rec = getRecordForInput((inputRecord *)&inputList, param)){
 			// found the record...
 			tx_length = snprintf(buf, sizeof buf, "Bus\tVolume\tConnection List\n");
-			my_send(session, buf, tx_length, session->silent);
+			my_send(session, buf, tx_length, session->silent, 0);
 			if(rec->mmList && strlen(rec->mmList))
 				tx_length = snprintf(buf, sizeof buf, "%u\t%f\t%s\n", rec->mmBus, rec->mmVol, rec->mmList);
 			else
 				tx_length = snprintf(buf, sizeof buf, "%u\t%f\t\n", rec->mmBus, rec->mmVol);
-			my_send(session, buf, tx_length, session->silent);
+			my_send(session, buf, tx_length, session->silent, 0);
 		}
 		pthread_rwlock_unlock(&inputLock);
 	}
@@ -3530,14 +3544,14 @@ unsigned char handle_tasks(ctl_session *session){
 
 	// dump the task list
 	tx_length = snprintf(buf, sizeof buf, "ID\tPID\tUID\tRuntime\tTimeout\tName\n");
-	my_send(session, buf, tx_length, session->silent);
+	my_send(session, buf, tx_length, session->silent, 0);
 	pthread_rwlock_rdlock(&taskLock);
 	prev = (taskRecord *)&taskList;
 	while(rec = (taskRecord *)getNextNode((LinkedListEntry *)prev)){
 		tx_length = snprintf(buf, sizeof buf, "%u\t%u\t%08x\t%ld\t%d\t%s\n", 
 				rec->taskID, (unsigned int)rec->taskID, (unsigned int)rec->UID, 
 				time(NULL) - rec->started, rec->timeOut, rec->name);
-		my_send(session, buf, tx_length, session->silent);		
+		my_send(session, buf, tx_length, session->silent, 0);
 		prev = rec;
 	}
 	pthread_rwlock_unlock(&taskLock);
@@ -3589,10 +3603,10 @@ unsigned char handle_urlmeta(ctl_session *session){
 		GetURLMetaData(localUID, session->save_pointer);
 		if(count = GetMetaKeysAndValues(localUID, &keys, &values)){
 			tx_length = snprintf(buf, sizeof buf, "rev=%u\n", GetMetaRev(localUID));
-			my_send(session, buf, tx_length, session->silent);
+			my_send(session, buf, tx_length, session->silent, 0);
 			for(i=0; i<count; i++){
 				tx_length = snprintf(buf, sizeof buf, "%s=%s\n", keys[i], values[i]);
-				my_send(session, buf, tx_length, session->silent);
+				my_send(session, buf, tx_length, session->silent, 0);
 				free(keys[i]);
 				free(values[i]);
 			}
@@ -3613,7 +3627,7 @@ unsigned char handle_dblist(ctl_session *session){
 
 	if(!session->silent){
 		tx_length = snprintf(buf, sizeof buf, "Name\tRev\n");
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 		DumpDBDriverList(session, buf, sizeof buf);
 	}
 	return rNone;
@@ -3641,7 +3655,7 @@ unsigned char handle_cue(ctl_session *session){
 			if(aLong){
 				session->lastUID = aLong;
 				tx_length = snprintf(buf, sizeof buf, "UID=%08x Player=%d\n", (unsigned int)aLong, sInt);
-				my_send(session, buf, tx_length, session->silent);
+				my_send(session, buf, tx_length, session->silent, 0);
 				return rNone;
 			}
 		}else{
@@ -3796,11 +3810,11 @@ unsigned char handle_stat(ctl_session *session){
 		tx_length = snprintf(buf, sizeof buf, "ListRev=%u %s\n", (unsigned int)plRev, "Running");
 	else
 		tx_length = snprintf(buf, sizeof buf, "ListRev=%u %s\n", (unsigned int)plRev, "Stopped");
-	my_send(session, buf, tx_length, session->silent);
+	my_send(session, buf, tx_length, session->silent, 0);
 	
 	// last log entry time
 	tx_length = snprintf(buf, sizeof buf, "LogTime=%lld\n", (long long)logChangeTime);
-	my_send(session, buf, tx_length, session->silent);
+	my_send(session, buf, tx_length, session->silent, 0);
 	
 	// automation status
 	pthread_rwlock_rdlock(&queueLock);
@@ -3817,7 +3831,7 @@ unsigned char handle_stat(ctl_session *session){
 		}
 	}
 	pthread_rwlock_unlock(&queueLock);
-	my_send(session, buf, tx_length, session->silent);
+	my_send(session, buf, tx_length, session->silent, 0);
 	
 	// sip telephone interface status
 	if(sipStatus == 2)
@@ -3826,7 +3840,7 @@ unsigned char handle_stat(ctl_session *session){
 		tx_length = snprintf(buf, sizeof buf, "sipPhone=unregistered\n");
 	else
 		tx_length = snprintf(buf, sizeof buf, "sipPhone=off\n");
-	my_send(session, buf, tx_length, session->silent);
+	my_send(session, buf, tx_length, session->silent, 0);
 
 	return rNone;
 }
@@ -3850,7 +3864,7 @@ unsigned char handle_list(ctl_session *session){
 	// dump the entire play list
 	i = 0;
 	tx_length = snprintf(buf, sizeof buf, "index\tstatus\tpNum\tmeta-UID\tRev\ttype\tdur\tsegin\tsegout\ttotal\tname\n");
-	my_send(session, buf, tx_length, session->silent);
+	my_send(session, buf, tx_length, session->silent, 0);
 	totalTime = 0.0;
 	
 	pthread_rwlock_rdlock(&queueLock);
@@ -3893,7 +3907,7 @@ unsigned char handle_list(ctl_session *session){
 		tx_length = snprintf(buf, sizeof buf, "%u\t%u\t%d\t%08x\t%u\t%s\t%s\t%.1f\t%.1f\t%.1f\t%s\n", 
 					i, status, rec->player-1, (unsigned int)rec->UID, 
 					GetMetaRev(rec->UID), type, dur, segInT, segOutT, totalTime, Name);
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 		
 		free(Name);
 		free(dur);
@@ -3954,7 +3968,7 @@ unsigned char handle_add(ctl_session *session){
 				if(aLong = AddItem(aInt, session->save_pointer, "", 0)){
 					session->lastUID = aLong;
 					tx_length = snprintf(buf, sizeof buf, "UID=%08x\n", (unsigned int)aLong);
-					my_send(session, buf, tx_length, session->silent);
+					my_send(session, buf, tx_length, session->silent, 0);
 					return rNone;
 				}
 			}
@@ -4116,7 +4130,7 @@ unsigned char handle_uadd(ctl_session *session){
 			if(aLong){
 				session->lastUID = aLong;
 				tx_length = snprintf(buf, sizeof buf, "UID=%08x\n", (unsigned int)aLong);
-				my_send(session, buf, tx_length, session->silent);
+				my_send(session, buf, tx_length, session->silent, 0);
 				return rNone;
 			}
 		}
@@ -4149,7 +4163,7 @@ unsigned char handle_split(ctl_session *session){
 			if(aLong){
 				session->lastUID = aLong;
 				tx_length = snprintf(buf, sizeof buf, "UID=%08x\n", (unsigned int)aLong);
-				my_send(session, buf, tx_length, session->silent);
+				my_send(session, buf, tx_length, session->silent, 0);
 				return rNone;
 			}
 		}
@@ -4214,7 +4228,7 @@ unsigned char handle_getuid(ctl_session *session){
 			if(session->save_pointer != NULL){
 				if(uid = FindUidForKeyAndValue(param, session->save_pointer, 0)){
 					tx_length = snprintf(buf, sizeof buf, "%08x\n", uid);
-					my_send(session, buf, tx_length, session->silent);
+					my_send(session, buf, tx_length, session->silent, 0);
 					session->lastUID = uid;
 					return rOK; 
 				}else{
@@ -4244,7 +4258,7 @@ unsigned char handle_inuid(ctl_session *session){
 		str_insertstr(&url, "input:///", 0);
 		if(uid = FindUidForKeyAndValue("URL", url, 0)){
 			tx_length = snprintf(buf, sizeof buf, "%08x\n", uid);
-			my_send(session, buf, tx_length, session->silent);
+			my_send(session, buf, tx_length, session->silent, 0);
 			session->lastUID = uid;
 			return rOK; 
 		}else{
@@ -4557,7 +4571,7 @@ unsigned char handle_rstat(ctl_session *session){
 	
 	// recorders status
 	tx_length = snprintf(buf, sizeof buf, "encoder\t\tstatus\ttime\tlimit\tpersist\tgain\tname\n");
-	my_send(session, buf, tx_length, session->silent);
+	my_send(session, buf, tx_length, session->silent, 0);
 	i = 0;
 	while(UID = FindUidForKeyAndValue("Type", "encoder", i)){
 		name = GetMetaData(UID, "Name", 0);
@@ -4573,7 +4587,7 @@ unsigned char handle_rstat(ctl_session *session){
 		tx_length = snprintf(buf, sizeof buf, "%08x\t%d\t%.1f\t%u\t%u\t%.3f\t%s\n", UID, status, pos, (unsigned int)GetMetaInt(UID, "Limit", NULL), 
 								(unsigned int)GetMetaInt(UID, "Persistent", NULL), GetMetaFloat(UID, "Volume", NULL), name);
 		free(name);
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 		i++;
 	}
 	return rNone;
@@ -4861,7 +4875,7 @@ unsigned char handle_newrec(ctl_session *session){
 		}
 		
 		tx_length = snprintf(buf, sizeof buf, "UID=%08x\n", (unsigned int)newUID);
-		my_send(session, buf, tx_length, session->silent);
+		my_send(session, buf, tx_length, session->silent, 0);
 		return rOK;
 	}
 	session->errMSG = "Error creating a new encoder UID record.\n";

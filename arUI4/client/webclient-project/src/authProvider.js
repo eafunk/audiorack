@@ -1,5 +1,5 @@
 var auth = {
-	conf: {},
+	cred: {},
 	
 	// called when the user attempts to log in
 	login: ({ username, password }) => {
@@ -14,53 +14,88 @@ var auth = {
 			}
 			return response.json();
 		}).then(obj => {
-			auth.conf = obj;
+			auth.cred = obj;
 			return Promise.resolve();
 		});
 	},
+	
 	// called when the user clicks on the logout button
 	logout: () => {
 		return fetch('/unauth').then(response => {
-			auth.conf = {};
+			auth.cred = {};
 			return Promise.resolve();
 		}).catch(err => {
-			auth.conf = {};
+			auth.cred = {};
 			return Promise.resolve();
 		});
 	},
+	
 	// called when the API returns an error
 	checkError: ({ status }) => {
-		if(status === 401 || status === 403) {
-			auth.conf = {};
+	if(status === 401 || status === 403) {
+			auth.cred = {};
 			return Promise.reject();
 		}
 		return Promise.resolve();
 	},
+	
 	// called when the user navigates to a new location, to check for authentication
 	checkAuth: () => {
-		if(auth.conf.username){
+		if(auth.cred.username){
 			return Promise.resolve();
 		}else{
-			return Promise.reject();
+			// check with the uiserver, to allow login servival after javascript app reload
+			return auth.checkWho().then(() => {
+				return Promise.resolve();
+			}).catch(() => {
+				return Promise.reject();
+			});
 		}
 	},
+	
 	// called when the user navigates to a new location, to check for permissions / roles
 	getPermissions: () => {
-		if(auth.conf.permission){
-			return Promise.resolve(auth.conf.permission);
+		if(auth.cred.permission){
+			return Promise.resolve(auth.cred.permission);
 		}else{
-			return Promise.reject();
+			// check with the uiserver, to allow login servival after javascript app reload
+			return auth.checkWho().then(() => {
+				return Promise.resolve(auth.cred.permission);
+			}).catch(() => {
+				return Promise.reject();
+			});
 		}
 	},
 	
 	getIdentity: () => {
-		if(auth.conf.username){
-			return Promise.resolve({fullName: auth.conf.username});
+		if(auth.cred.username){
+			return Promise.resolve({fullName: auth.cred.username});
 		}else{
-			return Promise.reject();
+			// check with the uiserver, to allow login servival after javascript app reload
+			return auth.checkWho().then(() => {
+				return Promise.resolve({fullName: auth.cred.username});
+			}).catch(() => {
+				return Promise.reject();
+			});
 		}
 	},
 	
+	checkWho: () => {
+		return fetch('who').then(response => {
+			if((response.status < 200) || (response.status >= 300)){
+				auth.cred = {};
+				return Promise.reject();
+			}
+			return response.json();
+		}).then(obj => {
+			auth.cred = obj;
+			return Promise.resolve();
+		}).catch(() => {
+			auth.cred = {};
+			return Promise.reject();
+		});
+	}
+
 };
 
 export default auth;

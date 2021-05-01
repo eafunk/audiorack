@@ -48,8 +48,15 @@ function hasWhiteSpace(str) {
   return /\s/g.test(str);
 }
 
+function changeKey(oldKey, newKey, obj){
+	if(obj.oldKey){
+		obj.newKey = obj.oldKey;
+		delete obj.oldKey;
+	}
+}
+
 function asyncGetDBConnection(){
-	return new Promise(function (resolve){
+	return new Promise(function (resolve, reject){
 		libpool.getConnection((err, connection) => {
 			if(err){
 				reject(err);
@@ -270,6 +277,8 @@ function includeSearchKeys(queryParts, params){
 		if(hasWhiteSpace(key))
 			// keys can't have white spaced... skip if it does
 			continue;
+		if(key == "range")	// range is handled by the restQueryRequest function
+			continue;
 		//keys:track,playlist,task,added,category,artist,album,comment,missing,rested
 		if(key == "title"){ // files by item name
 			queryParts.where = buildWhereString(queryParts.where, "toc", "Type", "file");
@@ -430,7 +439,7 @@ function includeSearchKeys(queryParts, params){
 	}
 }
 
-function restQueryRequest(connection, request, response, select, from, where, tail, sort, noLimit){
+function restQueryRequest(connection, table, request, response, select, from, where, tail, sort, noLimit){
 	// handle Order By request
 	if(sort){
 		let parts = sort.split(',');
@@ -453,22 +462,23 @@ function restQueryRequest(connection, request, response, select, from, where, ta
 	}
 
 	// handle range request
+	let params = {};
+	if(request.method == 'GET')
+		params = request.query;
+	else if(request.method == 'POST')
+		params = request.body;
 	let offset = 0;
 	let cnt = DefLimit;
 	if(noLimit==0){	// only set a limit/offset if noLimit is 0
-		if(request.headers.Range){
-			let parts = request.headers.Range.path.split('=');
-			if(parts[1]){
-				fromto = parts[1].split('-');
-				offset = fromto[0];
-				cnt = fromto[1]-offset;
-			}
+		if(params.range){
+			let parts = params.range;
+			offset = parts[0];
+			cnt = parts[1]-offset;
 		}
 		tail += "LIMIT "+cnt+" OFFSET "+offset;
 	}
 	
 	let query = select+from+where+tail;
-	
 	connection.query(select+from+where+tail,function (err, results, fields) {
 		if(err){
 			response.status(400);
@@ -488,6 +498,8 @@ function restQueryRequest(connection, request, response, select, from, where, ta
 					let header = "items "+offset+"-"+last+"/"+cres[0].Num;
 					response.setHeader('Content-Range', header);
 					response.status(201);
+					// convert table column results back to API names
+					tableToApiReformat(table, results);
 					response.json(results);
 				}
 				connection.release(); // return the connection to pool
@@ -931,10 +943,156 @@ async function resolveFileFromProperties(properties){
 	return status;
 }
 
-// getFrom -> get/table{/ID}?key1=, key2, ...
+function apiToTableReformat(table, params){
+	// handle inconsistent table ID name usage, convert ALL database row id column names to 'id', 
+	// and some rational columns from ID to 'Item' to our client API side
+	let idCol = 'id';
+	// tables for which the id column is named ID
+	if(['artist', 'album', 'category', 'toc', 'daypart', 'queries', 'favs', 'locations', 'schedule', 'file', 'logs', 'orders', 'request', 'users'].includes(table) == true){
+		idCol = 'ID';
+		//	and handle parameters too...
+		if(params.id){
+			params.ID = params.id;
+			delete params.id;
+		}
+		if(params.sortBy){
+			let parts = params.sortBy.split(',');
+			if(parts.length){
+				for(let i=0; i < parts.length; i++){
+					let str = parts[i];
+					let j = str.search("-");
+					if(j > -1)
+						str = str.substring(j+1);
+					if(str == "id")
+						str = "ID";
+					if(j > -1)
+						str = "-"+str;
+					parts[i] = str;
+				}
+			}
+			params.sortBy = parts.join(",");
+		}
+		if(params.distinct){
+			if(Array.isArray(params.distinct)){
+				for(let j=0; j < params.distinct.length; j++){
+					if(params.distinct[j] == "id")
+						params.distinct[j] = "ID";
+				}
+			}else if(params.distinct == "id"){
+				params.distinct = "ID";
+			}
+		}
+	}
+	// tables for which the id column is named RID
+	else if(['category_item', 'meta', 'playlist', 'rest', 'task'].includes(table) == true){
+		idCol = 'RID';
+		//	and handle parameters too...
+		if(params.id){
+			params.RID = params.id;
+			delete params.id;
+		}
+		if(params.sortBy){
+			let parts = params.sortBy.split(',');
+			if(parts.length){
+				for(let i=0; i < parts.length; i++){
+					let str = parts[i];
+					let j = str.search("-");
+					if(j > -1)
+						str = str.substring(j+1);
+					if(str == "id")
+						str = "RID";
+					if(j > -1)
+						str = "-"+str;
+					parts[i] = str;
+				}
+			}
+			params.sortBy = parts.join(",");
+		}
+		if(params.distinct){
+			if(Array.isArray(params.distinct)){
+				for(let j=0; j < params.distinct.length; j++){
+					if(params.distinct[j] == "id")
+						params.distinct[j] = "RID";
+				}
+			}else if(params.distinct == "id"){
+				params.distinct = "RID";
+			}
+		}
+		// translate parameter Item to ID for some tables
+		if(['meta', 'playlist', 'task'].includes(table) == true){
+			if(params.Item){
+				params.ID = params.Item;
+				delete params.Item;
+			}
+			if(params.sortBy){
+				let parts = params.sortBy.split(',');
+				if(parts.length){
+					for(let i=0; i < parts.length; i++){
+						let str = parts[i];
+						let j = str.search("-");
+						if(j > -1)
+							str = str.substring(j+1);
+						if(str == "Item")
+							str = "ID";
+						if(j > -1)
+							str = "-"+str;
+						parts[i] = str;
+					}
+				}
+				params.sortBy = parts.join(",");
+			}
+			if(params.distinct){
+				if(Array.isArray(params.distinct)){
+					for(let j=0; j < params.distinct.length; j++){
+						if(params.distinct[j] == "Item")
+							params.distinct[j] = "ID";
+					}
+				}else if(params.distinct == "Item"){
+					params.distinct = "ID";
+				}
+			}
+		}
+	}
+	return idCol;
+}
+
+function tableToApiReformat(table, result){
+	// tables for which the id column is named ID
+	if(['artist', 'album', 'category', 'toc', 'daypart', 'queries', 'favs', 'locations', 'schedule', 'file', 'logs', 'orders', 'request', 'users'].includes(table) == true){
+		result.forEach(function(item){ 
+			if(item.ID){
+				item.id = item.ID;
+				delete item.ID;
+			}
+		});
+	// tables for which the id column is named RID
+	}else if(['category_item', 'meta', 'playlist', 'rest', 'task'].includes(table) == true){
+		result.forEach(function(item){ 
+			if(item.RID){
+				item.id = item.RID;
+				delete item.RID;
+			}
+		});
+		// translate parameter Item to ID for some tables
+		if(['meta', 'playlist', 'task'].includes(table) == true){
+			if(item.ID){
+				item.tocID = item.ID;
+				delete item.ID;
+			}
+		}
+	}
+	
+	// if result doesn't have an id property create it as a row index
+	if(result.length && !result[0].id){
+		result.forEach(function(item, index){ 
+			item.id = index;
+		});
+	}
+}
+
+// getFrom -> get/table{/id}?key1=, key2, ...
 // distinct=column or columns to return with distinct clause
 // table=toc
-// id=2345 (all if excluded)
 // property=value (% in string for like)
 function getFrom(request, response, params, dirs){
 	if(dirs[3]){
@@ -946,6 +1104,9 @@ function getFrom(request, response, params, dirs){
 			return;
 		}
 		libpool.getConnection((err, connection) => {
+			// convert API params to table column names
+			let idCol = apiToTableReformat(table, params);
+			
 			if(err){
 				response.status(400);
 				response.send(err.code);
@@ -955,7 +1116,7 @@ function getFrom(request, response, params, dirs){
 				if(params.sortBy)
 					delete params.sortBy;
 				else
-					sort = "ID";
+					sort = idCol;
 				
 				let select = "";
 				let distinct = params.distinct;
@@ -991,7 +1152,7 @@ function getFrom(request, response, params, dirs){
 				let tail = "";
 
 				if(dirs[4])
-					where += "WHERE ID="+libpool.escape(dirs[4])+" ";
+					where += "WHERE "+idCol+"="+libpool.escape(dirs[4])+" ";
 
 				// additional "where" values
 				let keys = Object.keys(params);
@@ -1000,6 +1161,8 @@ function getFrom(request, response, params, dirs){
 					let key = keys[i];
 					if(hasWhiteSpace(key))
 						// keys can't have white spaced... skip if it does
+						continue;
+					if(key == "range")	// range is handled by the restQueryRequest function
 						continue;
 					let val = vals[i];
 					let valstr = val;
@@ -1012,7 +1175,7 @@ function getFrom(request, response, params, dirs){
 						where = buildWhereString(where, table, key, valstr);
 					}
 				}
-				restQueryRequest(connection, request, response, select, from, where, tail, sort, 0); // NOTE: connection will be returned to the pool.
+				restQueryRequest(connection, table, request, response, select, from, where, tail, sort, 0); // NOTE: connection will be returned to the pool.
 			}
 		});
 	}else{
@@ -1021,7 +1184,7 @@ function getFrom(request, response, params, dirs){
 	}
 }
 
-// setIn -> set/table{/ID}?col1=, col2= ...
+// setIn -> set/table{/id}?col1=, col2= ...
 // table=toc
 // id=2345 (if excluded, new row is created, ID id returned)
 function setIn(request, response, params, dirs){
@@ -1054,6 +1217,9 @@ function setIn(request, response, params, dirs){
 				// NOTE: client is responsable for updating Total Playlist duration, and update when changes are made.
 				// after all moves, additions and deletions are done, use the get item's calcDur property (recalculated duration) 
 				// to then update the item's duration property
+				
+				// modify parameters for table where columns and API keys don't match (id, RID, Item, etc.)
+				apiToTableReformat(table, params);
 				if(dirs[4]){
 					// we have an ID... update the row with the specified ID
 					let update = "UPDATE "+locConf['prefix']+table+" ";
@@ -1364,7 +1530,7 @@ function removeSubtype(connection, type, id, response){
 	});
 }
 
-// delete/table/ID[?reassign=id][remove=1]	
+// delete/table/ID[?reassign=id][remove=1]
 //	reassign will reassign related items that contain this property as specified, or fail if not.
 // remove will attempt to delete the associated file for file type items.
 function deleteID(request, response, params, dirs){
@@ -1920,6 +2086,8 @@ function getLogs(request, response, params){
 					if(hasWhiteSpace(key))
 						// keys can't have white spaced... skip if it does
 						continue;
+					if(key == "range")	// range is handled by the restQueryRequest function
+						continue;
 					let val = vals[i];
 					let valstr = val;
 					if(Array.isArray(val)){
@@ -1931,7 +2099,7 @@ function getLogs(request, response, params){
 						where = buildWhereString(where, "logs", key, valstr);
 					}
 				}
-				restQueryRequest(connection, request, response, select, from, where, tail, sort, 0); // NOTE: connection will be returned to the pool.
+				restQueryRequest(connection, "logs", request, response, select, from, where, tail, sort, 0); // NOTE: connection will be returned to the pool.
 
 			}else{	// no location given
 				let sort = "Label";
@@ -1940,7 +2108,7 @@ function getLogs(request, response, params){
 				let where = "WHERE "+locConf['prefix']+"logs.Location = "+locConf['prefix']+"locations.ID ";
 				let tail = ""; 
 				
-				restQueryRequest(connection, request, response, select, from, where, tail, sort, 0); // NOTE: connection will be returned to the pool.
+				restQueryRequest(connection, "location", request, response, select, from, where, tail, sort, 0); // NOTE: connection will be returned to the pool.
 			}
 		}
 	});
@@ -1997,7 +2165,7 @@ function getSched(request, response, params){
 					}
 					let tail = "ORDER BY mapHour ASC, Minute ASC, Priority DESC ";
 					
-					restQueryRequest(connection, request, response, select, from, where, tail, sort, 0); // NOTE: connection will be returned to the pool.
+					restQueryRequest(connection, "schedule", request, response, select, from, where, tail, sort, 0); // NOTE: connection will be returned to the pool.
 					
 				}else{
 					// Insert Items
@@ -2040,7 +2208,7 @@ function getSched(request, response, params){
 					}
 					let tail = "ORDER BY mapHour ASC, Minute ASC, Priority DESC ";
 					
-					restQueryRequest(connection, request, response, select, from, where, tail, sort, 0); // NOTE: connection will be returned to the pool.
+					restQueryRequest(connection, "schedule", request, response, select, from, where, tail, sort, 0); // NOTE: connection will be returned to the pool.
 					
 				}
 			}else{
@@ -2051,7 +2219,7 @@ function getSched(request, response, params){
 				let sort = "Label";
 				let tail = ""; 
 
-				restQueryRequest(connection, request, response, select, from, where, tail, sort, 0); // NOTE: connection will be returned to the pool.
+				restQueryRequest(connection, "location", request, response, select, from, where, tail, sort, 0); // NOTE: connection will be returned to the pool.
 			}
 		}
 	});
@@ -2066,10 +2234,12 @@ function getSched(request, response, params){
 // added=yyyy-mm-dd
 // missing=true/false (joins file table only)
 // limit=10 (default for no limit)
+// sortBy=Label or Duration (prepend - for descending)
 
 function searchFor(request, response, params, dirs){
 	if(params.type){
-		var type = params.type;
+		let type = params.type;
+		let sort = params.sortBy;
 		libpool.getConnection((err, connection) => {
 			if(err){
 				response.status(400);
@@ -2077,18 +2247,23 @@ function searchFor(request, response, params, dirs){
 				response.end();
 			}else{
 				delete params.type;
+				let table = type;
+				let select;
+				let from;
+				let where;
+				let tail = "";
 				if(type == 'artist'){
-					var sort = "Label";
-					var select = "SELECT DISTINCT "+locConf['prefix']+"artist.Name AS Label, ";
-					select += locConf['prefix']+"artist.ID AS ID ";
-					var from = "FROM ("+locConf['prefix']+"toc, "+locConf['prefix']+"file, "+locConf['prefix']+"artist";
-					var where = "WHERE "+locConf['prefix']+"toc.Type = 'file' AND "+locConf['prefix']+"file.ID = "+locConf['prefix']+"toc.ID ";
+					if(!sort)
+						sort = "Label";
+					select = "SELECT DISTINCT "+locConf['prefix']+"artist.Name AS Label, ";
+					select += locConf['prefix']+"artist.ID AS ID, '"+type+"' AS qtype ";
+					from = "FROM ("+locConf['prefix']+"toc, "+locConf['prefix']+"file, "+locConf['prefix']+"artist";
+					where = "WHERE "+locConf['prefix']+"toc.Type = 'file' AND "+locConf['prefix']+"file.ID = "+locConf['prefix']+"toc.ID ";
 					where += "AND "+locConf['prefix']+"artist.ID = "+locConf['prefix']+"file.Artist ";
 					if(params.match){ 
 						where = buildWhereString(where, "artist", "Name", params.match);
 						delete params.match;
 					}
-					var tail = ""; 
 					let parts = {from: from, where: where};
 					includeSearchKeys(parts, params);
 					from = parts.from;
@@ -2096,146 +2271,154 @@ function searchFor(request, response, params, dirs){
 					from += ") ";
 					
 				}else if(type == 'album'){
-					var sort = "Label";
-					var select = "SELECT DISTINCT "+locConf['prefix']+"album.Name AS Label, ";
-					select += locConf['prefix']+"album.ID AS ID ";
-					var from = "FROM ("+locConf['prefix']+"toc, "+locConf['prefix']+"file, "+locConf['prefix']+"album";
-					var where = "WHERE "+locConf['prefix']+"toc.Type = 'file' AND "+locConf['prefix']+"file.ID = "+locConf['prefix']+"toc.ID ";
+					if(!sort)
+						sort = "Label";
+					select = "SELECT DISTINCT "+locConf['prefix']+"album.Name AS Label, ";
+					select += locConf['prefix']+"album.ID AS ID, '"+type+"' AS qtype ";
+					from = "FROM ("+locConf['prefix']+"toc, "+locConf['prefix']+"file, "+locConf['prefix']+"album";
+					where = "WHERE "+locConf['prefix']+"toc.Type = 'file' AND "+locConf['prefix']+"file.ID = "+locConf['prefix']+"toc.ID ";
 					where += "AND "+locConf['prefix']+"album.ID = "+locConf['prefix']+"file.Album ";
 					if(params.match){ 
 						where = buildWhereString(where, "album", "Name", params.match);
 						delete params.match;
 					}
-					var tail = ""; 
 					let parts = {from: from, where: where};
 					includeSearchKeys(parts, params);
 					from = parts.from;
 					where = parts.where;
 					from += ") ";
 				}else if(type == 'title'){
-					var sort = "Label";
-					var select = "SELECT DISTINCT "+locConf['prefix']+"toc.Name AS Label, ";
-					select += locConf['prefix']+"toc.ID AS tocID, "+locConf['prefix']+"toc.Duration AS Duration ";
-					var from = "FROM ("+locConf['prefix']+"toc";
-					var where = "WHERE "+locConf['prefix']+"toc.Type = 'file' ";
+					if(!sort)
+						sort = "Label";
+					table = "toc";
+					select = "SELECT DISTINCT "+locConf['prefix']+"toc.Name AS Label, '"+type+"' AS qtype, ";
+					select += locConf['prefix']+"toc.ID AS tocID, "+locConf['prefix']+"toc.ID AS ID, "+locConf['prefix']+"toc.Duration AS Duration ";
+					from = "FROM ("+locConf['prefix']+"toc";
+					where = "WHERE "+locConf['prefix']+"toc.Type = 'file' ";
 					if(params.match){ 
 						where = buildWhereString(where, "toc", "Name", params.match);
 						delete params.match;
 					}
-					var tail = ""; 
 					let parts = {from: from, where: where};
 					includeSearchKeys(parts, params);
 					from = parts.from;
 					where = parts.where;
 					from += ") ";
 				}else if(type == 'task'){
-					var sort = "Label";
-					var select = "SELECT DISTINCT "+locConf['prefix']+"toc.Name AS Label, ";
-					select += locConf['prefix']+"toc.ID AS tocID, "+locConf['prefix']+"toc.Duration AS Duration ";
-					var from = "FROM ("+locConf['prefix']+"toc";
-					var where = "WHERE "+locConf['prefix']+"toc.Type = 'task' ";
+					table = "toc";
+					if(!sort)
+						sort = "Label";
+					select = "SELECT DISTINCT "+locConf['prefix']+"toc.Name AS Label, '"+type+"' AS qtype, ";
+					select += locConf['prefix']+"toc.ID AS tocID, "+locConf['prefix']+"toc.ID AS ID, "+locConf['prefix']+"toc.Duration AS Duration ";
+					from = "FROM ("+locConf['prefix']+"toc";
+					where = "WHERE "+locConf['prefix']+"toc.Type = 'task' ";
 					if(params.match){ 
 						where = buildWhereString(where, "toc", "Name", params.match);
 						delete params.match;
 					}
-					var tail = ""; 
 					let parts = {from: from, where: where};
 					includeSearchKeys(parts, params);
 					from = parts.from;
 					where = parts.where;
 					from += ") ";
 				}else if(type == 'category'){
-					var sort = "Label";
-					var select = "SELECT DISTINCT "+locConf['prefix']+"category.Name AS Label, ";
-					select += locConf['prefix']+"category.ID AS ID ";
-					var from = "FROM ("+locConf['prefix']+"toc, "+locConf['prefix']+"category, "+locConf['prefix']+"category_item";
-					var where = "WHERE "+locConf['prefix']+"category_item.Item = "+locConf['prefix']+"toc.ID ";
+					table = "category"
+					if(!sort)
+						sort = "Label";
+					select = "SELECT DISTINCT "+locConf['prefix']+"category.Name AS Label, ";
+					select += locConf['prefix']+"category.ID AS ID, '"+type+"' AS qtype ";
+					from = "FROM ("+locConf['prefix']+"toc, "+locConf['prefix']+"category, "+locConf['prefix']+"category_item";
+					where = "WHERE "+locConf['prefix']+"category_item.Item = "+locConf['prefix']+"toc.ID ";
 					where += "AND "+locConf['prefix']+"category.ID = "+locConf['prefix']+"category_item.Category "; 
 					if(params.match){ 
 						where = buildWhereString(where, "category", "Name", params.match);
 						delete params.match;
 					}
-					var tail = ""; 
 					let parts = {from: from, where: where};
 					includeSearchKeys(parts, params);
 					from = parts.from;
 					where = parts.where;
 					from += ") ";
 				}else if(type == 'playlist'){
-					var sort = "Label";
-					var select = "SELECT DISTINCT "+locConf['prefix']+"toc.Name AS Label, ";
-					select += locConf['prefix']+"toc.ID AS tocID, "+locConf['prefix']+"toc.Duration AS Duration ";
-					var from = "FROM ("+locConf['prefix']+"toc";
-					var where = "WHERE "+locConf['prefix']+"toc.Type = 'playlist' ";
+					table = "toc";
+					if(!sort)
+						sort = "Label";
+					select = "SELECT DISTINCT "+locConf['prefix']+"toc.Name AS Label, '"+type+"' AS qtype, ";
+					select += locConf['prefix']+"toc.ID AS tocID, "+locConf['prefix']+"toc.ID AS ID, "+locConf['prefix']+"toc.Duration AS Duration ";
+					from = "FROM ("+locConf['prefix']+"toc";
+					where = "WHERE "+locConf['prefix']+"toc.Type = 'playlist' ";
 					if(params.match){ 
 						where = buildWhereString(where, "toc", "Name", params.match);
 						delete params.match;
 					}
-					var tail = ""; 
 					let parts = {from: from, where: where};
 					includeSearchKeys(parts, params);
 					from = parts.from;
 					where = parts.where;
 					from += ") ";
 				}else if(type == 'added'){
-					var sort = "-"+locConf['prefix']+"toc.Added";
-					var select = "SELECT DISTINCT DATE(FROM_UNIXTIME("+locConf['prefix']+"toc.Added)) AS Label ";
-					var from = "FROM ("+locConf['prefix']+"toc";
-					var where = "";
+					table = "toc";
+					if(!sort)
+						sort = "Label";
+					select = "SELECT DISTINCT DATE(FROM_UNIXTIME("+locConf['prefix']+"toc.Added)) AS Label, '"+type+"' AS qtype ";
+					from = "FROM ("+locConf['prefix']+"toc";
+					where = "";
 					if(params.match){ 
 						where = buildWhereDate(where, "toc", "Added", params.match);
 						delete params.match;
 					}
-					var tail = ""; 
 					let parts = {from: from, where: where};
 					includeSearchKeys(parts, params);
 					from = parts.from;
 					where = parts.where;
 					from += ") ";
 				}else if(type == 'comment'){
-					var sort = "Label";
-					var select = "SELECT DISTINCT "+locConf['prefix']+"toc.Tag AS Label ";
-					var from = "FROM ("+locConf['prefix']+"toc";
-					var where = "";
+					table = "toc";
+					if(!sort)
+						sort = "Label";
+					select = "SELECT DISTINCT "+locConf['prefix']+"toc.Tag AS Label, '"+type+"' AS qtype ";
+					from = "FROM ("+locConf['prefix']+"toc";
+					where = "WHERE "+locConf['prefix']+"toc.Tag IS NOT NULL "
 					if(params.match){ 
 						where = buildWhereString(where, "toc", "Tag", params.match);
 						delete params.match;
 					}
-					var tail = ""; 
 					let parts = {from: from, where: where};
 					includeSearchKeys(parts, params);
 					from = parts.from;
 					where = parts.where;
 					from += ") ";
 				}else if(type == 'missing'){
-					var sort = "Label";
-					var select = "SELECT DISTINCT "+locConf['prefix']+"toc.Name AS Label, ";
-					select += locConf['prefix']+"toc.ID AS tocID, "+locConf['prefix']+"toc.Duration AS Duration ";
-					var from = "FROM ("+locConf['prefix']+"toc, "+locConf['prefix']+"file";
-					var where = "WHERE "+locConf['prefix']+"toc.Type = 'file' AND "+locConf['prefix']+"file.ID = "+locConf['prefix']+"toc.ID ";
+					table = "toc";
+					if(!sort)
+						sort = "Label";
+					select = "SELECT DISTINCT "+locConf['prefix']+"toc.Name AS Label, '"+type+"' AS qtype, ";
+					select += locConf['prefix']+"toc.ID AS tocID, "+locConf['prefix']+"toc.ID AS ID, "+locConf['prefix']+"toc.Duration AS Duration ";
+					from = "FROM ("+locConf['prefix']+"toc, "+locConf['prefix']+"file";
+					where = "WHERE "+locConf['prefix']+"toc.Type = 'file' AND "+locConf['prefix']+"file.ID = "+locConf['prefix']+"toc.ID ";
 					where += "AND "+locConf['prefix']+"file.Missing = 1 ";
 					if(params.match){ 
 						where = buildWhereString(where, "toc", "Name", params.match);
 						delete params.match;
 					}
-					var tail = ""; 
 					let parts = {from: from, where: where};
 					includeSearchKeys(parts, params);
 					from = parts.from;
 					where = parts.where;
 					from += ") ";
 				}else if(type == 'rested'){
-					var sort = "Label";
-					var select = "SELECT DISTINCT "+locConf['prefix']+"locations.Name AS Label, ";
+					table = "locations";
+					if(!sort)
+						sort = "Label";
+					select = "SELECT DISTINCT "+locConf['prefix']+"locations.Name AS Label, '"+type+"' AS qtype, ";
 					select += locConf['prefix']+"locations.ID AS ID ";
-					var from = "FROM ("+locConf['prefix']+"toc, "+locConf['prefix']+"rest, "+locConf['prefix']+"locations";
-					var where = "WHERE "+locConf['prefix']+"toc.ID = "+locConf['prefix']+"rest.Item ";
+					from = "FROM ("+locConf['prefix']+"toc, "+locConf['prefix']+"rest, "+locConf['prefix']+"locations";
+					where = "WHERE "+locConf['prefix']+"toc.ID = "+locConf['prefix']+"rest.Item ";
 					where += "AND "+locConf['prefix']+"locations.ID = "+locConf['prefix']+"rest.Location "
 					if(params.match){ 
 						where = buildWhereString(where, "locations", "Name", params.match);
 						delete params.match;
 					}
-					var tail = ""; 
 					let parts = {from: from, where: where};
 					includeSearchKeys(parts, params);
 					from = parts.from;
@@ -2248,7 +2431,7 @@ function searchFor(request, response, params, dirs){
 					return;
 				}
 				
-				restQueryRequest(connection, request, response, select, from, where, tail, sort, 0); // NOTE: connection will be returned to the pool.
+				restQueryRequest(connection, table, request, response, select, from, where, tail, sort, 0); // NOTE: connection will be returned to the pool.
 				
 			}
 		});
@@ -2262,7 +2445,7 @@ function searchFor(request, response, params, dirs){
 	}
 }
 
-// item/ID{?resolve=(1,0)}		gets full item info, If resolve is true (default 0), file item paths and 
+// item/ID{?resolve=(1,0)}		gets full item info, If resolve is true (default 0 <false>), file item paths and 
 // 									missing will be re-writen making use of local prefix search settings.
 // 									Use separate get queries for last played/history and schedule entries. 
 function getItem(request, response, params, dirs){
@@ -4043,27 +4226,25 @@ function abortDbFileSearch(request, response){
 
 module.exports = {
 	configure: function (config) {
-		let prx_list = config['prefixes'];
-		if(prx_list && Array.isArray(prx_list) && prx_list.length)
-			prefix_list = prx_list;
-		else{
-			if(process.platform == "darwin")
-				prefix_list = ["/Volumes/","/private/var/automount/Network/","/Network/"];		// OSX prefix list
-			else
-				prefix_list = ["/mnt/","/media/*/","/run/user/*/gvfs/*share="];	// all other POSIX prefix list
+		supportDir = "/opt/audiorack/support";
+		mediaDir = "";
+		tmpDir = "";
+		if(process.platform == "darwin")
+			prefix_list = ["/Volumes/","/private/var/automount/Network/","/Network/"];		// OSX prefix list
+		else
+			prefix_list = ["/mnt/","/media/*/","/run/user/*/gvfs/*share="];	// all other POSIX prefix list
+		let files = config['files'];
+		if(files){
+			let prx_list = files['prefixes'];
+			if(prx_list && Array.isArray(prx_list) && prx_list.length)
+				prefix_list = prx_list;
+			if(files['tmpMediaDir'] && files['tmpMediaDir'].length)
+				tmpDir = files['tmpMediaDir'];
+			if(files['mediaDir'] && files['mediaDir'].length)
+				mediaDir = files['mediaDir'];
+			if(files['supportDir'] && files['supportDir'].length)
+				supportDir = files['mediaDir'];
 		}
-		if(config['tmpMediaDir'] && config['tmpMediaDir'].length)
-			tmpDir = config['tmpMediaDir'];
-		else
-			tmpDir = "";
-		if(config['mediaDir'] && config['mediaDir'].length)
-			mediaDir = config['mediaDir'];
-		else
-			mediaDir = "";
-		if(config['supportDir'] && config['supportDir'].length)
-			supportDir = config['mediaDir'];
-		else
-			supportDir = "/opt/audiorack/support";
 		let libc = config['library'];
 		if(libc){
 			if(_.isEqual(libc, locConf) == false){
@@ -4115,7 +4296,7 @@ module.exports = {
 			getLogs(request, response, params);			// /logs{?location=loc-name}{&datetime=YYYY-MM-DD-HH:MM}{&column=value1&...} 
 																	// Range is from specified date/time to start of that day
 																	//	today assumed if no date specified
-																	// ?added=0 assumed (playFed only) if added not specified
+																	// ?added=0 assumed (played only) if added not specified
 																	// /logs alone returns list of location names that have log entries
 		}else if(dirs[2] == 'sched'){
 			getSched(request, response, params);			// /sched{?location=loc-name}{&fill=1}{&datetime=YYYY-MM-DD} 
@@ -4125,7 +4306,7 @@ module.exports = {
 		}else if(dirs[2] == 'browse'){
 			searchFor(request, response, params, dirs);	// /browse{?type=resultType}{&match=name}{&other-type1=value1&...}
 																		// /browse alone returns a list of types, less the "item" type
-		}else if(dirs[2] == 'item'){				// item/ID{?resolve=(1,0)}		
+		}else if(dirs[2] == 'item'){		// item/ID{?resolve=(1,0)}		
 													// gets full item info, If resolve is true (default 0), file item paths and 
 													// missing will be re-writen making use of local prefix search settings.
 													// Use separate get queries for last played/history and schedule entries

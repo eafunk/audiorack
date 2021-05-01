@@ -828,11 +828,24 @@ void watchdogReset(void){
 
 		if(sum < silent_thresh){
 			if((difftime(time(NULL), silent_event) > silent_timeout)){
+				silent_event = time(NULL); // we are about to handle this. Reset timer so we don't handle over and over again
 				if(!silent_tryseg){
 					// first try to seg all
-					serverLogMakeEntry("[automation] -:Silence detection timed out; trying seg all");
+					serverLogMakeEntry("[automation] -:Silence detection timed out; trying silence.detect or seg all");
 					silent_tryseg = 1;
-					silent_event = time(NULL);
+					
+					char *triggerDir = GetMetaData(0, "file_trigger_dir", 0);
+					if(strlen(triggerDir)){
+						if(triggerDir[strlen(triggerDir)-1] != directoryToken){
+							// add trailing slash
+							str_appendstr(&triggerDir, directoryTokenStr);
+						}
+						str_appendstr(&triggerDir, "silence.detect");
+						createTaskItem(triggerDir, loadConfigFromTask, NULL, 0, 0, 0, 0); // no timeout
+						free(triggerDir);
+						return;	// silence.detect script take precidence over default action
+					}
+					free(triggerDir);
 					
 					inChannel *instance;
 					int i;
@@ -845,11 +858,25 @@ void watchdogReset(void){
 						}
 					}	
 				}else{
-					serverLogMakeEntry("[automation] -:Silence detection timed out; trying restart");
-					sleep(5);	// wait 5 seconds for log entry to be made
+					serverLogMakeEntry("[automation] -:Silence detection timed out; trying silence.fault script or restart");
 					silent_tryseg = 0; // If arserver is not in keep-alive mode, the following command
 					// will do nothing.  In that case, clearing silent_tryseg will cause arserver to 
 					// attempt a segall next time this watchdogReset function is called.
+					
+					char *triggerDir = GetMetaData(0, "file_trigger_dir", 0);
+					if(strlen(triggerDir)){
+						if(triggerDir[strlen(triggerDir)-1] != directoryToken){
+							// add trailing slash
+							str_appendstr(&triggerDir, directoryTokenStr);
+						}
+						str_appendstr(&triggerDir, "silence.fault"); //!!! "silence.detect"
+						createTaskItem(triggerDir, loadConfigFromTask, NULL, 0, 0, 0, 0); // no timeout
+						free(triggerDir);
+						return;	// silence.fail script take precidence over default action
+					}
+					free(triggerDir);
+
+					sleep(5);	// wait 5 seconds for log entry to be made
 					write(STDOUT_FILENO, "#", 1);
 					return;
 				}

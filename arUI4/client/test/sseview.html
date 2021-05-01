@@ -51,7 +51,7 @@
 			
 			function addListenersForAllSubscriptions(){
 				fetch("/sseget").then(response => {
-					if(response.status == 201){
+					if((response.status >= 200) && (response.status < 400)){
 						// sucess...
 						response.json().then(data => {
 							data.forEach(entry => {

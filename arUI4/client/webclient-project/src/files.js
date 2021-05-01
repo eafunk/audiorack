@@ -12,11 +12,11 @@ import {
 	Create
 } from 'react-admin';
 
-const LibraryTitle = ({ record }) => {
-	return <span>Library {record ? `"${record.id}"` : 'Create New'}</span>;
+const FileTitle = ({ record }) => {
+	return <span>File {record ? `"${record.id}"` : 'Create New'}</span>;
 };
 
-export const LibraryList = ({ permissions, ...props }) => {
+export const FileList = ({ permissions, ...props }) => {
 	const isSmall = useMediaQuery(theme => theme.breakpoints.down('sm'));
 	return (
 		<List exporter={false} {...props}>
@@ -36,8 +36,8 @@ export const LibraryList = ({ permissions, ...props }) => {
 	);
 };
 
-export const LibraryEdit = props => (
-	<Edit title={<LibraryTitle />} {...props}>
+export const FileEdit = props => (
+	<Edit title={<FileTitle />} {...props}>
 		<SimpleForm>
 			<TextInput disabled label="Property" source="id" />
 			<TextInput label="Value" source="value" />
@@ -45,8 +45,8 @@ export const LibraryEdit = props => (
 	</Edit>
 );
 
-export const LibraryCreate = props => (
-	<Create title={<LibraryTitle />} {...props}>
+export const FileCreate = props => (
+	<Create title={<FileTitle />} {...props}>
 		<SimpleForm>
 			<TextInput label="Property" source="id" />
 			<TextInput label="Value" source="value" />

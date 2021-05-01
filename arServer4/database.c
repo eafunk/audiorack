@@ -476,7 +476,7 @@ void DumpDBDriverList(ctl_session *session, char *buf, size_t size){
 	
 	version = mysql_get_client_info();
 	tx_length = snprintf(buf, size, "%s\t%s\n", "mysql", version);
-	my_send(session, buf, tx_length, 0);
+	my_send(session, buf, tx_length, 0, 0);
 	
 }
 
@@ -3358,13 +3358,13 @@ void dbFileSync(ctl_session *session, unsigned char silent){
 				str_appendstr(&Str, URL);
 			}
 			tx_length = snprintf(buf, sizeof buf, "%u\t%s\t%s\n", (unsigned int)count, MSG, Str);
-			sendCount = my_send(session, buf, tx_length, silent);
+			sendCount = my_send(session, buf, tx_length, silent, 0);
 			count--;
 		}
 		count = db_result_get_result_rows(instance);
 	}
 	tx_length = snprintf(buf, sizeof buf, "\nChecked=%u\nMissing=%u\nError=%u\nFixed=%u\n", (unsigned int)count, (unsigned int)missing, (unsigned int)error, (unsigned int)fixed);
-	my_send(session, buf, tx_length, silent);
+	my_send(session, buf, tx_length, silent, 0);
 	tx_length = snprintf(buf, sizeof buf, "Checked=%u, Missing=%u, Error=%u, Fixed=%u", (unsigned int)count, (unsigned int)missing, (unsigned int)error, (unsigned int)fixed);
 	MSG = NULL;
 	str_setstr(&MSG, "[database] dbSync-'");
@@ -3418,14 +3418,14 @@ int dbHashSearchFileHeiarchy(ctl_session *session, unsigned char silent, const c
 		db_quote_string(instance, &vol);
 		if(!strlen(vol)){
 			tx_length = snprintf(buf, sizeof buf, " Path not in prefix list\n");
-			my_send(session, buf, tx_length, silent);	
+			my_send(session, buf, tx_length, silent, 0);	
 			free(vol);
 			db_set_errtag(instance, NULL);
 			return 0;
 		}
 	}else{
 		tx_length = snprintf(buf, sizeof buf, " Path not in prefix list\n");
-		my_send(session, buf, tx_length, silent);	
+		my_send(session, buf, tx_length, silent, 0);	
 		free(vol);
 		return 0;
 	}
@@ -3437,7 +3437,7 @@ int dbHashSearchFileHeiarchy(ctl_session *session, unsigned char silent, const c
 	
 	if(fts_session = fts_open((char * const *)pathArray, FTS_NOCHDIR | FTS_XDEV, NULL)){
 		tx_length = snprintf(buf, sizeof buf, " Searching...\n");
-		my_send(session, buf, tx_length, silent);
+		my_send(session, buf, tx_length, silent, 0);
 		tmp = NULL;
 		str_setstr(&tmp, "[database] dbFileSearch-searching for moved files: ");
 		str_appendstr(&tmp, searchPath);
@@ -3448,7 +3448,7 @@ int dbHashSearchFileHeiarchy(ctl_session *session, unsigned char silent, const c
 			if(fts_entry->fts_name[0] == '.')
 				continue;	// ignore . prefixed files
 			tx_length = snprintf(buf, sizeof buf, "\t%s\n", fts_entry->fts_path);
-			my_send(session, buf, tx_length, silent);
+			my_send(session, buf, tx_length, silent, 0);
 			
 			if(fts_entry->fts_info == FTS_F){
 				if(hash = GetFileHash(fts_entry->fts_path)){
@@ -3461,7 +3461,7 @@ int dbHashSearchFileHeiarchy(ctl_session *session, unsigned char silent, const c
 								recID = atol(sval);
 							if(recID){
 								tx_length = snprintf(buf, sizeof buf, "\t\t%u", recID);
-								my_send(session, buf, tx_length, silent);
+								my_send(session, buf, tx_length, silent, 0);
 								// see if the record is for a missing file
 								// create an empty meta data record to hold results
 								dbresult = db_result_detach(instance);
@@ -3487,7 +3487,7 @@ int dbHashSearchFileHeiarchy(ctl_session *session, unsigned char silent, const c
 										free(path);
 										if(db_result_get_rows_affected(instance)){
 											tx_length = snprintf(buf, sizeof buf, " Fixed\n");
-											my_send(session, buf, tx_length, silent);
+											my_send(session, buf, tx_length, silent, 0);
 											tmp = NULL;
 											str_setstr(&tmp, "[database] dbFileSearch-Found missing file: ");
 											str_appendstr(&tmp, fts_entry->fts_path);
@@ -3506,7 +3506,7 @@ int dbHashSearchFileHeiarchy(ctl_session *session, unsigned char silent, const c
 									
 								}else{
 									tx_length = snprintf(buf, sizeof buf, " OK\n");
-									my_send(session, buf, tx_length, silent);	
+									my_send(session, buf, tx_length, silent, 0);	
 								}
 								// done with the metadata record... 
 								releaseMetaRecord(localUID);
@@ -3527,7 +3527,7 @@ int dbHashSearchFileHeiarchy(ctl_session *session, unsigned char silent, const c
 		return 1;
 	}
 	tx_length = snprintf(buf, sizeof buf, " Invalid\n");
-	my_send(session, buf, tx_length, silent);	
+	my_send(session, buf, tx_length, silent, 0);	
 	free(vol);
 	free(prefix);
 	db_set_errtag(instance, NULL);
@@ -3606,7 +3606,7 @@ void dbFileSearch(ctl_session *session, unsigned char silent, const char *Path, 
 								while(i < globbuf.gl_pathc){
 									// found a path in new glob list
 									tx_length = snprintf(buf, sizeof buf, "Search Location %s: ", globbuf.gl_pathv[i]);
-									my_send(session, buf, tx_length, silent);
+									my_send(session, buf, tx_length, silent, 0);
 									dbresult = db_result_detach(instance);
 									dbHashSearchFileHeiarchy(session, silent, globbuf.gl_pathv[i], pace);
 									db_result_attach(instance, dbresult);
@@ -3629,7 +3629,7 @@ void dbFileSearch(ctl_session *session, unsigned char silent, const char *Path, 
 	}else{	
 		// search path has been specified
 		tx_length = snprintf(buf, sizeof buf, "Search Location %s: ", Path);
-		my_send(session, buf, tx_length, silent);
+		my_send(session, buf, tx_length, silent, 0);
 		dbHashSearchFileHeiarchy(session, silent, Path, pace);
 	}
 	db_set_errtag(instance, NULL);

@@ -649,7 +649,7 @@ void *playerChangeWatcher(void *refCon){
 						
 						name = GetMetaData(instance->UID, "Name", 0);
 						type = GetMetaData(instance->UID, "Type", 0);
-						if(strlen(triggerDir) && strlen(name) && !strcmp(type, "input")){			
+						if(strlen(triggerDir) && strlen(name) && !strcmp(type, "input")){
 							str_setstr(&triggerFile, triggerDir);
 							str_appendstr(&triggerFile, name);
 							str_appendstr(&triggerFile, ".start");
@@ -737,7 +737,7 @@ void *playerChangeWatcher(void *refCon){
 							free(mmList);
 							mmList = NULL; 
 						}
-						if(strlen(triggerDir) && strlen(name) && !strcmp(type, "input")){			
+						if(strlen(triggerDir) && strlen(name) && !strcmp(type, "input")){
 							str_setstr(&triggerFile, triggerDir);
 							str_appendstr(&triggerFile, name);
 							str_appendstr(&triggerFile, ".unload");

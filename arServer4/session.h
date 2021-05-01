@@ -64,7 +64,7 @@ typedef struct {
 
 char *initSessions(unsigned int maxSessions, short *tcpPort);
 void shutdownSessions(void);
-int my_send(ctl_session *session, const char *buf, int tx_length, unsigned char silent);
+int my_send(ctl_session *session, const char *buf, int tx_length, unsigned char silent, int flags);
 unsigned char processCommand(ctl_session *session, char *command, unsigned char *passResult);
 unsigned char loadConfiguration(ctl_session *session, char *file_path);
 int noticeSend(const char *buf, int tx_length, unsigned char isVU);
