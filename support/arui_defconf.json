@@ -1,0 +1,33 @@
+{
+   "files": {
+      "tmpMediaDir": "",
+      "tmpMediaAgeLimitHrs": 48,
+      "mediaDir": ""
+   },
+   "http": {
+      "http_port": 4000,
+      "https_certfile": "",
+      "https_keyfile": "",
+      "https_port": 8888,
+      "ses_secret": "Here is some random web session secret",
+      "ses_ttl": 86400
+   },
+   "users": {
+      "admin": {
+         "salt": "U1EANqpTXtEOCfvspFdUnG2yEPJ+Y+qJiZfXFSug4O8B9yD7pq1yNcx+JEeJnFfyBfJ4DC20ndRdZSZEmlY+Xw==",
+         "password": "YB0K//OEWgds5No9mkOfSAgZw/ltUXrKDwAuOdh7erRt3uzuSQDpnYREJwOz9zDxf8nx5M5OKslQNOKTcDd8Rg==",
+         "permission": "admin"
+      }
+   },
+   "library": {
+      "type": "mysql",
+      "host": "127.0.0.1",
+      "port": "",
+      "user": "root",
+      "password": "",
+      "database": "",
+      "prefix": "ar_"
+   },
+   "studios": {
+   }
+}

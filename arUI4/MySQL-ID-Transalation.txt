@@ -1,0 +1,30 @@
+Table			ID's (cross ref)		Translations
+ar_album		ID				ID=>id
+ar_artist		ID				ID=>id
+ar_campaign		id
+ar_category		ID				ID=>id
+ar_category_item	RID (Item)			RID=>id
+ar_client		id
+ar_daypart		ID				ID=>id
+ar_daypart_times	id (daypart)
+ar_favs			ID				ID=>id
+ar_file			ID				ID=>id
+ar_info			<none>
+ar_invoices		id
+ar_listeners		ID				ID=>id
+ar_locations		ID				ID=>id
+ar_logs			ID (Item) (Location)		ID=>id
+ar_meta			RID (ID)			ID=>Item, RID=>id
+ar_orders		ID				ID=>id
+ar_playlist		RID (ID)			ID=>Item, RID=>id
+ar_queries		ID				ID=>id
+ar_request		ID (Item)			ID=>id
+ar_rest			RID (Item)			RID=>id
+ar_schedule		ID (Item)			ID=>id
+ar_task			RID (ID)			ID=>Item, RID=>id
+ar_toc			ID				ID=>id
+ar_transactions		id
+ar_trans_camp		id (campaign) (transaction)
+ar_users		ID				ID=>id			Depricated
+ar_user_client		id (user) (client)	
+

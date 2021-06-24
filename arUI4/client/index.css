@@ -1,0 +1,284 @@
+* {box-sizing: border-box}
+
+html, body {
+	height: 100%;
+	font: 12px Arial,sans-serif; 
+	margin: 0px;
+}
+
+.center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+}
+
+.panel {
+	display: flex;
+	flex-flow: column;
+	height: 100%; /* 100% Full-height */
+	width: 0px; /* 0 width - change this with JavaScript */
+	position: fixed; /* Stay in place */
+	z-index: 1; /* Stay on top */
+	top: 0; /* Stay at the top */
+	right: 0;
+	background-color: #eee; 
+	overflow-x: hidden; /* Disable horizontal scroll */
+	padding-top: 60px; /* Place content 60px from the top */
+	transition: 0.4s; /* 0.5 second transition effect to slide in the */
+}
+
+.tableleftj {
+	text-align: left;
+	width: 100%;
+}
+
+.tableleftj tr{
+	background: #EEE;
+}
+
+.tselrow:hover {
+	background-color: #FFC;
+}
+
+.tselrow.active {
+	background-color: #777;
+}
+
+.tselcell clickable:hover {
+	background-color: #FFC;
+}
+
+input[type=search] {
+	width: 300px;
+	font-size: 13px;
+	text-align: left;
+}
+
+button.closeb {
+	overflow: hidden;
+	width: auto;
+	white-space: pre;
+	padding: 0px;
+}
+
+.editbutton {
+	overflow: hidden;
+	font-size: 8px;
+	text-align: center;
+	width: auto;
+	padding: 0px;
+}
+
+button.closeb i {
+	float: left;
+}
+
+select {
+	font-size: 10px;
+}
+
+i {
+	padding: 6px;
+}
+
+.container {
+	display: flex;
+	height: 100%;
+	flex-flow: column;
+}
+
+.wrapper {
+	flex: auto;
+	display: flex;
+	align-items: stretch;
+	overflow: auto;
+	height: 100%;
+}
+
+footer {
+	flex: none;
+	background: #777;
+	text-align: center;
+	padding: 5px;
+}
+
+/* Style the tab */
+.navtab {
+	overflow: auto;
+	height: 100%;
+	float: left;
+	border: 1px solid #CCC;
+	background-color: #EEE;
+	width: 140px;
+	align-items: stretch;
+}
+
+/* Style the buttons that are used to open the tab content */
+.navtab button {
+	display: block;
+	background-color: inherit;
+	color: black;
+	padding: 10px 12px;
+	width: 100%;
+	border: none;
+	outline: none;
+	text-align: left;
+	cursor: pointer;
+	transition: 0.4s;
+}
+
+/* Change background color of buttons on hover */
+.navtab button:hover {
+	background-color: #FFC;
+}
+
+/* Create an active/current "tab button" class */
+.navtab button.active {
+	background-color: #ccc;
+}
+
+/* Dropdown container (hidden by default). */
+.dropdown-container {
+	display: none;
+	background-color: #EEE;
+	padding-left: 16px;
+	transition: 0.4s;
+}
+
+.dropdown-container select, 
+.dropdown-container label {
+	background-color: #EEE;
+	font-size: 12px;
+	position: relative;
+	left: 12px;
+}
+
+/* Optional: Style the caret down icon */
+.fa-caret-down {
+	float: right;
+	padding-right: 8px;
+}
+
+/* Style the tab content */
+.tabcontent {
+	flex: 1;
+	flex-flow: column;
+	display: none;
+	background-color: #ccc;
+	float: left;
+	padding: 0px 12px;
+	align-items: stretch;
+	animation: fadeEffect 1s; /* Fading effect takes 1 second */
+}
+
+/* Go from zero to full opacity */
+@keyframes fadeEffect {
+	from {opacity: 0;}
+	to {opacity: 1;}
+}
+
+input[type="text"], input[type="password"] {
+	font-size: 10px;
+	margin: 2px;
+
+}
+
+input[type="number"] {
+	font-size: 10px;
+	width: 50px;
+}
+.boxed {
+	display: block; 
+	border: 1px solid #000;
+	padding: 10px;
+	margin: 5px;
+}
+
+#login {
+	width: 80%;
+	margin: 0 auto;
+
+}
+#login h2 {
+	text-align: center;
+	color: #4d4d4d;
+	font-size: 24px;
+	padding: 20px 0 20px 0;
+}
+
+#login input[type="password"],
+#login input[type="text"] {
+	font-size: 12px;
+	width: 250px;
+	padding: 15px;
+	border: 1px solid #DDD;
+	margin-bottom: 15px;
+	box-sizing:border-box;
+}
+
+#login input[type="submit"] {
+	width: 250px;
+	padding: 15px;
+	background-color: #535b63;
+	border: 0;
+	box-sizing: border-box;
+	cursor: pointer;
+	font-weight: bold;
+	color: #ffffff;
+}
+#browsres {
+	display: flex;
+	flex-flow: row;
+	padding: 10px;
+	width: 100%;
+	height: 100%;
+}
+
+#brefine * {
+	font-size: 10px;
+}
+
+div.vscroll {
+	flex: 1;
+	display: block;
+	overflow-x: hidden;
+	overflow-y: auto;
+	text-align: center;
+	padding: 5px;
+}
+
+#btype {
+	flex: none;
+	width: 120px;
+}
+
+.accordion {
+	background-color: #eee;
+	color: #444;
+	cursor: pointer;
+	padding: 18px;
+	width: 100%;
+	text-align: left;
+	border: none;
+	outline: none;
+	transition: 0.4s;
+}
+
+/* Add a background color to the button if it is clicked on (add the .active class with JS), and when you move the mouse over it (hover) */
+button.active {
+	background-color: #777;
+}
+
+.accordion:hover {
+	background-color: #FFC;
+}
+
+/* Style the accordion panel. Note: hidden by default */
+.accpanel {
+	padding: 0 18px;
+	background-color: white;
+	display: none;
+	overflow-x: auto;
+	overflow-y: auto;
+}

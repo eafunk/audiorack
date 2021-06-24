@@ -46,19 +46,19 @@
 #define cPeer_bus		0x30
 
 #define cType_MASK		0x0f
-#define cType_tags	 	0	// tags - data is counted json string of track tags
-#define cType_pos 		1 	// position - data is a float (seconds)
-#define cType_start 	2	// start - data is empty	
+#define cType_tags		0	// tags - data is counted json string of track tags
+#define cType_pos 		1	// position - data is a float (seconds)
+#define cType_start		2	// start - data is empty
 #define cType_stop	 	3	// stop - data is empty
-#define cType_end	 	4	// reached media end - data is empty.  Closes recorder
-#define cType_anc	 	5	// anounce (recorder) - data is json collection of recorder settings.
-#define cType_vu	 	6	// vU meters (recorder) - data is array of vuNData type (see below)
-#define cType_err	 	7	// error message - data is uint32 error code
-#define cType_reid	 	8	// change UID (recorder) - data is a new uint32 UID
-#define cType_vol	 	9	// change volume - data is a float
-#define cType_lock	 	10	// set recorder to locked - data is empty
-#define cType_unlock	11	// set recorder to unlocked - data is empty
-#define cType_posack	12	// arServer acknowlage of pos change back to a player - data is empty
+#define cType_end			4	// reached media end (player), close (recorder) - data is empty.
+#define cType_anc			5	// anounce (recorder only) - data is json collection of recorder settings.
+#define cType_vu			6	// vU meters (recorder only) - data is array of vuNData type (see below)
+#define cType_err			7	// error message - data is uint32 error code
+#define cType_reid		8	// change UID (recorder only) - data is a new uint32 UID
+#define cType_vol			9	// change volume (recorder only) - data is a float
+#define cType_lock		10	// set recorder to locked (recorder only) - data is empty
+#define cType_unlock		11	// set recorder to unlocked (recorder only) - data is empty
+#define cType_posack		12	// arServer acknowlage of pos change back to a player - data is empty
 
 #define	queueSizeBytes 	64 * 1024
 
@@ -68,16 +68,16 @@ typedef union {
 	int8_t			cVal[4];
 } valuetype;
 
-typedef struct __attribute__((packed)){	
+typedef struct __attribute__((packed)){
 						/* Structure of contol packet: used to control/communicate with recorders and players
 						 * NOTE: packets passed as midi data via jackaudio midi API, even though the data format
 						 * is not midi.  Jack is fine with this, but don't try to connect the arserver control midi
 						 * ports to other applications that are expecting actual midi data. */
-	uint8_t				type;
-	uint32_t			peer;		// network byte order - player input number [0,N] or recorder UID.
+	uint8_t			type;
+	uint32_t			peer;			// network byte order - player input number [0,N] or recorder UID.
 	uint16_t			dataSize;	// network byte order - size, in bytes, of the data, if any.
-	int8_t				data[1];	// network byte order or text.  Text need NOT to be null terminated
-									// due to the size (length) specified above.
+	int8_t			data[1];		// network byte order or text.  Text need NOT to be null terminated
+										// due to the size (length) specified above.
 }controlPacket;
 
 /* Structure to contain all our information, so we can pass it around */
@@ -86,25 +86,25 @@ typedef struct _CustomData {
 	unsigned int chCount;
 	unsigned int sampleRate;
 	uint32_t ctlID;
-	GstElement *src;  		/* source element */
-	GstElement *asink;  	/* audio sink element */
+	GstElement *src;		/* source element */
+	GstElement *asink;	/* audio sink element */
 	char *lastTags;
 	jack_client_t *client;
 	const char *ourJackName;
-	jack_port_t **audioOut_jPorts; // pointer to chCount array of jack ports
-	jack_port_t *midiIn_jPort;	// midi in control 
+	jack_port_t **audioOut_jPorts;	// pointer to chCount array of jack ports
+	jack_port_t *midiIn_jPort;		// midi in control 
 	jack_port_t *midiOut_jPort;	// midi out status/time
 	jack_ringbuffer_t *ringbuffer;
 	jack_ringbuffer_t *ctlqueue;
 	jack_default_audio_sample_t **jbufs; // pointer to chCount array of jack ports data buffers
 	gboolean endFlag;
-	gboolean playing;      /* Are we in the PLAYING state? */
+	gboolean playing;			/* Are we in the PLAYING state? */
 	gboolean playReq;
 	gboolean pauseReq;
-	gboolean terminate;    /* Should we terminate execution? */
-	gboolean seek_enabled; /* Is seeking enabled for this media? */
-	gboolean seek_done;    /* Have we performed the seek already? */
-	gint64 duration;       /* How long does this media last, in nanoseconds */
+	gboolean terminate;		/* Should we terminate execution? */
+	gboolean seek_enabled;	/* Is seeking enabled for this media? */
+	gboolean seek_done;		/* Have we performed the seek already? */
+	gint64 duration;		/* How long does this media last, in nanoseconds */
 	double curPos;			/* position update in seconds */
 	double reqPos;			/* position request in seconds */
 	gboolean posReq;		/* new position requested */
@@ -134,7 +134,7 @@ char *str_NthField(const char *string, const char *token, unsigned int field){
 	char *result, *tmp;
 	
 	/* if result is not empty, string has been copied and will need to be freed */
-	result = NULL;	
+	result = NULL;
 	if(tsize = strlen(token)){
 		while(field > 0){
 			if(string = strstr(string, token)){
@@ -147,7 +147,7 @@ char *str_NthField(const char *string, const char *token, unsigned int field){
 		if(tmp = strstr(result, token))
 			*tmp = 0;
 	}
-	return result;	
+	return result;
 }
 
 void jack_shutdown_callback(void *arg){
@@ -170,7 +170,7 @@ int jack_process(jack_nframes_t nframes, void *arg){
 	controlPacket *packet;
 	controlPacket header;
 	void* midi_buffer;
-			
+	
 	/* handle received control packets */		
 	midi_buffer = jack_port_get_buffer(data->midiIn_jPort, nframes);
 	event_count = jack_midi_get_event_count(midi_buffer);
@@ -190,12 +190,12 @@ int jack_process(jack_nframes_t nframes, void *arg){
 				if(type == cType_start){
 					/* handle realtime control play packet */
 					data->playReq = TRUE;
-					change_flag = TRUE;			
+					change_flag = TRUE;
 				}
 				if(type == cType_stop){
 					/* handle realtime control pause packet */
 					data->pauseReq = TRUE;
-					change_flag = TRUE;		
+					change_flag = TRUE;
 					data->endFlag = FALSE;
 				}
 				if((type == cType_pos) && (cnt == 4)){
@@ -217,7 +217,7 @@ int jack_process(jack_nframes_t nframes, void *arg){
 			}
 		}
 	}
-
+	
 	/* send any required control messages, if control port is connected */
 	if(data->connected > 1){
 		midi_buffer = jack_port_get_buffer(data->midiOut_jPort, nframes);
@@ -236,15 +236,15 @@ int jack_process(jack_nframes_t nframes, void *arg){
 			/* send pos control for current position (at start of this process cycle) time */
 			valuetype *val;
 			if(packet = (controlPacket *)jack_midi_event_reserve(midi_buffer, 0, 11)){
-				packet->type = cType_pos | cPeer_player;	
+				packet->type = cType_pos | cPeer_player;
 				packet->peer = htonl(data->ctlID);
 				packet->dataSize = htons(4);
 				val = (valuetype *)&packet->data;
 				val->fVal = data->curPos;
-				val->iVal = htonl(val->iVal); 			
+				val->iVal = htonl(val->iVal);
 			}
 		}
-
+		
 		// Check tags (control queue) for non-realtime queued packets
 		// to be sent, upto one per process cycle
 		cnt = jack_ringbuffer_peek(data->ctlqueue, (char*)&header, 7);
@@ -283,7 +283,7 @@ int jack_process(jack_nframes_t nframes, void *arg){
 			if(!rbdPtr->len)
 				rbdPtr = &rbData[1];
 		}
-		nframes--;	
+		nframes--;
 	}
 	jack_ringbuffer_read_advance(data->ringbuffer, sampsRead * sizeof(jack_default_audio_sample_t)); 
 	if(nframes){
@@ -297,7 +297,7 @@ int jack_process(jack_nframes_t nframes, void *arg){
 	/* notify midi in status change execution thread of requests */	
 	if(change_flag)
 		pthread_cond_broadcast(&data->changedSemaphore);
-	return 0;      
+	return 0;
 }
 
 /* The appsink has received a buffer */
@@ -343,10 +343,10 @@ static void appendTagData(const GstTagList *tags, const gchar *tag, gpointer use
 	gchar *str;
 	const char *prop;
 	double num;
-
+	
 	gst_tag_list_copy_value(&val, tags, tag);
 	prop = gst_tag_get_nick(tag);
-
+	
 	str = NULL;
 	if(!strcmp(prop, GST_TAG_EXTENDED_COMMENT)){
 		// special AR specific data
@@ -379,7 +379,7 @@ static void appendTagData(const GstTagList *tags, const gchar *tag, gpointer use
 		cJSON_AddStringToObject(obj, "ISRC", str);
 	}
 	if(str)
-		g_free(str);	
+		g_free(str);
 
 	g_value_unset(&val);
 }
@@ -391,7 +391,7 @@ char *tagsToControlPacketData(const GstTagList *tags) {
 	obj = cJSON_CreateObject();
 	gst_tag_list_foreach(tags, appendTagData, obj);
 	tagStr = cJSON_PrintUnformatted(obj);
-	cJSON_Delete(obj);	
+	cJSON_Delete(obj);
 	return tagStr;
 }
 
@@ -400,7 +400,7 @@ void handle_message(CustomData *data, GstMessage *msg) {
 	gchar *debug_info;
 	GstState old_state, new_state, pending_state;
 	GstTagList *tags = NULL;
-
+	
 	switch (GST_MESSAGE_TYPE (msg)) {
 		case GST_MESSAGE_ERROR:
 			gst_message_parse_error (msg, &err, &debug_info);
@@ -453,7 +453,7 @@ void handle_message(CustomData *data, GstMessage *msg) {
 					}else{
 						g_printerr ("Seeking query failed.");
 					}
-					gst_query_unref(query);				
+					gst_query_unref(query);
 					
 					/* connect JACK midi out port.  NOTE: MIDI ports connected first, so we are 
 					 * assured of control comms prior to audio port connection. arServer marks 
@@ -480,7 +480,7 @@ void handle_message(CustomData *data, GstMessage *msg) {
 					char *portName = NULL;
 					int c, i;
 					jack_port_t **port;
-
+					
 					port = data->audioOut_jPorts;
 					for(c=0; c<data->chCount; c++){
 						if(chanList = str_NthField(data->argv[5], "&", c)){
@@ -499,7 +499,7 @@ void handle_message(CustomData *data, GstMessage *msg) {
 						}
 						port++;
 					}
-
+					
 					/* and start the pipeline playing if we are NOT connected to arServer*/
 					if(!ctl_con){
 						gst_element_set_state(data->src, GST_STATE_PLAYING);
@@ -529,7 +529,7 @@ void handle_message(CustomData *data, GstMessage *msg) {
 							header.peer = htonl(data->ctlID);
 							header.dataSize = htons(len);
 							jack_ringbuffer_write(data->ctlqueue, (char*)&header, 7);
-							jack_ringbuffer_write(data->ctlqueue, jstr, len);	
+							jack_ringbuffer_write(data->ctlqueue, jstr, len);
 						}
 					}
 				}
@@ -548,10 +548,10 @@ void handle_message(CustomData *data, GstMessage *msg) {
 
 void* changeRequestWatcher(void *refCon){
 	CustomData *data = (CustomData*)refCon;
-
-    pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
-    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
-    do{
+	
+	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+	do{
 		if(data->playReq){
 			gst_element_set_state(data->src, GST_STATE_PLAYING);
 			data->playReq = FALSE;
@@ -570,7 +570,7 @@ void* changeRequestWatcher(void *refCon){
 		
 		pthread_mutex_lock(&data->changedMutex);
 		pthread_cond_wait(&data->changedSemaphore, &data->changedMutex);
-		pthread_mutex_unlock(&data->changedMutex);		
+		pthread_mutex_unlock(&data->changedMutex);
 	}while(!data->terminate);
 	
 	return NULL;
@@ -592,7 +592,7 @@ void mainloop(char *argv[], char isPipeline){
 	unsigned int disconnected;
 	unsigned int i;
 	size_t rbsize;
-
+	
 	mlock(&data, sizeof(CustomData));
 	data.argv = argv;
 	data.lastTags = NULL;
@@ -622,12 +622,12 @@ void mainloop(char *argv[], char isPipeline){
 		/* create a pipeline using gst_parse_launch, which
 		 * construts a pipeline from a text description. */
 		data.src = gst_parse_launch(argv[2], &err);
-        if(err){
+		if(err){
 			g_printerr("\nERROR: failed to create specified gstreamer pipline\n");
 			goto finish;
 		}
 		data.asink = gst_bin_get_by_name(GST_BIN(data.src), "audiosink");
-        if(data.asink){
+		if(data.asink){
 			g_printerr("\nERROR: specified pipeline filed to include an appsink element name d audiosink.\n");
 			goto finish;
 		}
@@ -642,9 +642,9 @@ void mainloop(char *argv[], char isPipeline){
 			goto finish;
 		}
 	}
-
+	
 	data.chCount = str_CountFields(argv[5], "&") + 1;
-
+	
 	/* setup JACK and get pads properties */
 	data.ctlID = atoi(argv[4]);
 	char ourName[256];
@@ -705,7 +705,7 @@ void mainloop(char *argv[], char isPipeline){
 		g_printerr("\nERROR: JACK midi ports allocation failed.\n");
 		goto finish;
 	}
-				
+	
 	/* Configure appsink to match JACK pad properties */
 	gst_audio_info_set_format(&info, GST_AUDIO_FORMAT_F32, data.sampleRate, data.chCount, NULL);
 	audio_caps = gst_audio_info_to_caps(&info);
@@ -764,7 +764,7 @@ void mainloop(char *argv[], char isPipeline){
 				if(!data.posUpdate){
 					data.curPos = current / (double)GST_SECOND;
 					data.posUpdate = TRUE;
-				}	
+				}
 			}
 			if(data.playing){
 				/* If we didn't know it yet, query the stream duration */
@@ -838,8 +838,8 @@ int main(int argc, char *argv[]){
 		fprintf(stderr, "Usage: (optional) [required]\n");
 		fprintf(stderr, "%s [(-u playURL) or (-p gstreamer-pipline)] [Jack client name] [ctlIDNumber] [jack port connection list]\n\n", argv[0]);
 		fprintf(stderr, "where client name is the Jack name for an arServer instance to which we will connect our control ports,\n");
-		fprintf(stderr, "and ctlIDNumber is our player number which we will will tag control messages we send, and watch for\n");
-		fprintf(stderr, "taged messages that match our id that we receive.\n");
+		fprintf(stderr, "and ctlIDNumber is our player number which we will tag control messages we send, and watch for taged\n");
+		fprintf(stderr, "messages that match our id that we receive.\n");
 		fprintf(stderr, "\nThe jack port list format is, by example:\n");
 		fprintf(stderr, "\tclient:port1+client:port2&client:port3+client:port4\n");
 		fprintf(stderr, "\n... which connects the our first channel to client sink port1 AND port2, then connects our second channel\n");
@@ -853,13 +853,13 @@ int main(int argc, char *argv[]){
 	}else{
 		if(!strcmp(argv[1], "-u")){
 			mainloop(argv, 0);
-			return 0;		
+			return 0;
 		}else if(!strcmp(argv[1], "-p")){
 			mainloop(argv, 1);
-			return 0;				
+			return 0;
 		}else{
 			fprintf(stderr, "Error:  first parameter must specify -u or -p, followed by a corrisponding URL or gstreamer pipline description.\n");
-			return -1;			
+			return -1;
 		}
 	}		
 }

@@ -18,7 +18,7 @@
 
 "use strict"; // prevents accidental global var creation when a variable is assigned but not previously declared.
 
-const DefLimit = 50;
+const DefLimit = 0;	// zero for no default limit: return all results
 
 var mysql = require('mysql');
 const _= require('lodash');
@@ -245,8 +245,11 @@ function buildWhereDate(whereStr, table, key, dateStr){
 	return whereStr;
 }
 
+// Make sure hard coded string befor call use escaped names
 function buildFromString(fromStr, table){
 	table = libpool.escapeId(locConf['prefix']+table);
+	if(!fromStr)
+		fromStr = "";
 	if(fromStr.indexOf(table) == -1){
 		if(fromStr.length == 0)
 			fromStr += "FROM (";
@@ -258,6 +261,8 @@ function buildFromString(fromStr, table){
 }
 
 function includeJoin(whereStr, includeStr){
+	if(!whereStr)
+		whereStr = "";
 	if(whereStr.indexOf(includeStr) == -1){
 		if(whereStr.length == 0)
 			whereStr += "WHERE ";
@@ -272,6 +277,7 @@ function includeSearchKeys(queryParts, params){
 	// additional "where" values: toc table is assumed to already be in the from clause.
 	let keys = Object.keys(params);
 	let vals = Object.values(params);
+	let added = false;
 	for(let i=0; i < keys.length; i++){
 		let key = keys[i];
 		if(hasWhiteSpace(key))
@@ -292,6 +298,7 @@ function includeSearchKeys(queryParts, params){
 			}else{
 				queryParts.where = buildWhereString(queryParts.where, "toc", "Name", valstr);
 			}
+			added = true;
 		}else if(key == "artist"){
 			queryParts.from = buildFromString(queryParts.from, "artist");
 			queryParts.from = buildFromString(queryParts.from, "file");
@@ -307,6 +314,7 @@ function includeSearchKeys(queryParts, params){
 			}else{
 				queryParts.where = buildWhereString(queryParts.where, "artist", "Name", valstr);
 			}
+			added = true;
 		}else if(key == "album"){
 			queryParts.from = buildFromString(queryParts.from, "album");
 			queryParts.from = buildFromString(queryParts.from, "file");
@@ -322,6 +330,7 @@ function includeSearchKeys(queryParts, params){
 			}else{
 				queryParts.where = buildWhereString(queryParts.where, "album", "Name", valstr);
 			}
+			added = true;
 		}else if(key == "playlist"){
 			queryParts.where = buildWhereString(queryParts.where, "toc", "Type", "playlist");
 			let val = vals[i];
@@ -334,6 +343,7 @@ function includeSearchKeys(queryParts, params){
 			}else{
 				queryParts.where = buildWhereString(queryParts.where, "toc", "Name", valstr);
 			}
+			added = true;
 		}else if(key == "task"){
 			queryParts.where = buildWhereString(queryParts.where, "toc", "Type", "task");
 			let val = vals[i];
@@ -346,6 +356,7 @@ function includeSearchKeys(queryParts, params){
 			}else{
 				queryParts.where = buildWhereString(queryParts.where, "toc", "Name", valstr);
 			}
+			added = true;
 		}else if(key == "added"){
 			let val = vals[i];
 			let valstr = val;
@@ -357,14 +368,15 @@ function includeSearchKeys(queryParts, params){
 			}else{
 				queryParts.where = buildWhereDate(queryParts.where, "toc", "Added", valstr);
 			}
-			
+			added = true;
 		}else if(key == "category"){
 			// assumes an item is only in a particular category once
 			let val = vals[i];
 			let valstr = val;
+			let subwhere = "";
+			let count;
 			if(Array.isArray(val)){
 				// multi-category
-				let subwhere = "";
 				for(let j=0; j < val.length; j++){
 					valstr = val[j];
 					if(subwhere.length)
@@ -375,25 +387,28 @@ function includeSearchKeys(queryParts, params){
 					else
 						subwhere += " LIKE "+libpool.escape(valstr);
 				}
-				let subselect = locConf['prefix']+"toc.ID IN (SELECT "+locConf['prefix']+"toc.ID AS ID ";
-				subselect += "FROM ("+locConf['prefix']+"toc, "+locConf['prefix']+"category, "+locConf['prefix']+"category_item) ";
-				subselect += "WHERE "+locConf['prefix']+"category_item.Item = "+locConf['prefix']+"toc.ID ";
-				subselect += "AND "+locConf['prefix']+"category.ID = "+locConf['prefix']+"category_item.Category AND ("; 
-				subselect += subwhere+") ";
-				subselect += "GROUP BY "+locConf['prefix']+"toc.ID HAVING COUNT("+locConf['prefix']+"toc.ID) = "+val.length+") ";
-				if(queryParts.where.length == 0)
-					queryParts.where += "WHERE ";
-				else
-					queryParts.where += "AND ";
-				queryParts.where += subselect;
+				subwhere = "("+subwhere+") ";
+				count = val.length;
 			}else{
-				// single category
-				queryParts.from = buildFromString(queryParts.from, "category");
-				queryParts.from = buildFromString(queryParts.from, "category_item");
-				queryParts.where = buildWhereString(queryParts.where, "category", "Name", valstr);
-				queryParts.where = includeJoin(queryParts.where, locConf['prefix']+"category_item.Item = "+locConf['prefix']+"toc.ID ");
-				queryParts.where = includeJoin(queryParts.where, locConf['prefix']+"category.ID = "+locConf['prefix']+"category_item.Category ");
+				subwhere = locConf['prefix']+"category.Name";
+				if(valstr.indexOf("%") == -1)
+					subwhere += "="+libpool.escape(valstr)+" ";
+				else
+					subwhere += " LIKE "+libpool.escape(valstr)+" ";
+			count = 1;
 			}
+			let subselect = locConf['prefix']+"toc.ID IN (SELECT "+locConf['prefix']+"toc.ID AS ID ";
+			subselect += "FROM ("+locConf['prefix']+"toc, "+locConf['prefix']+"category, "+locConf['prefix']+"category_item) ";
+			subselect += "WHERE "+locConf['prefix']+"category_item.Item = "+locConf['prefix']+"toc.ID ";
+			subselect += "AND "+locConf['prefix']+"category.ID = "+locConf['prefix']+"category_item.Category AND "; 
+			subselect += subwhere;
+			subselect += "GROUP BY "+locConf['prefix']+"toc.ID HAVING COUNT("+locConf['prefix']+"toc.ID) = "+count+") ";
+			if(queryParts.where.length == 0)
+				queryParts.where += "WHERE ";
+			else
+				queryParts.where += "AND ";
+			queryParts.where += subselect;
+			added = true;
 		}else if(key == "comment"){
 			let val = vals[i];
 			let valstr = val;
@@ -405,6 +420,7 @@ function includeSearchKeys(queryParts, params){
 			}else{
 				queryParts.where = buildWhereString(queryParts.where, "toc", "Tag", valstr);
 			}
+			added = true;
 		}else if(key == "missing"){
 			queryParts.from = buildFromString(queryParts.from, "file");
 			queryParts.where = includeJoin(queryParts.where, locConf['prefix']+"file.ID = "+locConf['prefix']+"toc.ID ");
@@ -418,6 +434,7 @@ function includeSearchKeys(queryParts, params){
 			}else{
 				queryParts.where = buildWhereString(queryParts.where, "file", "Missing", valstr);
 			}
+			added = true;
 		}else if(key == "rested"){
 			queryParts.from = buildFromString(queryParts.from, "rest");
 			queryParts.from = buildFromString(queryParts.from, "locations");
@@ -432,11 +449,12 @@ function includeSearchKeys(queryParts, params){
 				}
 			}else{
 				queryParts.where = buildWhereString(queryParts.where, "locations", "Name", valstr);
-			}
+			}added = true;
 		}else
 			// unknow key... ignore
 			continue;
 	}
+	return added;
 }
 
 function restQueryRequest(connection, table, request, response, select, from, where, tail, sort, noLimit){
@@ -475,11 +493,12 @@ function restQueryRequest(connection, table, request, response, select, from, wh
 			offset = parts[0];
 			cnt = parts[1]-offset;
 		}
-		tail += "LIMIT "+cnt+" OFFSET "+offset;
+		if(cnt)
+			tail += "LIMIT "+cnt+" OFFSET "+offset;
 	}
-	
 	let query = select+from+where+tail;
-	connection.query(select+from+where+tail,function (err, results, fields) {
+console.log(query);
+	connection.query(query, function (err, results, fields) {
 		if(err){
 			response.status(400);
 			response.send(err.code);
@@ -1083,13 +1102,12 @@ function tableToApiReformat(table, result){
 	}
 	
 	// if result doesn't have an id property create it as a row index
-	if(result.length && !result[0].id){
-		result.forEach(function(item, index){ 
-			item.id = index;
-		});
-	}
+//	if(result.length && !result[0].id){
+//		result.forEach(function(item, index){ 
+//			item.id = index;
+//		});
+//	}
 }
-
 // getFrom -> get/table{/id}?key1=, key2, ...
 // distinct=column or columns to return with distinct clause
 // table=toc
@@ -1203,7 +1221,7 @@ function setIn(request, response, params, dirs){
 			return;
 		}
 		// check for allowed tables
-		if(['artist', 'album', 'category', 'toc', 'meta', 'queries', 'rest', 'category_item', 'schedule', 'playlist', 'task', 'file'].includes(table) == false){
+		if(['artist', 'album', 'category', 'locations', 'toc', 'meta', 'queries', 'rest', 'category_item', 'schedule', 'playlist', 'task', 'file'].includes(table) == false){
 			response.status(400);
 			response.end();
 			return;
@@ -2040,7 +2058,6 @@ function deleteID(request, response, params, dirs){
 		response.end();
 	}
 }
-
 // getLogs -> location=(name), key1=, key2=, key3=, etc.
 // datetime=yyyy-mm-dd-hh:mm:ss
 // property=value (% for like)
@@ -2230,13 +2247,14 @@ function getSched(request, response, params){
 // match=wind%hair (% triggers a like match)
 // artist=ethan
 // category=blue
-// meta=key,value (parent is table)
+// meta=key,value (parent is type table)
 // added=yyyy-mm-dd
 // missing=true/false (joins file table only)
 // limit=10 (default for no limit)
 // sortBy=Label or Duration (prepend - for descending)
 
 function searchFor(request, response, params, dirs){
+console.log(params);
 	if(params.type){
 		let type = params.type;
 		let sort = params.sortBy;
@@ -2250,24 +2268,29 @@ function searchFor(request, response, params, dirs){
 				let table = type;
 				let select;
 				let from;
-				let where;
+				let where = "";
 				let tail = "";
 				if(type == 'artist'){
 					if(!sort)
 						sort = "Label";
 					select = "SELECT DISTINCT "+locConf['prefix']+"artist.Name AS Label, ";
 					select += locConf['prefix']+"artist.ID AS ID, '"+type+"' AS qtype ";
-					from = "FROM ("+locConf['prefix']+"toc, "+locConf['prefix']+"file, "+locConf['prefix']+"artist";
-					where = "WHERE "+locConf['prefix']+"toc.Type = 'file' AND "+locConf['prefix']+"file.ID = "+locConf['prefix']+"toc.ID ";
-					where += "AND "+locConf['prefix']+"artist.ID = "+locConf['prefix']+"file.Artist ";
+					from = buildFromString(from, "artist");
 					if(params.match){ 
 						where = buildWhereString(where, "artist", "Name", params.match);
 						delete params.match;
 					}
 					let parts = {from: from, where: where};
-					includeSearchKeys(parts, params);
-					from = parts.from;
-					where = parts.where;
+					let added = includeSearchKeys(parts, params);
+					if(added){
+						from = parts.from;
+						where = parts.where;
+						// if there are seach fields, we don't show all, only those that match
+						from = buildFromString(from, "toc");
+						from = buildFromString(from, "file");
+						where += "AND "+locConf['prefix']+"toc.Type = 'file' AND "+locConf['prefix']+"file.ID = "+locConf['prefix']+"toc.ID ";
+						where += "AND "+locConf['prefix']+"artist.ID = "+locConf['prefix']+"file.Artist "; 
+					}
 					from += ") ";
 					
 				}else if(type == 'album'){
@@ -2275,17 +2298,22 @@ function searchFor(request, response, params, dirs){
 						sort = "Label";
 					select = "SELECT DISTINCT "+locConf['prefix']+"album.Name AS Label, ";
 					select += locConf['prefix']+"album.ID AS ID, '"+type+"' AS qtype ";
-					from = "FROM ("+locConf['prefix']+"toc, "+locConf['prefix']+"file, "+locConf['prefix']+"album";
-					where = "WHERE "+locConf['prefix']+"toc.Type = 'file' AND "+locConf['prefix']+"file.ID = "+locConf['prefix']+"toc.ID ";
-					where += "AND "+locConf['prefix']+"album.ID = "+locConf['prefix']+"file.Album ";
+					from = buildFromString(from, "album");
 					if(params.match){ 
 						where = buildWhereString(where, "album", "Name", params.match);
 						delete params.match;
 					}
 					let parts = {from: from, where: where};
-					includeSearchKeys(parts, params);
-					from = parts.from;
-					where = parts.where;
+					let added = includeSearchKeys(parts, params);
+					if(added){
+						from = parts.from;
+						where = parts.where;
+						// if there are seach fields, we don't show all, only those that match
+						from = buildFromString(from, "toc");
+						from = buildFromString(from, "file");
+						where += "AND "+locConf['prefix']+"toc.Type = 'file' AND "+locConf['prefix']+"file.ID = "+locConf['prefix']+"toc.ID ";
+						where += "AND "+locConf['prefix']+"album.ID = "+locConf['prefix']+"file.Album "; 
+					}
 					from += ") ";
 				}else if(type == 'title'){
 					if(!sort)
@@ -2293,7 +2321,7 @@ function searchFor(request, response, params, dirs){
 					table = "toc";
 					select = "SELECT DISTINCT "+locConf['prefix']+"toc.Name AS Label, '"+type+"' AS qtype, ";
 					select += locConf['prefix']+"toc.ID AS tocID, "+locConf['prefix']+"toc.ID AS ID, "+locConf['prefix']+"toc.Duration AS Duration ";
-					from = "FROM ("+locConf['prefix']+"toc";
+					from = buildFromString(from, "toc");
 					where = "WHERE "+locConf['prefix']+"toc.Type = 'file' ";
 					if(params.match){ 
 						where = buildWhereString(where, "toc", "Name", params.match);
@@ -2310,7 +2338,7 @@ function searchFor(request, response, params, dirs){
 						sort = "Label";
 					select = "SELECT DISTINCT "+locConf['prefix']+"toc.Name AS Label, '"+type+"' AS qtype, ";
 					select += locConf['prefix']+"toc.ID AS tocID, "+locConf['prefix']+"toc.ID AS ID, "+locConf['prefix']+"toc.Duration AS Duration ";
-					from = "FROM ("+locConf['prefix']+"toc";
+					from = buildFromString(from, "toc");
 					where = "WHERE "+locConf['prefix']+"toc.Type = 'task' ";
 					if(params.match){ 
 						where = buildWhereString(where, "toc", "Name", params.match);
@@ -2327,17 +2355,22 @@ function searchFor(request, response, params, dirs){
 						sort = "Label";
 					select = "SELECT DISTINCT "+locConf['prefix']+"category.Name AS Label, ";
 					select += locConf['prefix']+"category.ID AS ID, '"+type+"' AS qtype ";
-					from = "FROM ("+locConf['prefix']+"toc, "+locConf['prefix']+"category, "+locConf['prefix']+"category_item";
-					where = "WHERE "+locConf['prefix']+"category_item.Item = "+locConf['prefix']+"toc.ID ";
-					where += "AND "+locConf['prefix']+"category.ID = "+locConf['prefix']+"category_item.Category "; 
+					from = buildFromString(from, "category");
 					if(params.match){ 
 						where = buildWhereString(where, "category", "Name", params.match);
 						delete params.match;
 					}
 					let parts = {from: from, where: where};
-					includeSearchKeys(parts, params);
-					from = parts.from;
-					where = parts.where;
+					let added = includeSearchKeys(parts, params);
+					if(added){
+						from = parts.from;
+						where = parts.where;
+						// if there are seach fields, we don't show all, only those that match
+						from = buildFromString(from, "toc");
+						from = buildFromString(from, "category_item");
+						where += "AND "+locConf['prefix']+"category_item.Item = "+locConf['prefix']+"toc.ID ";
+						where += "AND "+locConf['prefix']+"category.ID = "+locConf['prefix']+"category_item.Category "; 
+					}
 					from += ") ";
 				}else if(type == 'playlist'){
 					table = "toc";
@@ -2345,7 +2378,7 @@ function searchFor(request, response, params, dirs){
 						sort = "Label";
 					select = "SELECT DISTINCT "+locConf['prefix']+"toc.Name AS Label, '"+type+"' AS qtype, ";
 					select += locConf['prefix']+"toc.ID AS tocID, "+locConf['prefix']+"toc.ID AS ID, "+locConf['prefix']+"toc.Duration AS Duration ";
-					from = "FROM ("+locConf['prefix']+"toc";
+					from = buildFromString(from, "toc");
 					where = "WHERE "+locConf['prefix']+"toc.Type = 'playlist' ";
 					if(params.match){ 
 						where = buildWhereString(where, "toc", "Name", params.match);
@@ -2361,7 +2394,7 @@ function searchFor(request, response, params, dirs){
 					if(!sort)
 						sort = "Label";
 					select = "SELECT DISTINCT DATE(FROM_UNIXTIME("+locConf['prefix']+"toc.Added)) AS Label, '"+type+"' AS qtype ";
-					from = "FROM ("+locConf['prefix']+"toc";
+					from = buildFromString(from, "toc");
 					where = "";
 					if(params.match){ 
 						where = buildWhereDate(where, "toc", "Added", params.match);
@@ -2377,7 +2410,7 @@ function searchFor(request, response, params, dirs){
 					if(!sort)
 						sort = "Label";
 					select = "SELECT DISTINCT "+locConf['prefix']+"toc.Tag AS Label, '"+type+"' AS qtype ";
-					from = "FROM ("+locConf['prefix']+"toc";
+					from = buildFromString(from, "toc");
 					where = "WHERE "+locConf['prefix']+"toc.Tag IS NOT NULL "
 					if(params.match){ 
 						where = buildWhereString(where, "toc", "Tag", params.match);
@@ -2394,7 +2427,8 @@ function searchFor(request, response, params, dirs){
 						sort = "Label";
 					select = "SELECT DISTINCT "+locConf['prefix']+"toc.Name AS Label, '"+type+"' AS qtype, ";
 					select += locConf['prefix']+"toc.ID AS tocID, "+locConf['prefix']+"toc.ID AS ID, "+locConf['prefix']+"toc.Duration AS Duration ";
-					from = "FROM ("+locConf['prefix']+"toc, "+locConf['prefix']+"file";
+					from = buildFromString(from, "toc");
+					from = buildFromString(from, "file");
 					where = "WHERE "+locConf['prefix']+"toc.Type = 'file' AND "+locConf['prefix']+"file.ID = "+locConf['prefix']+"toc.ID ";
 					where += "AND "+locConf['prefix']+"file.Missing = 1 ";
 					if(params.match){ 
@@ -2410,9 +2444,10 @@ function searchFor(request, response, params, dirs){
 					table = "locations";
 					if(!sort)
 						sort = "Label";
-					select = "SELECT DISTINCT "+locConf['prefix']+"locations.Name AS Label, '"+type+"' AS qtype, ";
-					select += locConf['prefix']+"locations.ID AS ID ";
-					from = "FROM ("+locConf['prefix']+"toc, "+locConf['prefix']+"rest, "+locConf['prefix']+"locations";
+					select = "SELECT DISTINCT "+locConf['prefix']+"locations.Name AS Label, '"+type+"' AS qtype ";
+					from = buildFromString(from, "toc");
+					from = buildFromString(from, "rest");
+					from = buildFromString(from, "locations");
 					where = "WHERE "+locConf['prefix']+"toc.ID = "+locConf['prefix']+"rest.Item ";
 					where += "AND "+locConf['prefix']+"locations.ID = "+locConf['prefix']+"rest.Location "
 					if(params.match){ 
@@ -2437,10 +2472,10 @@ function searchFor(request, response, params, dirs){
 		});
 	}else{
 		// no type... generate type list
-		let list = [{Label: "Artist", Branch: "artist"}, {Label: "Album", Branch: "album"}, {Label: "Title", Branch: "title"}, 
-		{Label: "Category", Branch: "category"}, {Label: "Playlist", Branch: "playlist"}, {Label: "Task", Branch: "task"}, 
-		{Label: "Added", Branch: "added"}, {Label: "Comment", Branch: "comment"}, {Label: "Missing", Branch: "missing"},
-		{Label: "Rested", Branch: "rested"}];
+		let list = [{Type: "Artist", qtype: "artist"}, {Type: "Album", qtype: "album"}, {Type: "Title", qtype: "title"}, 
+		{Type: "Category", qtype: "category"}, {Type: "Playlist", qtype: "playlist"}, {Type: "Task", qtype: "task"}, 
+		{Type: "Added", qtype: "added"}, {Type: "Comment", qtype: "comment"}, {Type: "Missing", qtype: "missing"},
+		{Type: "Rested", qtype: "rested"}];
 		restObjectRequest(response, list);
 	}
 }
@@ -3650,7 +3685,7 @@ async function importFileIntoLibrary(fpath, params){
 						}
 					}
 				}
-
+				
 			}else{
 				// invalid type
 				if(conn)
@@ -3758,7 +3793,7 @@ async function db_initialize(conn, params){
 	
 	try{
 		result = await asyncQuery(conn, "USE "+params.database+";");
-		result = await asyncQuery(conn, "SELECT Value FROM "+locConf['prefix']+"info WHERE Property = 'Version'");
+		result = await asyncQuery(conn, "SELECT Value FROM "+params.prefix+"info WHERE Property = 'Version'");
 		versionStr = result[0].Value;
 	}catch(err){
 		versionStr = "";
@@ -3804,7 +3839,7 @@ async function db_initialize(conn, params){
 	}
 	// get the new version number string
 	try{
-		result = await asyncQuery(conn, "SELECT Value FROM "+locConf['prefix']+"info WHERE Property = 'Version'");
+		result = await asyncQuery(conn, "SELECT Value FROM "+params.prefix+"info WHERE Property = 'Version'");
 		return {version: result[0].Value, oldVersion: "0.0"};
 	}catch(err){
 		return {error: err};
@@ -3929,6 +3964,8 @@ async function dbFileSync(connection, mark){
 	let num = 0;
 	let msgtmr = false;
 	let statistics = {running: true, remaining: 0, missing: 0, updated: 0, lost: 0, found: 0, error: 0};
+	let msg = {dbsync: statistics};
+	sse.postSSEvent(false, JSON.stringify(msg));
 	let results = false;
 	try{
 		results = await asyncQuery(connection, "SELECT ID, Hash, Path, Prefix, URL, Mount, Missing FROM "+locConf['prefix']+"file ORDER BY ID;");
@@ -4063,7 +4100,6 @@ async function crawlDirectory(connection, fpath, pace, passStat){
 		statistics = passStat;
 	else
 		statistics = {running: true, curPath: "", checked: 0, found: 0, error: 0};
-		
 	try{
 		files = await fsPromises.readdir(fpath);
 	}catch(err){
@@ -4076,11 +4112,13 @@ async function crawlDirectory(connection, fpath, pace, passStat){
 		return;
 	}
 	if(passStat == false){
+		let msg = {dbsearch: statistics};
+		sse.postSSEvent(false, JSON.stringify(msg));
 		// we are the root directory.  Start status report timer
 		msgtmr = setInterval(() => {
 				let msg = {dbsearch: statistics};
 				sse.postSSEvent(false, JSON.stringify(msg));
-			}, pace * 10 * 1000);
+			}, pace * 5 * 1000);
 	}
 	// loop through dir entries
 	for(let i=0; i<files.length; i++){
@@ -4273,6 +4311,22 @@ module.exports = {
 		return true;
 	},
 	
+	getLibraryLocations: async function () {
+		let result;
+		let conn = await asyncGetDBConnection();
+		if(!conn){
+			return [];
+		}
+		try{
+			result = await asyncQuery(conn, "SELECT Name FROM "+locConf['prefix']+"locations ORDER BY Name;");
+		}catch(err){
+			conn.release();
+			return [];
+		}
+		conn.release();
+		return result;
+	},
+	
 	handleRequest: function (request, response) {
 		let params = undefined;
 		if(request.method == 'GET')
@@ -4344,7 +4398,7 @@ module.exports = {
 		}else if(dirs[2] == 'dbsync'){
 			startDbFileSync(request, response, params);		// /dbsync?mark=1 starts a dbSync process running in the background
 																// if mark is true (nonzero), files that can't be found will be marked as missing
-																// one fixed or found files will be updated, not lost files. 
+																// otherwise fixed or found files will be updated, and lost files ignored. 
 		}else if(dirs[2] == 'synchalt'){
 			abortDbFileSync(request, response);		// stops a dbSync process running in the background
 		}else if(dirs[2] == 'crawl'){

@@ -1,1 +1,172 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"/><link rel="icon" href="/favicon.ico"/><meta name="viewport" content="width=device-width,initial-scale=1"/><meta name="theme-color" content="#000000"/><meta name="description" content="Web site created using create-react-app"/><link rel="apple-touch-icon" href="/logo192.png"/><link rel="manifest" href="/manifest.json"/><title>React App</title><link href="/static/css/main.6dea0f05.chunk.css" rel="stylesheet"></head><body><noscript>You need to enable JavaScript to run this app.</noscript><div id="root"></div><script>!function(e){function r(r){for(var n,i,a=r[0],c=r[1],l=r[2],s=0,p=[];s<a.length;s++)i=a[s],Object.prototype.hasOwnProperty.call(o,i)&&o[i]&&p.push(o[i][0]),o[i]=0;for(n in c)Object.prototype.hasOwnProperty.call(c,n)&&(e[n]=c[n]);for(f&&f(r);p.length;)p.shift()();return u.push.apply(u,l||[]),t()}function t(){for(var e,r=0;r<u.length;r++){for(var t=u[r],n=!0,a=1;a<t.length;a++){var c=t[a];0!==o[c]&&(n=!1)}n&&(u.splice(r--,1),e=i(i.s=t[0]))}return e}var n={},o={1:0},u=[];function i(r){if(n[r])return n[r].exports;var t=n[r]={i:r,l:!1,exports:{}};return e[r].call(t.exports,t,t.exports,i),t.l=!0,t.exports}i.e=function(e){var r=[],t=o[e];if(0!==t)if(t)r.push(t[2]);else{var n=new Promise((function(r,n){t=o[e]=[r,n]}));r.push(t[2]=n);var u,a=document.createElement("script");a.charset="utf-8",a.timeout=120,i.nc&&a.setAttribute("nonce",i.nc),a.src=function(e){return i.p+"static/js/"+({}[e]||e)+"."+{3:"bd8d65a3"}[e]+".chunk.js"}(e);var c=new Error;u=function(r){a.onerror=a.onload=null,clearTimeout(l);var t=o[e];if(0!==t){if(t){var n=r&&("load"===r.type?"missing":r.type),u=r&&r.target&&r.target.src;c.message="Loading chunk "+e+" failed.\n("+n+": "+u+")",c.name="ChunkLoadError",c.type=n,c.request=u,t[1](c)}o[e]=void 0}};var l=setTimeout((function(){u({type:"timeout",target:a})}),12e4);a.onerror=a.onload=u,document.head.appendChild(a)}return Promise.all(r)},i.m=e,i.c=n,i.d=function(e,r,t){i.o(e,r)||Object.defineProperty(e,r,{enumerable:!0,get:t})},i.r=function(e){"undefined"!=typeof Symbol&&Symbol.toStringTag&&Object.defineProperty(e,Symbol.toStringTag,{value:"Module"}),Object.defineProperty(e,"__esModule",{value:!0})},i.t=function(e,r){if(1&r&&(e=i(e)),8&r)return e;if(4&r&&"object"==typeof e&&e&&e.__esModule)return e;var t=Object.create(null);if(i.r(t),Object.defineProperty(t,"default",{enumerable:!0,value:e}),2&r&&"string"!=typeof e)for(var n in e)i.d(t,n,function(r){return e[r]}.bind(null,n));return t},i.n=function(e){var r=e&&e.__esModule?function(){return e.default}:function(){return e};return i.d(r,"a",r),r},i.o=function(e,r){return Object.prototype.hasOwnProperty.call(e,r)},i.p="/",i.oe=function(e){throw console.error(e),e};var a=this["webpackJsonparui-client"]=this["webpackJsonparui-client"]||[],c=a.push.bind(a);a.push=r,a=a.slice();for(var l=0;l<a.length;l++)r(a[l]);var f=c;t()}([])</script><script src="/static/js/2.7be5b743.chunk.js"></script><script src="/static/js/main.ac5177c1.chunk.js"></script></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AudioRack 4.0.1</title>
+<link rel="stylesheet" href="index.css">
+<link rel="stylesheet" href="font-awesome/css/font-awesome.min.css">
+</head>
+<body>
+	<script src="index.js"></script>
+	<div class="container">
+		<div class="wrapper">
+			<div id="navtab" class="navtab">
+				<button id="navabout" class="tabitem" onclick="showTab(event, 'about')">About</button>
+			</div> 
+			<div id="infopane" class="panel">
+				<div id="infodata">
+					<p>Info Panel</p>
+				</div>
+				<button onclick="closeInfo(event)">Close</button>
+			</div>
+			<div id="about" class="tabcontent">
+				<h2>Welcome to AudioRack v4.0.1</h2>
+				<p>Radio is fun...</p>
+			</div>
+			<div id="stash" class="tabcontent">
+				<h2>Local Stash</h2>
+				<p>Radio is fun...</p>
+			</div>
+			<div id="files" class="tabcontent">
+				<h2>Temporary Files</h2>
+				<p>Radio is fun...</p>
+			</div>
+			<div id="login" class="tabcontent">
+				<h2>AudioRack User Login</h2>
+				<form onsubmit="loginSubmit(event)">
+					<center>
+					<ul style="list-style-type:none">
+						<li><input type="text" name="username" placeholder="Username" required></li>
+						<li><input type="password" name="password" placeholder="Password" required></li>
+						<li><input type="submit" value="Login"></li>
+					</ul>
+					</center>
+				</form>
+			</div>
+			<div id="browse" class="tabcontent">
+				<label for="bmatch" style="float: left" >Contains:
+					<input type="search" id="bmatch" name="match" onchange="browseQuery(event)" placeholder="Enter Text..."> 
+				</label>
+				<div id="brefine">
+				
+				</div>
+				<div id="browsres" >
+					<div id="btype" class="vscroll">
+						
+					</div>
+					<div id="bres" class="vscroll">
+						
+					</div>
+				</div>
+			</div>
+			<div id="schedule" class="tabcontent">
+				<h2>Schedule</h2>
+				<p>Radio is fun...</p>
+			</div>
+			<div id="logs" class="tabcontent">
+				<h2>Logs</h2>
+				<p>Radio is fun...</p>
+			</div>
+			<div id="query" class="tabcontent">
+				<h2>Custom Queries</h2>
+				<p>Radio is fun...</p>
+			</div>
+			<div id="libmanage" class="tabcontent">
+				<div class="vscroll">
+					<h2>Manage Database</h2>
+					<div id="dbinit" class="boxed">
+						<h3>Initialize/Update Library Database</h3>
+						<form id="dbiform">
+						<input type="radio" name="dbiprop" value="conf" checked="checked"> Current Library (from settings) -or- 
+						<input type="radio" name="dbiprop" value="other"> Specify a library (below):<br>
+						<ul style="list-style-type:none">
+							<li>MySQL Host: <input type="text" name="host" value=""></li>
+							<li>Port: <input type="text" name="port" value="" size="5"></li>
+							<li>Username: <input type="text" name="user" value=""></li>
+							<li>Password: <input type="text" name="password" value=""></li>
+							<li>Database: <input type="text" name="database" value=""></li>
+							<li>Table Name Prefix: <input type="text" name="prefix" value="ar_" size="5"></li>
+						</ul>
+						<div align="left"><button id="dbibutton" name="submit" onclick="clickDbInit(event)">Execute</button> last result: <div id="dbimsg" style="display: inline"></div></div>
+						</form>
+					</div>
+					<div id="locman" class="boxed">
+						<h3>Manage Locations</h3>
+						<div id="manloctbl" class="vscroll">
+							
+						</div>
+					</div>
+					<div id="dbsyncdiv" class="boxed">
+						<h3>Syncronize Database - Check for restored files after storage recovery.</h3>
+						<input type="checkbox" id="syncmark" name="mark"> Mark files as missing.  Otherwise, it's up to the studios to mark missing files.<br>
+						<div align="left"><button id="syncbutton" onclick="clickDbSync(event)">Start</button> status: <div id="syncmsg" style="display: inline">Stopped.</div></div>
+					</div>
+					<div id="dbcrawldiv" class="boxed">
+						<h3>Crawl File System - Locate moved/renamed files.</h3>
+						<form id="crawlform">
+						Pace: <input type="text" name="pace" value="1.0" size="3"> seconds per file checked.<br>
+						<input type="radio" name="crawlprop" value="conf" checked="checked"> Media Files Directory (from settings) -or- 
+						<input type="radio" name="crawlprop" value="other"> Specify directory:<input type="text" name="path" value="">
+						<div align="left"><button id="crawlbutton" name="submit" onclick="clickDbCrawl(event)">Start</button> status: <div id="crawlmsg" style="display: inline">Stopped.</div></div>
+						</form>
+					</div>
+				</div>
+			</div>
+			<div id="studio" class="tabcontent">
+				<h2>Studio</h2>
+				<p>Radio is fun...</p>
+				<div id='busvu'></div>
+			</div>
+			<div id="configure" class="tabcontent">
+				<h2>UI Configuration</h2>
+				<div class="vscroll">
+					<button class="accordion" onclick="clickConfType(event, 'users')">User Settings</button>
+					<div class="accpanel">
+						<p>Lorem ipsum...</p>
+					</div>
+					<button class="accordion" onclick="clickConfType(event, 'http')">HTTP Settings</button>
+					<div class="accpanel">
+						<p>Lorem ipsum...</p>
+					</div>
+					<button class="accordion" onclick="clickConfType(event, 'files')">File Settings</button>
+					<div class="accpanel">
+						<p>Lorem ipsum...</p>
+					</div>
+					<button class="accordion" onclick="clickConfType(event, 'library')">Library Settings</button>
+					<div class="accpanel">
+						<p>Lorem ipsum...</p>
+					</div>
+					<button class="accordion" onclick="clickConfType(event, 'studios')">Studio Settings</button>
+					<div class="accpanel">
+						<p>Lorem ipsum...</p>
+					</div>
+				</div>
+			</div>
+			<div id="cust" class="tabcontent">
+				<h2>Ad Customers</h2>
+				<p>Radio is fun...</p>
+			</div>
+			<div id="campaign" class="tabcontent">
+				<h2>Ad Campaigns</h2>
+				<p>Radio is fun...</p>
+			</div>
+			<div id="invoice" class="tabcontent">
+				<h2>Ad Invoices</h2>
+				<p>Radio is fun...</p>
+			</div>
+			<div id="trafsched" class="tabcontent">
+				<h2>Ad Schedule</h2>
+				<p>Radio is fun...</p>
+			</div>
+			<div id="trafdp" class="tabcontent">
+				<h2>Ad Dayparts</h2>
+				<p>Radio is fun...</p>
+			</div>
+		</div>
+		<footer>
+			<div id="ssemsg" style="display: inline; float: left;"></div>
+			<div style="display: inline; float: right;">Copyright &copy2021; Ethan Funk</div>
+		</footer>
+	</div>
+</body>
+</html>
