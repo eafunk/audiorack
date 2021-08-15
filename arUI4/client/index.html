@@ -13,12 +13,13 @@
 			<div id="navtab" class="navtab">
 				<button id="navabout" class="tabitem" onclick="showTab(event, 'about')">About</button>
 			</div> 
-			<div id="infopane" class="panel">
-				<div id="infodata">
+			<div class="panel" id="infopane">
+				<button style="float:right;" onclick="closeInfo(event)">&gt;</button>
+				<div id="infodata" class="scroll" style="text-align: left;">
 					<p>Info Panel</p>
 				</div>
-				<button onclick="closeInfo(event)">Close</button>
 			</div>
+			<button id="showinfobtn" onclick="showInfo(event)">&lt;</button>
 			<div id="about" class="tabcontent">
 				<h2>Welcome to AudioRack v4.0.1</h2>
 				<p>Radio is fun...</p>
@@ -28,8 +29,48 @@
 				<p>Radio is fun...</p>
 			</div>
 			<div id="files" class="tabcontent">
-				<h2>Temporary Files</h2>
-				<p>Radio is fun...</p>
+				<div class="scroll">
+					<h2>Temporary Files</h2>
+					<div class="boxed">
+						<h3>Upload Files to Temporary Media Directory</h3>
+						<form id="uploadform" enctype="multipart/form-data">
+							<input type="file" name="filestoupload" multiple>
+							<button id="uploadbut" name="submit" onclick="uploadFiles(event)">Upload</button>
+						</form>
+						.zip files will be expanded after upload, including any subdirectories.
+					</div>
+					<div class="boxed">
+						<h3>Temporary Media Directory File Listing</h3>
+						<div id="filefolder" style="text-align: left">
+						</div>
+						<div id="filelist" class="scroll">
+						</div>
+					</div>
+					<div id="fileimportbox" class="boxed">
+						<h3>Import Selected File(s) into Library</h3>
+						<form id="importform">
+							Add imported items to Category:
+							<div class="dropdown">
+								<button id="fileImportCatBtn" class="editbutton" data-id="0" onclick="toggleShowSearchList(event)">[None]</button>
+								<div class="search-list-right">
+									<button class="editbutton" onclick="refreshFileImportCats(event)">Refresh List</button><br>
+									<input id="fileImportCatText" type="text" onkeyup="filterSearchList(event)" placeholder="Enter Search..."></input>
+									<div id="fileImportCatList"></div>
+								</div>
+							</div>
+							<div class="boxed">
+								Handle duplicate items that are found to already be in the library (via file hash):
+								<ul style="list-style-type:none; text-align: left">
+								<li><input type="radio" name="dup" value="skip" checked="checked">skip
+								<li><input type="radio" name="dup" value="catset">Add to category only
+								<li><input type="radio" name="dup" value="catset">Replace with selected file (delete old file)
+								<li><input type="radio" name="dup" value="update">Update to selected file (if old is missing)
+								</ul>
+							</div>
+						</form>
+						<button id="importbut" name="submit" onclick="importSelectFiles(event)">Import</button>
+					</div>
+				</div>
 			</div>
 			<div id="login" class="tabcontent">
 				<h2>AudioRack User Login</h2>
@@ -44,17 +85,18 @@
 				</form>
 			</div>
 			<div id="browse" class="tabcontent">
+				<h2>Browse Library</h2>
 				<label for="bmatch" style="float: left" >Contains:
 					<input type="search" id="bmatch" name="match" onchange="browseQuery(event)" placeholder="Enter Text..."> 
 				</label>
 				<div id="brefine">
 				
 				</div>
-				<div id="browsres" >
-					<div id="btype" class="vscroll">
+				<div id="browsres">
+					<div id="btype" class="scroll">
 						
 					</div>
-					<div id="bres" class="vscroll">
+					<div id="bres" class="scroll">
 						
 					</div>
 				</div>
@@ -72,7 +114,7 @@
 				<p>Radio is fun...</p>
 			</div>
 			<div id="libmanage" class="tabcontent">
-				<div class="vscroll">
+				<div class="scroll">
 					<h2>Manage Database</h2>
 					<div id="dbinit" class="boxed">
 						<h3>Initialize/Update Library Database</h3>
@@ -92,7 +134,7 @@
 					</div>
 					<div id="locman" class="boxed">
 						<h3>Manage Locations</h3>
-						<div id="manloctbl" class="vscroll">
+						<div id="manloctbl" class="scroll">
 							
 						</div>
 					</div>
@@ -119,26 +161,21 @@
 			</div>
 			<div id="configure" class="tabcontent">
 				<h2>UI Configuration</h2>
-				<div class="vscroll">
-					<button class="accordion" onclick="clickConfType(event, 'users')">User Settings</button>
+				<div class="scroll">
+					<button class="accordion" onclick="clickAccordType(event, reloadConfSection, 'users')">User Settings</button>
 					<div class="accpanel">
-						<p>Lorem ipsum...</p>
 					</div>
-					<button class="accordion" onclick="clickConfType(event, 'http')">HTTP Settings</button>
+					<button class="accordion" onclick="clickAccordType(event, reloadConfSection, 'http')">HTTP Settings</button>
 					<div class="accpanel">
-						<p>Lorem ipsum...</p>
 					</div>
-					<button class="accordion" onclick="clickConfType(event, 'files')">File Settings</button>
+					<button class="accordion" onclick="clickAccordType(event, reloadConfSection, 'files')">File Settings</button>
 					<div class="accpanel">
-						<p>Lorem ipsum...</p>
 					</div>
-					<button class="accordion" onclick="clickConfType(event, 'library')">Library Settings</button>
+					<button class="accordion" onclick="clickAccordType(event, reloadConfSection, 'library')">Library Settings</button>
 					<div class="accpanel">
-						<p>Lorem ipsum...</p>
 					</div>
-					<button class="accordion" onclick="clickConfType(event, 'studios')">Studio Settings</button>
+					<button class="accordion" onclick="clickAccordType(event, reloadConfSection, 'studios')">Studio Settings</button>
 					<div class="accpanel">
-						<p>Lorem ipsum...</p>
 					</div>
 				</div>
 			</div>

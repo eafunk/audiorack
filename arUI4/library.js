@@ -497,7 +497,6 @@ function restQueryRequest(connection, table, request, response, select, from, wh
 			tail += "LIMIT "+cnt+" OFFSET "+offset;
 	}
 	let query = select+from+where+tail;
-console.log(query);
 	connection.query(query, function (err, results, fields) {
 		if(err){
 			response.status(400);
@@ -721,16 +720,20 @@ async function getFileHash(fpath){
 }
 
 async function CheckFileHashMatch(fpath, hash){
+	let fHash = await getFileHash(fpath);
+	if(!fHash.length)
+		fHash = false;
+	if(!fHash)
+		return fHash;
 	if(hash){
 		if(hash.length == 0)	// ignore hash check for items with empy hash property
-			return true;
-		let fHash = await getFileHash(fpath);
+			return fHash;
 		if(fHash.toLowerCase() === hash.toLowerCase())
-			return true;
+			return fHash;
 		return false;
 	}else
 		// ignore hash check for items with NULL hash property
-		return true;
+		return fHash;
 }
 
 function strPrefixSpan(string, prefix){
@@ -785,10 +788,10 @@ async function resolveFileFromProperties(properties){
 	// use file as final authority for properties. This function may modify the properties object.
 	// Returns a status of 0 for unchanged, 1 for updated/fixed, 2 for lost, 3 for found.
 	// Start with these 2 assumptions:
-	
-	if(typeof properties.Missing === 'string')
-		properties.Missing = parseInt(properties.Missing);
+	let newHash;
 
+	if(properties.Missing && (typeof properties.Missing === 'string'))
+		properties.Missing = parseInt(properties.Missing);
 	let status = 0;
 	let changed = 0;
 	let missing = 1;
@@ -806,8 +809,6 @@ async function resolveFileFromProperties(properties){
 			plen = properties.Prefix.length;
 			if(plen)
 				fpath = properties.Prefix;
-			else
-				fpath = "";
 		}
 		pathStr = properties.Path;
 		fpath += pathStr;
@@ -832,7 +833,7 @@ async function resolveFileFromProperties(properties){
 						// given fpath = /longer/path/to/mount/some/file
 						// and Mount = mount
 						// pathStr -> mount/some/file */
-						pathStr = path.substring(i);
+						pathStr = fpath.substring(i);
 						plen = 1;
 					}else
 						pathStr = "";
@@ -871,8 +872,9 @@ async function resolveFileFromProperties(properties){
 	let c = 0;
 	let results = [];
 	do{
-		if(await CheckFileHashMatch(fpath, properties.Hash)){
-			// Hash code agrees with database, not missing
+		newHash = await CheckFileHashMatch(fpath, properties.Hash);
+		if(newHash){
+			// Hash code agrees with or was empty with/in database, not missing
 			missing = 0;
 			break;
 		}else{
@@ -952,6 +954,9 @@ async function resolveFileFromProperties(properties){
 				properties.Mount = "/Volumes/" + mountName;
 			}
 		}
+		// setthe Hash... it may have been empty going in
+		properties.Hash = newHash;
+
 		if(properties.Missing){
 			// was missing, but has been found... 
 			status = 3; // missing now found
@@ -1091,22 +1096,15 @@ function tableToApiReformat(table, result){
 				item.id = item.RID;
 				delete item.RID;
 			}
-		});
-		// translate parameter Item to ID for some tables
-		if(['meta', 'playlist', 'task'].includes(table) == true){
-			if(item.ID){
-				item.tocID = item.ID;
-				delete item.ID;
+			// translate parameter ID to tocID for some tables
+			if(['meta', 'playlist', 'task'].includes(table) == true){
+				if(item.ID){
+					item.tocID = item.ID;
+					delete item.ID;
+				}
 			}
-		}
+		});
 	}
-	
-	// if result doesn't have an id property create it as a row index
-//	if(result.length && !result[0].id){
-//		result.forEach(function(item, index){ 
-//			item.id = index;
-//		});
-//	}
 }
 // getFrom -> get/table{/id}?key1=, key2, ...
 // distinct=column or columns to return with distinct clause
@@ -1121,6 +1119,8 @@ function getFrom(request, response, params, dirs){
 			response.end();
 			return;
 		}
+		if(params.Parent)
+			params.Parent = locConf['prefix'] + params.Parent;
 		libpool.getConnection((err, connection) => {
 			// convert API params to table column names
 			let idCol = apiToTableReformat(table, params);
@@ -1168,10 +1168,10 @@ function getFrom(request, response, params, dirs){
 				let from = "FROM "+libpool.escapeId(locConf['prefix']+table)+" ";
 				let where = "";
 				let tail = "";
-
+				
 				if(dirs[4])
 					where += "WHERE "+idCol+"="+libpool.escape(dirs[4])+" ";
-
+				
 				// additional "where" values
 				let keys = Object.keys(params);
 				let vals = Object.values(params);
@@ -1226,6 +1226,8 @@ function setIn(request, response, params, dirs){
 			response.end();
 			return;
 		}
+		if(params.Parent)
+			params.Parent = locConf['prefix'] + params.Parent;
 		libpool.getConnection((err, connection) => {
 			if(err){
 				response.status(400);
@@ -1315,7 +1317,7 @@ function setIn(request, response, params, dirs){
 									response.end();
 									return;
 								}else{
-									let insert = "INSERT INTO "+locConf['prefix']+table+" ";
+									let insert = "INSERT INTO "+locConf['prefix']+"toc ";
 									let colstr = "";
 									let setstr = "";
 									
@@ -1907,6 +1909,27 @@ function deleteID(request, response, params, dirs){
 					});
 				}
 			});
+		}else if(table == 'task'){
+			libpool.getConnection((err, connection) => {
+				if(err){
+					response.status(400);
+					response.send(err.code);
+					response.end();
+				}else{
+					connection.query("DELETE FROM "+locConf['prefix']+"task WHERE RID = "+ID+";", function(err, results){
+						if(err){
+							connection.release();
+							response.status(304);
+							response.send(err.code);
+							response.end();
+						}else{
+							connection.release();
+							response.status(201);
+							response.end();
+						}
+					});
+				}
+			});
 		}else if(table == 'meta'){
 			libpool.getConnection((err, connection) => {
 				if(err){
@@ -2149,7 +2172,6 @@ function getSched(request, response, params){
 					select += locConf['prefix']+"schedule.Fill As Fill, ";
 					select += locConf['prefix']+"hourmap.Map AS mapHour, ";
 					select += locConf['prefix']+"schedule.Hour AS dbHour, ";
-					select += locConf['prefix']+"daymap.Map AS mapDay, ";
 					select += locConf['prefix']+"schedule.Day AS dbDay, ";
 					select += locConf['prefix']+"schedule.Priority AS Priority, ";
 					select += locConf['prefix']+"schedule.Month AS Month, ";
@@ -2158,8 +2180,7 @@ function getSched(request, response, params){
 					
 					let from = "FROM ("+locConf['prefix']+"schedule, ";
 					from += locConf['prefix']+"toc, ";
-					from += locConf['prefix']+"hourmap, ";
-					from += locConf['prefix']+"daymap) ";
+					from += locConf['prefix']+"hourmap) ";
 					
 					from += "LEFT JOIN "+locConf['prefix']+"locations ON ("+locConf['prefix']+"locations.Name = "+libpool.escape(params.location)+" AND "+locConf['prefix']+"schedule.Location = "+locConf['prefix']+"locations.ID) ";
 					from += "LEFT JOIN "+locConf['prefix']+"rest ON ("+locConf['prefix']+"schedule.Item = "+locConf['prefix']+"rest.Item AND "+locConf['prefix']+"rest.Location = "+locConf['prefix']+"locations.ID) ";
@@ -2167,21 +2188,19 @@ function getSched(request, response, params){
 					let where = "WHERE "+locConf['prefix']+"rest.Added IS NULL ";
 					where += "AND "+locConf['prefix']+"schedule.Item = "+locConf['prefix']+"toc.ID ";
 					where += "AND "+locConf['prefix']+"schedule.Fill > 0 ";
-					where += "AND "+locConf['prefix']+"schedule.Day = "+locConf['prefix']+"daymap.Day ";
 					where += "AND "+locConf['prefix']+"schedule.Hour = "+locConf['prefix']+"hourmap.Hour ";
 					where += "AND ("+locConf['prefix']+"schedule.Location IS NULL OR "+locConf['prefix']+"schedule.Location = "+locConf['prefix']+"locations.ID) ";
 					where += "AND "+locConf['prefix']+"schedule.Priority > 0 ";
 					if(params.date){
+						where += "AND ("+locConf['prefix']+"schedule.Day = 0 OR ("+locConf['prefix']+"schedule.Day = (FLOOR((DATE_FORMAT("+libpool.escape(params.date)+",'%e')-1)/7)*7+(DATE_FORMAT("+libpool.escape(params.date)+", '%w')+1)) ) ) ";
 						where += "AND ("+locConf['prefix']+"schedule.Date = 0 OR "+locConf['prefix']+"schedule.Date = DATE_FORMAT("+libpool.escape(params.date)+", '%e') ) ";
 						where += "AND ("+locConf['prefix']+"schedule.Month = 0 OR "+locConf['prefix']+"schedule.Month = DATE_FORMAT("+libpool.escape(params.date)+", '%c') ) ";
-						where += "AND "+locConf['prefix']+"daymap.Map = 1 + DATE_FORMAT("+libpool.escape(params.date)+", '%w') ";
 					}else{
+						where += "AND ("+locConf['prefix']+"schedule.Day = 0 OR ("+locConf['prefix']+"schedule.Day = (FLOOR((DATE_FORMAT(NOW(),'%e')-1)/7)*7+(DATE_FORMAT(NOW(), '%w')+1)) ) ) ";
 						where += "AND ("+locConf['prefix']+"schedule.Date = 0 OR "+locConf['prefix']+"schedule.Date = DATE_FORMAT(NOW(), '%e') ) ";
 						where += "AND ("+locConf['prefix']+"schedule.Month = 0 OR "+locConf['prefix']+"schedule.Month = DATE_FORMAT(NOW(), '%c') ) ";
-						where += "AND "+locConf['prefix']+"daymap.Map = 1 + DATE_FORMAT(NOW(), '%w') ";
 					}
 					let tail = "ORDER BY mapHour ASC, Minute ASC, Priority DESC ";
-					
 					restQueryRequest(connection, "schedule", request, response, select, from, where, tail, sort, 0); // NOTE: connection will be returned to the pool.
 					
 				}else{
@@ -2192,7 +2211,6 @@ function getSched(request, response, params){
 					select += locConf['prefix']+"toc.Duration / 60 AS Duration, ";
 					select += locConf['prefix']+"hourmap.Map AS mapHour, ";
 					select += locConf['prefix']+"schedule.Hour AS dbHour, ";
-					select += locConf['prefix']+"daymap.Map AS mapDay, ";
 					select += locConf['prefix']+"schedule.Day AS dbDay, ";
 					select += locConf['prefix']+"schedule.Priority AS Priority, ";
 					select += locConf['prefix']+"schedule.Month AS Month, ";
@@ -2201,8 +2219,7 @@ function getSched(request, response, params){
 					
 					let from = "FROM ("+locConf['prefix']+"schedule, ";
 					from += locConf['prefix']+"toc, ";
-					from += locConf['prefix']+"hourmap, ";
-					from += locConf['prefix']+"daymap) ";
+					from += locConf['prefix']+"hourmap) ";
 					
 					from += "LEFT JOIN "+locConf['prefix']+"locations ON ("+locConf['prefix']+"locations.Name = "+libpool.escape(params.location)+" AND "+locConf['prefix']+"schedule.Location = "+locConf['prefix']+"locations.ID) ";
 					from += "LEFT JOIN "+locConf['prefix']+"rest ON ("+locConf['prefix']+"schedule.Item = "+locConf['prefix']+"rest.Item AND "+locConf['prefix']+"rest.Location = "+locConf['prefix']+"locations.ID) ";
@@ -2210,23 +2227,20 @@ function getSched(request, response, params){
 					let where = "WHERE "+locConf['prefix']+"rest.Added IS NULL ";
 					where += "AND "+locConf['prefix']+"schedule.Item = "+locConf['prefix']+"toc.ID ";
 					where += "AND "+locConf['prefix']+"schedule.Fill = 0 ";
-					where += "AND "+locConf['prefix']+"schedule.Day = "+locConf['prefix']+"daymap.Day ";
 					where += "AND "+locConf['prefix']+"schedule.Hour = "+locConf['prefix']+"hourmap.Hour ";
 					where += "AND ("+locConf['prefix']+"schedule.Location IS NULL OR "+locConf['prefix']+"schedule.Location = "+locConf['prefix']+"locations.ID) ";
 					where += "AND "+locConf['prefix']+"schedule.Priority > 0 ";
 					if(params.date){
+						where += "AND ("+locConf['prefix']+"schedule.Day = 0 OR ("+locConf['prefix']+"schedule.Day = (FLOOR((DATE_FORMAT("+libpool.escape(params.date)+",'%e')-1)/7)*7+(DATE_FORMAT("+libpool.escape(params.date)+", '%w')+1)) ) ) ";
 						where += "AND ("+locConf['prefix']+"schedule.Date = 0 OR "+locConf['prefix']+"schedule.Date = DATE_FORMAT("+libpool.escape(params.date)+", '%e') ) ";
 						where += "AND ("+locConf['prefix']+"schedule.Month = 0 OR "+locConf['prefix']+"schedule.Month = DATE_FORMAT("+libpool.escape(params.date)+", '%c') ) ";
-						where += "AND "+locConf['prefix']+"daymap.Map = 1 + DATE_FORMAT("+libpool.escape(params.date)+", '%w') ";
 					}else{
+						where += "AND ("+locConf['prefix']+"schedule.Day = 0 OR ("+locConf['prefix']+"schedule.Day = (FLOOR((DATE_FORMAT(NOW(),'%e')-1)/7)*7+(DATE_FORMAT(NOW(), '%w')+1)) ) ) ";
 						where += "AND ("+locConf['prefix']+"schedule.Date = 0 OR "+locConf['prefix']+"schedule.Date = DATE_FORMAT(NOW(), '%e') ) ";
 						where += "AND ("+locConf['prefix']+"schedule.Month = 0 OR "+locConf['prefix']+"schedule.Month = DATE_FORMAT(NOW(), '%c') ) ";
-						where += "AND "+locConf['prefix']+"daymap.Map = 1 + DATE_FORMAT(NOW(), '%w') ";
 					}
 					let tail = "ORDER BY mapHour ASC, Minute ASC, Priority DESC ";
-					
 					restQueryRequest(connection, "schedule", request, response, select, from, where, tail, sort, 0); // NOTE: connection will be returned to the pool.
-					
 				}
 			}else{
 				// location list
@@ -2235,7 +2249,6 @@ function getSched(request, response, params){
 				let where = "WHERE "+locConf['prefix']+"schedule.Location = "+locConf['prefix']+"locations.ID ";
 				let sort = "Label";
 				let tail = ""; 
-
 				restQueryRequest(connection, "location", request, response, select, from, where, tail, sort, 0); // NOTE: connection will be returned to the pool.
 			}
 		}
@@ -2254,7 +2267,6 @@ function getSched(request, response, params){
 // sortBy=Label or Duration (prepend - for descending)
 
 function searchFor(request, response, params, dirs){
-console.log(params);
 	if(params.type){
 		let type = params.type;
 		let sort = params.sortBy;
@@ -2480,6 +2492,199 @@ console.log(params);
 	}
 }
 
+async function getItemObject(ID, params){  // params.resolve, params.locname, params.histlimit, params.histdate
+	if(!ID)
+		return 400;
+	let connection;
+	let results;
+	let final;
+	try{
+		connection = await asyncGetDBConnection();
+		if(!connection)
+			return 400;
+	}catch(err){
+		return 400;
+	}
+	try{
+		results = await asyncQuery(connection, "SELECT * FROM "+locConf['prefix']+"toc WHERE ID = "+ID+";");
+	}catch(err){
+		connection.release();
+		return 304;
+	}
+	if(results[0]){
+		final = results[0];
+		let type = results[0].Type;
+		if(type.length){
+			if(hasWhiteSpace(type)){
+				//type Error
+				connection.release();
+				return 304;
+			}
+			let subresults;
+			// get categories
+			let query = "SELECT Name, ID, RID, Added FROM "+locConf['prefix']+"category_item ";
+			query += "LEFT JOIN "+locConf['prefix']+"category ON "+locConf['prefix']+"category.ID = "+locConf['prefix']+"category_item.Category ";
+			query += "WHERE "+locConf['prefix']+"category_item.Item = "+ID+";"
+			try{
+				subresults = await asyncQuery(connection, query);
+			}catch(err){
+				connection.release();
+				return 304;
+			}
+			final["categories"] = subresults;
+			// get rested
+			query = "SELECT Name, ID, RID, Added FROM "+locConf['prefix']+"rest ";
+			query += "LEFT JOIN "+locConf['prefix']+"locations ON "+locConf['prefix']+"locations.ID = "+locConf['prefix']+"rest.Location ";
+			query += "WHERE "+locConf['prefix']+"rest.Item = "+ID+";"
+			try{
+				subresults = await asyncQuery(connection, query);
+			}catch(err){
+				connection.release();
+				return 304;
+			}
+			final["rest"] = subresults;
+			// get custom (metadata)
+			query = "SELECT Property, Value, RID FROM "+locConf['prefix']+"meta ";
+			query += "WHERE Parent = '"+locConf['prefix']+"toc' AND ID = "+ID+";"
+			try{
+				subresults = await asyncQuery(connection, query);
+			}catch(err){
+				connection.release();
+				return 304;
+			}
+			final["meta"] = subresults;
+			if(params && params.locname && params.locname.length){
+				query = "SELECT ID FROM "+locConf['prefix']+"locations WHERE Name = "+libpool.escape(params.locname)+";"
+				try{
+					subresults = await asyncQuery(connection, query);
+				}catch(err){
+					connection.release();
+					return 304;
+				}
+				if(subresults.length){
+					let LocID = subresults[0].ID;
+					// get schedule for location
+					query = "SELECT Day, Date, Month, Hour, Minute, Fill, Priority, ID AS RID FROM "+locConf['prefix']+"schedule ";
+					query += "WHERE Location = "+LocID+" AND Item = "+ID+" ";
+					query += "ORDER BY Hour ASC, Minute ASC, Priority DESC;";
+					try{
+						subresults = await asyncQuery(connection, query);
+					}catch(err){
+						connection.release();
+						return 304;
+					}
+					final["sched"] = subresults;
+					// get play history for location
+					query = "SELECT FROM_UNIXTIME(Time) AS Played FROM "+locConf['prefix']+"logs ";
+					query += "WHERE (Added & 0x3) = 0 AND Item = "+ID+" AND Location = "+LocID+" ";
+					if(params.histdate){
+						query += "AND Time < UNIX_TIMESTAMP("+libpool.escape(params.histdate)+") ";
+					}
+					query += "ORDER BY Time DESC "
+					if(params.histlimit){
+						if(typeof params.histlimit === 'string')
+							params.histlimit = parseInt(params.histlimit);
+						query += "LIMIT "+params.histlimit+";";
+					}else
+						query += "LIMIT 10;"
+					try{
+						subresults = await asyncQuery(connection, query);
+					}catch(err){
+						connection.release();
+						return 304;
+					}
+					for(let i=0; i<subresults.length; i++) // flatten array
+						subresults[i] = subresults[i].Played;
+					final["history"] = subresults;
+				}
+			}
+			// get type rows
+			if(type == "file"){
+				let fitb = locConf['prefix']+"file";
+				let artb = locConf['prefix']+"artist";
+				let altb = locConf['prefix']+"album";
+				let query = "SELECT "+fitb+".Missing AS Missing, "+fitb+".Volume AS Volume, "+fitb+".Hash AS Hash, "+fitb+".Prefix AS Prefix, ";
+				query += fitb+".Path AS Path, "+fitb+".Mount AS Mount, "+fitb+".URL AS URL, "+fitb+".SegIn AS SegIn, "+fitb+".SegOut SegOut, ";
+				query += fitb+".FadeOut AS FadeOut, "+fitb+".Intro AS Intro, "+fitb+".Outcue AS Outcue, "+fitb+".Track AS Track, ";
+				query += fitb+".Artist AS ArtistID, "+fitb+".Album AS AlbumID, "+artb+".Name AS Artist, "+altb+".Name as Album ";
+				query += "FROM "+fitb+" LEFT JOIN "+artb+" ON "+fitb+".Artist = "+artb+".ID LEFT JOIN "+altb+" ON "+fitb+".Album = "+altb+".ID ";
+				query += "WHERE "+fitb+".ID = "+ID+";";
+				try{
+					subresults = await asyncQuery(connection, query);
+				}catch(err){
+					connection.release();
+					return 304;
+				}
+				if(subresults[0]){
+					if(params && params.resolve){
+						// handle file type resolve option
+						await resolveFileFromProperties(subresults[0]);
+					}
+					final[type] = subresults[0];
+					connection.release();
+					return final;
+				}else{
+					// no file properties!
+					connection.release();
+					return 404;
+				}
+				
+				
+			}else if(type == "playlist"){
+				try{
+					subresults = await asyncQuery(connection, "SELECT Position, RID, Property, Value FROM "+locConf['prefix']+type+" WHERE ID = "+ID+" ORDER BY Position ASC;");
+				}catch(err){
+					connection.release();
+					return 304;
+				}
+				let re = [];
+				let pos = -1;
+				for(let i=0; i < subresults.length; i++){
+					if(subresults[i].Position != pos){
+						pos = subresults[i].Position;
+						re[pos] = [];
+					}
+					delete subresults[i].Position;
+					re[pos].push(subresults[i]);
+				}
+				final[type] = re;
+				connection.release();
+				return final;
+
+			}else if(type == "task"){
+				try{
+					subresults = await asyncQuery(connection, "SELECT RID, Property, Value FROM "+locConf['prefix']+type+" WHERE ID = "+ID+" ORDER BY Property ASC;");
+				}catch(err){
+					connection.release();
+					return 304;
+				}
+				final[type] = subresults;
+				connection.release();
+				return final;
+			}else{
+				try{
+					subresults = await asyncQuery(connection, "SELECT * FROM "+locConf['prefix']+libpool.escapeId(type)+" WHERE ID = "+ID+";");
+				}catch(err){
+					connection.release();
+					return 304;
+				}
+				final[type] = subresults;
+				connection.release();
+				return final;
+			}
+		}else{
+			//type Error
+			connection.release();
+			return 304;
+		}
+	}else{
+		// No result!
+		connection.release();
+		return 404;
+	}
+
+}
+
 // item/ID{?resolve=(1,0)}		gets full item info, If resolve is true (default 0 <false>), file item paths and 
 // 									missing will be re-writen making use of local prefix search settings.
 // 									Use separate get queries for last played/history and schedule entries. 
@@ -2492,154 +2697,17 @@ function getItem(request, response, params, dirs){
 			response.end();
 			return;
 		}
-		libpool.getConnection((err, connection) => {
-			if(err){
-				response.status(400);
-				response.send(err.code);
+		let resolve = false;
+		if(params.resolve)
+			resolve = true;
+		getItemObject(ID, params).then(result => {
+			if(typeof result === 'number'){
+				response.status(result);
 				response.end();
-				return;
 			}else{
-				connection.query("SELECT * FROM "+locConf['prefix']+"toc WHERE ID = "+ID+";", function(err, results){
-					if(err){
-						response.status(304);
-						response.send(err.code);
-						connection.release();
-						response.end();
-						return;
-					}else if(results[0]){
-						let type = results[0].Type;
-						if(type.length){
-							if(hasWhiteSpace(type)){
-								//type Error
-								response.status(304);
-								connection.release();
-								response.end();
-								return;
-							}
-							// get subtype rows
-							if(type == "file"){
-								let fitb = locConf['prefix']+"file";
-								let artb = locConf['prefix']+"artist";
-								let altb = locConf['prefix']+"album";
-								let query = "SELECT "+fitb+".Missing AS Missing, "+fitb+".Volume AS Volume, "+fitb+".Hash AS Hash, "+fitb+".Prefix AS Prefix, ";
-								query += fitb+".Path AS Path, "+fitb+".Mount AS Mount, "+fitb+".URL AS URL, "+fitb+".SegIn AS SegIn, "+fitb+".SegOut SegOut, ";
-								query += fitb+".FadeOut AS FadeOut, "+fitb+".Intro AS Intro, "+fitb+".Outcue AS Outcue, "+fitb+".Track AS Track, ";
-								query += fitb+".Artist AS ArtistID, "+fitb+".Album AS AlbumID, "+artb+".Name AS Artist, "+altb+".Name as Album ";
-								query += "FROM "+fitb+" LEFT JOIN "+artb+" ON "+fitb+".Artist = "+artb+".ID LEFT JOIN "+altb+" ON "+fitb+".Album = "+altb+".ID ";
-								query += "WHERE "+fitb+".ID = "+ID+";";
-								connection.query(query, function(err, subresults){
-									if(err){
-										response.status(304);
-										response.send(err.code);
-										connection.release();
-										response.end();
-										return;
-									}else if(subresults[0]){
-										let final = results[0];
-										if(params.resolve){
-											// handle file type resolve option
-											resolveFileFromProperties(subresults[0]).then(result => {
-												final[type] = subresults[0];
-												response.status(201);
-												response.json(final);
-												connection.release();
-												response.end();
-												return;
-											});
-											
-										}else{
-											final[type] = subresults[0];
-											response.status(201);
-											response.json(final);
-											connection.release();
-											response.end();
-											return;
-										}
-									}else{
-										// no file properties!
-										response.status(404);
-										connection.release();
-										response.end();
-									}
-								});
-							}else if(type == "playlist"){
-								connection.query("SELECT Position, RID, Property, Value FROM "+locConf['prefix']+type+" WHERE ID = "+ID+" ORDER BY Position ASC;", function(err, subresults){
-									if(err){
-										response.status(304);
-										response.send(err.code);
-										connection.release();
-										response.end();
-										return;
-									}else{
-										let final = results[0];
-										let re = [];
-										let pos = -1;
-										for(let i=0; i < subresults.length; i++){
-											if(subresults[i].Position != pos){
-												pos = subresults[i].Position;
-												re[pos] = [];
-											}
-											delete subresults[i].Position;
-											re[pos].push(subresults[i]);
-										}
-										final[type] = re;
-										response.status(201);
-										response.json(final);
-										connection.release();
-										response.end();
-									}
-								});
-							}else if(type == "task"){
-								connection.query("SELECT RID, Property, Value FROM "+locConf['prefix']+type+" WHERE ID = "+ID+" ORDER BY Property ASC;", function(err, subresults){
-									if(err){
-										response.status(304);
-										response.send(err.code);
-										connection.release();
-										response.end();
-										return;
-									}else{
-										let final = results[0];
-										final[type] = subresults;
-										response.status(201);
-										response.json(final);
-										connection.release();
-										response.end();
-									}
-								});
-							}else{
-								connection.query("SELECT * FROM "+locConf['prefix']+libpool.escapeId(type)+" WHERE ID = "+ID+";", function(err, subresults){
-									if(err){
-										response.status(304);
-										response.send(err.code);
-										connection.release();
-										response.end();
-										return;
-									}else{
-										let final = results[0];
-										final[type] = subresults;
-										response.status(201);
-										response.json(final);
-										connection.release();
-										response.end();
-									}
-								});
-							}
-						}else{
-							//type Error
-							response.status(304);
-							response.send(err.code);
-							connection.release();
-							response.end();
-							return;
-						}
-					}else{
-						// No result!
-						response.status(404);
-						connection.release();
-						response.end();
-						return;
-					}
-				});
+				response.status(201);
+				response.json(result);
+				response.end();
 			}
 		});
 	}else{
@@ -2854,12 +2922,67 @@ async function pathForID(connection, ID){
 		if(result && Array.isArray(result) && result[0].Prefix && result[0].Prefix.length && result[0].Path && result[0].Path.length){
 			// require that the file is prefixed, for security reasons
 			let properties = result[0];
-			await resolveFileFromProperties();
+			await resolveFileFromProperties(properties);
 			if(properties.Missing == 0)
 				return properties.Prefix + properties.Path;
 		}
 	}
 	return "";
+}
+
+function getHashForFileID(response, dirs){
+	let ID = 0;
+	if(dirs[3]){
+		// get ID and make sure it is a number.
+		ID = parseInt(dirs[3], 10);
+	}
+	if(!ID){
+		response.status(400);
+		response.end();
+		return;
+	}
+	hashForID(ID).then(result => {
+			if(typeof result === 'number'){
+				response.status(result);
+				response.end();
+			}else{
+				response.status(200);
+				response.send(result);
+				response.end();
+			}
+		});
+}
+
+async function hashForID(ID){
+	let result = false;
+	let connection;
+	try{
+		connection = await asyncGetDBConnection();
+		if(!connection)
+			return 400;
+	}catch(err){
+		return 400;
+	}
+	try{
+		result = await asyncQuery(connection, "SELECT Path, Prefix, Hash, URL, Mount, Missing FROM "+locConf['prefix']+"file WHERE ID = "+ID+";");
+	}catch(err){
+		connection.release();
+		return 404;
+	}
+	if(result[0]){
+		if(result && Array.isArray(result) && result[0].Prefix && result[0].Prefix.length && result[0].Path && result[0].Path.length){
+			// require that the file is prefixed, for security reasons
+			let properties = result[0];
+			properties.Hash = ""; // force recalculate of hash
+			await resolveFileFromProperties(properties);
+			if(properties.Missing == 0){
+				connection.release();
+				return properties.Hash;
+			}
+		}
+	}
+	connection.release();
+	return 404;
 }
 
 async function pathForProperties(connection, props){
@@ -2875,6 +2998,7 @@ async function pathForProperties(connection, props){
 	// can't find the file
 	return "";
 }
+
 // download/ID{?save=1}	if download is specified, then the file is downlaoded, no just sent
 function getDownload(request, response, params, dirs){
 	if(dirs[3]){
@@ -2907,10 +3031,19 @@ function getDownload(request, response, params, dirs){
 						return;
 					}
 					if(tresults && Array.isArray(tresults) && tresults.length){
-						if(tresults[0].Type == "file"){
+						if(params.export == "json"){
+							getItemObject(ID, params).then(result => {
+								connection.release();
+								response.type("application/octet-stream");
+								response.attachment("item"+ID+".json");
+								response.send(JSON.stringify(result, null, 3));
+								response.end();
+							});
+						}else if(tresults[0].Type == "file"){
 							pathForID(connection, ID).then(result => {
 								connection.release();
 								if(result.length){
+									response.header('Cache-Control', 'no-cache');
 									if(params.save && (params.save != 0))
 										response.download(result);
 									else
@@ -3224,7 +3357,7 @@ async function mkMediaDirs(){
 	if(mediaDir.length){
 		let present = new Date();
 		var year = present.getFullYear();
-		var month = present.getMonth();
+		var month = present.getMonth()+1;
 		var date = present.getDate();
 		let fpath = mediaDir+zeroPad(year, 2)+"/"+zeroPad(month, 2)+"/"+zeroPad(date, 2)+"/";		// Format: YYYY/MM/DD/
 		// recursively create multiple directories
@@ -3279,7 +3412,7 @@ async function checkDupFileHash(connection, Hash){
 async function findAddNameTable(connection, table, name){
 	// find or if missing, and new table entry with the given name (i.e. Artist, Album, etc.)
 	let result = false;
-	if(name.length == 0)
+	if(!name || (name.length == 0))
 		name = "[NONE]";
 	// search...
 	let query = "SELECT ID FROM "+locConf['prefix']+table+" WHERE Name = "+libpool.escape(name)+";";
@@ -3289,7 +3422,7 @@ async function findAddNameTable(connection, table, name){
 		console.log("findAddNameTable err="+err);
 		result = false;
 	}
-	if(result && Array.isArray(result) && result[0].ID)
+	if(result && Array.isArray(result) && result.length && result[0].ID)
 		return result[0].ID;
 		
 	// Not found, add...
@@ -3343,11 +3476,10 @@ async function importFileIntoLibrary(fpath, params){
 	
 	if(tmpDir.length){
 		// Convert dup parameter to number: skip,catset,replace(delete old),update(if missing)
-		if(params.dup == undefined) dupmode = 0;
-		else if((params.dup == "catset") && params.catid && params.catid.length) dupmode = 2;
-		else if(params.dup == "replace") dupmode = 3;
-		else if(params.dup == "update") dupmode = 4;
-
+		if(params.dup === undefined) dupmode = 0;
+		else if((params.dup === "catset") && params.catid && (params.catid > 0)) dupmode = 2;
+		else if(params.dup === "replace") dupmode = 3;
+		else if(params.dup === "update") dupmode = 4;
 		meta = await getFileMeta(fpath);
 		if(meta && Object.keys(meta).length){
 			let conn = false;
@@ -3694,12 +3826,15 @@ async function importFileIntoLibrary(fpath, params){
 			}
 			// add to categories if catid is set
 			if(params.catid && params.catid.length){
-				result = await addToCatID(conn, ID, params.catid);
-				if(!result){
-					await asyncRollback(conn);
-					conn.release();
-					pass.status = -1;
-					return pass;
+				let catID = parseInt(params.catid);
+				if(catID){
+					result = await addToCatID(conn, ID, catID);
+					if(!result){
+						await asyncRollback(conn);
+						conn.release();
+						pass.status = -1;
+						return pass;
+					}
 				}
 			}
 			// all done.
@@ -4181,7 +4316,7 @@ async function crawlDirectory(connection, fpath, pace, passStat){
 					}catch(err){
 						statistics.error++;
 						console.log(err);
-					}					
+					}
 					
 				}
 			}
@@ -4342,10 +4477,11 @@ module.exports = {
 		if(dirs[2] == 'get'){
 			getFrom(request, response, params, dirs);	// /get/table/{ID/}?column=value1&...
 		}else if(dirs[2] == 'set'){
-			setIn(request, response, params, dirs);	// /set/table/{ID/}?column=value1&... If ID is missing, a new row is created
+			setIn(request, response, params, dirs);	// /set/table/{ID/}?column=value1&... If ID is excluded, a new row is created
 		}else if(dirs[2] == 'delete'){
-			deleteID(request, response, params, dirs);	// delete/table/ID?reassign=id	will reassign related items that contain this property as specified, or fail if not.
-																		// 					remove=1 will attempt to delete an associated file.
+			deleteID(request, response, params, dirs);	// delete/table/ID?reassign=id	will reassign related items that contain 
+																		// this property as specified, or fail if not.
+																		// remove=1 will attempt to delete an associated file.
 		}else if(dirs[2] == 'logs'){
 			getLogs(request, response, params);			// /logs{?location=loc-name}{&datetime=YYYY-MM-DD-HH:MM}{&column=value1&...} 
 																	// Range is from specified date/time to start of that day
@@ -4353,7 +4489,7 @@ module.exports = {
 																	// ?added=0 assumed (played only) if added not specified
 																	// /logs alone returns list of location names that have log entries
 		}else if(dirs[2] == 'sched'){
-			getSched(request, response, params);			// /sched{?location=loc-name}{&fill=1}{&datetime=YYYY-MM-DD} 
+			getSched(request, response, params);			// /sched{?location=loc-name}{&fill=1}{&date=YYYY-MM-DD} 
 																		// today assumed if no date specified
 																		// fill = 0 assumed if not specified
 																		// /sched alone returns list of location names that have schedules entries
@@ -4365,13 +4501,19 @@ module.exports = {
 													// missing will be re-writen making use of local prefix search settings.
 													// Use separate get queries for last played/history and schedule entries
 			getItem(request, response, params, dirs);
+		}else if(dirs[2] == 'hash'){		// hash/ID
+			getHashForFileID(response, dirs);
 		}else if(dirs[2] == 'pldurcalc'){				// pldurcalc/ID -> returns the calculated duration from the actual list in seconds
 			calcLPLDuration(request, response, dirs);
 		}else if(dirs[2] == 'download'){
 			getDownload(request, response, params, dirs);	// /download/ID	triggers a download of the file associated with the file type item
 																	//			?save=1 to save the file instead of showing contents in page
-																	//			?export=[fpl(default),fplmedia,cue] convert playlist to type, &save=1 is assumed and
-																	//			&offset=sec is optional to add sec to start times of items in the list.
+																	//			?export=[fpl(default),fplmedia,cue] convert playlist to type, 
+																	//			&save=1 is assumed and &offset=sec is optional to add sec 
+																	//			to start times of items in the list.
+																	//			?export=json to download a json file for any type, with schedule and 
+																	//			history (last 100) for all locations, or as specified by params accepted by
+																	//			item/ID above. Again, &save=1 is assumed.
 		}else if(dirs[2] == 'query'){
 			executeQuery(request, response, params, dirs);	// /query/ID?select=[selval1, selval2,..]&prompt=[promptval1, promptval2,..]
 																			//		runs the specified query number, replacing macros [select(...)],

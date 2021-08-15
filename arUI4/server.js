@@ -225,9 +225,12 @@ function listTmpDirFilesFunc(request, response){
 							let thisFile = path.join(tmpDir, file);
 							let finfo = fs.statSync(thisFile);
 							let obj = {}; 
-							obj.id = file;	// file name, key is id for react-admin frontend easy integration
 							obj.isDir = finfo.isDirectory();
-							obj.size = finfo.size;
+							obj.id = file;	// file name, key is id for react-admin frontend easy integration
+							if(obj.isDir)
+								obj.size = "";
+							else
+								obj.size = Math.round(10 * finfo.size / 1024) / 10;
 							obj.created = finfo.ctime;
 							obj.modified = finfo.mtime;
 							files[i] = obj;
@@ -805,19 +808,6 @@ app.get('/who', function(request, response){
 	response.end();
 });
 
-async function generateLocationList(){
-	let result = ""
-	let list = await lib.getLibraryLocations();
-	if(list.length){
-		result += `<label for="selloc">Library Location:</label>
-						<select id='selloc' onchange="locMenuChange(event)">`;
-		for(let i=0; i< list.length; i++)
-			result += "<option val="+list[i].Name+">"+list[i].Name+"</option>";
-		result += "</select>";
-	}
-	return result;
-}
-
 app.get('/nav', async function(request, response){
 	let html; 
 	if(!request.session.loggedin){
@@ -841,11 +831,14 @@ app.get('/nav', async function(request, response){
 			html += `<button class="tabitem" onclick="dropClick(event)" data-childdiv="libdiv">Library
 							<i class="fa fa-caret-down"></i>
 						</button>
-						<div id="libdiv" class="dropdown-container">`;
-			html += await generateLocationList();
-			html +=		`<button class="tabitem" onclick="showTab(event, 'browse')">Browse</button>
-							<button class="tabitem" onclick="showTab(event, 'schedule')">Schedule</button>
-							<button class="tabitem" onclick="showTab(event, 'logs')">Logs</button>`;
+						<div id="libdiv" class="dropdown-container">
+						<label for="selloc">Library Location:</label>
+						<select id='selloc' onchange="locMenuChange(event)">
+							<option val="" onClick="getLocList()">Reload List</option>
+						</select>
+						<button class="tabitem" onclick="showTab(event, 'browse')">Browse</button>
+						<button class="tabitem" onclick="showTab(event, 'schedule')">Schedule</button>
+						<button class="tabitem" onclick="showTab(event, 'logs')">Logs</button>`;
 			if(['admin', 'manager', 'library'].includes(request.session.permission)){
 				html +=	`<button class="tabitem" onclick="showTab(event, 'query')">Queries</button>`;
 			}
@@ -858,6 +851,10 @@ app.get('/nav', async function(request, response){
 							<i class="fa fa-caret-down"></i>
 						</button>
 						<div id="libdiv" class="dropdown-container">
+							<label for="selloc">Library Location:</label>
+							<select id='selloc' onchange="locMenuChange(event)">
+								<option val="" onClick="getLocList()">Reload List</option>
+							</select>
 							<button class="tabitem" onclick="showTab(event, 'browse')">Browse</button>
 							<button class="tabitem" onclick="showTab(event, 'logs')">Logs</button>
 						</div>`;
@@ -940,7 +937,8 @@ app.post('/tmpupload', function(req, res){
 				}
 			}
 			res.status(200);
-			res.end("Complete");
+			res.json(req.files); // [].filename cntains the name of the file placed in the temp directory
+			res.end();
 		});
 	}else{
 		res.status(500);
@@ -998,7 +996,6 @@ app.get('/sseget', function(req, res){
 		if(client && client.response){
 			res.status(200);
 			res.json(client.registered);
-console.log("sseget");
 		}else{
 			res.status(400);
 			res.end("No stream connected");

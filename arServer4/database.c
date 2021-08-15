@@ -869,7 +869,11 @@ unsigned char dbTaskRunner(uint32_t UID, unsigned char load){
 			}
 			free(value);
 
-			value = GetMetaData(UID, "Folder", 0);
+			value = GetMetaData(UID, "Path", 0);
+			if(!strlen(value)){
+				free(value);
+				value = GetMetaData(UID, "Folder", 0);
+			}
 			if(strlen(value)){
 				// folder pick
 				createTaskItem("Folder Pick", (void (*)(void *))folderPick, NULL, UID, -1, 300L, 1);
@@ -881,7 +885,7 @@ unsigned char dbTaskRunner(uint32_t UID, unsigned char load){
 			suc = 1;
 			goto cleanup; // not running, but don't detete... will run later on player load
 		}
-	}else{		
+	}else{
 		// player load attempt
 		// all of these are run only when a player load is attempted
 		// media.c:LoadItemPlayer
@@ -1902,8 +1906,7 @@ cleanup:
 }
 
 void folderPick(taskRecord *parent){
-	unsigned short nomod, seq, first, rerun;
-	long long date;
+	unsigned short nomod, seq, first, rerun, date;
 	uint32_t mod, rand, size;
 	uint32_t newUID;
 	float segout;
@@ -1931,8 +1934,7 @@ void folderPick(taskRecord *parent){
 	first = GetMetaInt(parent->UID, "First", NULL);
 	rand = GetMetaInt(parent->UID, "Random", NULL);
 	rerun = GetMetaInt(parent->UID, "Rerun", NULL);
-	date = atoll(tmp = GetMetaData(parent->UID, "Date", 0));
-	free(tmp);
+	date = GetMetaInt(parent->UID, "Date", NULL);
 	segout = GetMetaFloat(parent->UID, "def_segout", NULL);
 
 	pick = traverseFolderListing(&dir, prefix, mod, nomod, seq, rerun, first, rand, date);
@@ -1968,11 +1970,12 @@ uint32_t dbGetFillID(time_t *when){
 	int hr, min;
 	struct tm tm_rec;
 	struct dbErr errRec;
+	int dbday;
 	
 	result = 0;
 	// fill time record
 	localtime_r(when, &tm_rec);
-	
+	dbday = ((tm_rec.tm_mday - 1) / 7) * 7 + tm_rec.tm_wday + 1;
 	instance = db_get_and_connect();
 	if(!instance)
 		goto cleanup;
@@ -1999,7 +2002,7 @@ uint32_t dbGetFillID(time_t *when){
 
 	// perform the sql query function, including only items with priority greater than or equal to the over-riding priority above
 	if(db_queryf(instance, sql, tm_rec.tm_hour, tm_rec.tm_hour, tm_rec.tm_min, loc, loc, 
-								tm_rec.tm_mday, tm_rec.tm_wday+1, tm_rec.tm_mon+1, tm_rec.tm_hour, tm_rec.tm_hour, tm_rec.tm_min))
+								tm_rec.tm_mday, dbday, tm_rec.tm_mon+1, tm_rec.tm_hour, tm_rec.tm_hour, tm_rec.tm_min))
 		goto cleanup;
 
 	str_setstr(&sql,"SELECT [PFX]schedule.Item, [PFX]hourmap.Map AS Hour, "
@@ -2018,7 +2021,7 @@ uint32_t dbGetFillID(time_t *when){
 	str_ReplaceAll(&sql, "[PFX]", prefix);
 
 	// perform the sql query function
-	if(db_queryf(instance, sql, loc, loc, tm_rec.tm_mday, tm_rec.tm_wday+1, 
+	if(db_queryf(instance, sql, loc, loc, tm_rec.tm_mday, dbday, 
 									tm_rec.tm_mon+1, tm_rec.tm_hour, tm_rec.tm_hour, tm_rec.tm_min))
 		goto cleanup;
 	// get first record (should be the only record)
@@ -2141,6 +2144,7 @@ uint32_t dbGetNextScheduledItem(void **result, time_t *targetTime, short *priori
 	uint32_t ID;
 	struct tm from_rec, to_rec;
 	short min, hr;
+	int fromwday, towday;
 	
 	if(!result)
 		return 0;
@@ -2150,7 +2154,9 @@ uint32_t dbGetNextScheduledItem(void **result, time_t *targetTime, short *priori
 	localtime_r(&from_t, &from_rec);
 	localtime_r(&to_t, &to_rec);
 	ID = 0;
-
+	fromwday = ((from_rec.tm_mday - 1) / 7) * 7 + from_rec.tm_wday + 1;
+	towday = ((to_rec.tm_mday - 1) / 7) * 7 + to_rec.tm_wday + 1;
+	
 	// set up database access
 	instance = db_get_and_connect();
 	if(!instance)
@@ -2167,12 +2173,12 @@ uint32_t dbGetNextScheduledItem(void **result, time_t *targetTime, short *priori
 		// NOTE (BUG): If from and to times are split across a day rollover, the latest item befor the roll over will be 
 		// selected for the case where multiple duplicate items are scheduled.
 		str_setstr(&sql, "SELECT [prefix]schedule.Item AS Item, MAX(([prefix]hourmap.Map * 60) + [prefix]schedule.Minute) AS Minutes, ");
-		str_appendstr(&sql, "MAX([prefix]schedule.Priority) AS Priority FROM ([prefix]schedule, [prefix]hourmap, [prefix]daymap) ");
+		str_appendstr(&sql, "MAX([prefix]schedule.Priority) AS Priority FROM ([prefix]schedule, [prefix]hourmap) ");
 		str_appendstr(&sql, "LEFT JOIN [prefix]rest ON ([prefix]schedule.Item = [prefix]rest.Item AND [prefix]rest.Location = ");
 		str_appendstr(&sql, "[loc-id]) WHERE [prefix]rest.Added IS NULL AND ");
 		if(highOnly)
 			str_appendstr(&sql, "[prefix]schedule.Priority >= 8 AND ");
-		str_appendstr(&sql, "[prefix]schedule.Day = [prefix]daymap.Day AND [prefix]schedule.Hour = [prefix]hourmap.Hour ");
+		str_appendstr(&sql, "[prefix]schedule.Hour = [prefix]hourmap.Hour ");
 		str_appendstr(&sql, "AND [prefix]schedule.Fill = 0 AND ([prefix]schedule.Location IS NULL OR ");
 		str_appendstr(&sql, "[prefix]schedule.Location = [loc-id]) AND [prefix]schedule.Priority > 0 ");
 	  
@@ -2186,10 +2192,10 @@ uint32_t dbGetNextScheduledItem(void **result, time_t *targetTime, short *priori
 			str_appendstr(&sql, (tmp = istr(from_rec.tm_mday)));
 			free(tmp);
 			str_appendstr(&sql, " ) ");
-			str_appendstr(&sql, "AND [prefix]daymap.Map = ");
-			str_appendstr(&sql, (tmp = istr(from_rec.tm_wday + 1)));
+			str_appendstr(&sql, "AND ([prefix]schedule.Day = 0 OR [prefix]schedule.Day = ");
+			str_appendstr(&sql, (tmp = istr(fromwday)));
 			free(tmp);
-			str_appendstr(&sql, " ");
+			str_appendstr(&sql, ") ");
 			if(from_rec.tm_hour == to_rec.tm_hour){
 				// with in the same hour
 				str_appendstr(&sql, "AND [prefix]hourmap.Map = ");
@@ -2233,9 +2239,11 @@ uint32_t dbGetNextScheduledItem(void **result, time_t *targetTime, short *priori
 			str_appendstr(&sql, ") AND ([prefix]schedule.Date = 0 OR [prefix]schedule.Date = ");
 			str_appendstr(&sql, (tmp = istr(from_rec.tm_mday)));
 			free(tmp);
-			str_appendstr(&sql, ") AND [prefix]daymap.Map = ");
-			str_appendstr(&sql, (tmp = istr(from_rec.tm_wday + 1)));
+			str_appendstr(&sql, ") AND ([prefix]schedule.Day = 0 OR [prefix]schedule.Day = ");
+			str_appendstr(&sql, (tmp = istr(fromwday)));
 			free(tmp);
+			str_appendstr(&sql, ") ");
+			
 			str_appendstr(&sql, " AND ([prefix]hourmap.Map > ");
 			str_appendstr(&sql, (tmp = istr(from_rec.tm_hour)));
 			free(tmp);
@@ -2253,9 +2261,11 @@ uint32_t dbGetNextScheduledItem(void **result, time_t *targetTime, short *priori
 			str_appendstr(&sql, ") AND ([prefix]schedule.Date = 0 OR [prefix]schedule.Date = ");
 			str_appendstr(&sql, (tmp = istr(to_rec.tm_mday)));
 			free(tmp);
-			str_appendstr(&sql, ") AND [prefix]daymap.Map = ");
-			str_appendstr(&sql, (tmp = istr(to_rec.tm_wday + 1)));
+			str_appendstr(&sql, ") AND ([prefix]schedule.Day = 0 OR [prefix]schedule.Day = ");
+			str_appendstr(&sql, (tmp = istr(towday)));
 			free(tmp);
+			str_appendstr(&sql, ") ");
+			
 			str_appendstr(&sql, " AND ([prefix]hourmap.Map < ");
 			str_appendstr(&sql, (tmp = istr(to_rec.tm_hour)));
 			free(tmp);
