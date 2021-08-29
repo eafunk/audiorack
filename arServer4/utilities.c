@@ -236,7 +236,7 @@ char *str_NthField(const char *string, const char *token, unsigned int field){
 	unsigned int tsize;
 	char *result, *tmp;
 	
-	/* if result is not empty, string has been copied and will need to be freed */
+	/* if result is not NULL, string has been copied and will need to be freed */
 	result = NULL;	
 	if(tsize = strlen(token)){
 		while(field > 0){
@@ -250,7 +250,7 @@ char *str_NthField(const char *string, const char *token, unsigned int field){
 		if(tmp = strstr(result, token))
 			*tmp = 0;
 	}
-	return result;	
+	return result;
 }
 
 char *str_prefixSpan(char *string, const char *prefix){

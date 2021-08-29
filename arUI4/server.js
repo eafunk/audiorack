@@ -905,7 +905,7 @@ app.get('/tmplist', listTmpDirFilesFunc);
 app.get('/tmplist\*', listTmpDirFilesFunc);
 
 app.post('/tmpupload', function(req, res){
-	if((req.session.permission != "admin") &&  (req.session.permission != "manage")){
+	if(!req.session.loggedin){
 		res.status(401);
 		res.end();
 		return;

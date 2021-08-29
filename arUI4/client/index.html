@@ -26,7 +26,12 @@
 			</div>
 			<div id="stash" class="tabcontent">
 				<h2>Local Stash</h2>
-				<p>Radio is fun...</p>
+				<span style='float: left;'>Total/Selected Duration:</span><span id='stashdur' style='float: right;'></span><div style='clear:both;'></div><p>
+				<button onclick="stashSelectAll(event)">Selected all</button>
+				<button onclick="stashUnselectAll(event)">Unselect all</button><br>
+				<ul class="ddlist" id="stashlist" style="float: left;">
+				</ul>
+				<button onclick="stashDeleteSelected(event)">Delete selected</button>
 			</div>
 			<div id="files" class="tabcontent">
 				<div class="scroll">
@@ -45,6 +50,7 @@
 						</div>
 						<div id="filelist" class="scroll">
 						</div>
+						<button id="filestashbut" name="submit" onclick="filesToStash(event)">Copy selected file(s) to Stash</button>
 					</div>
 					<div id="fileimportbox" class="boxed">
 						<h3>Import Selected File(s) into Library</h3>
@@ -147,6 +153,7 @@
 						<h3>Crawl File System - Locate moved/renamed files.</h3>
 						<form id="crawlform">
 						Pace: <input type="text" name="pace" value="1.0" size="3"> seconds per file checked.<br>
+						<input type="checkbox" id="addnewcrawl" name="add" value="1"> Add audio file found not currently in library<br>
 						<input type="radio" name="crawlprop" value="conf" checked="checked"> Media Files Directory (from settings) -or- 
 						<input type="radio" name="crawlprop" value="other"> Specify directory:<input type="text" name="path" value="">
 						<div align="left"><button id="crawlbutton" name="submit" onclick="clickDbCrawl(event)">Start</button> status: <div id="crawlmsg" style="display: inline">Stopped.</div></div>

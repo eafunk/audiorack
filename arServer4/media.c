@@ -39,6 +39,7 @@
 #include <gst/gst.h>
 #include <gst/pbutils/pbutils.h>
 #include <fnmatch.h>
+#include <glob.h>
 
 struct locals{
 	uint32_t localUID;
@@ -250,6 +251,150 @@ char *getScriptFromFile(const char *file, unsigned char silent){
 	}
 	fclose(fp);
 	return result;
+}
+
+char *findPrefixedFile(uint32_t UID, char *inprefix, char *inpath){
+	char *newURL;
+	char *tmp, *msg;
+	unsigned char missing;
+	char *path = NULL;
+	char *pathStr = NULL;
+	char *adjPathStr = NULL;
+	char *prefixList, *newurl;
+	uint32_t listSize, i, p;
+	unsigned char c;	// true for case modified
+	size_t plen = 0;
+	glob_t globbuf;
+
+	// check file related properties in db against the file itself... find file if needed.
+	// use file as final authority for properties.  Start with these 2 assumptions:
+	missing = 1;
+	prefixList = GetMetaData(0, "file_prefixes", 0);
+	listSize = str_CountFields(prefixList, ",") + 1;
+	pathStr = strdup(inpath);
+	plen = strlen(inprefix);
+	// try various prefixes to acomidate different disk mount locations
+	// start with the full path as found in the URL: Prefix + Path
+	str_setstr(&path, inprefix);
+	str_appendstr(&path, pathStr);
+
+	/* escaping all *,?,[ chars found in pathStr to prevent paths
+	 * with these chars from being interpereted by the glob function
+	 * below as wild-card matches.*/
+	str_ReplaceAll(&pathStr, "*", "\\*");
+	str_ReplaceAll(&pathStr, "?", "\\?");
+	str_ReplaceAll(&pathStr, "[", "\\[");
+	
+	// Copy the string and change the case of the first letter, if it's a letter
+	// for an alternate comparison on systems that change the case of the mount
+	str_setstr(&adjPathStr, pathStr);
+	if(isupper(*adjPathStr))
+		*adjPathStr = tolower(*adjPathStr);
+	else if(islower(*adjPathStr))
+		*adjPathStr = toupper(*adjPathStr);
+	else{
+		// not case changable
+		free(adjPathStr);
+		adjPathStr = NULL;
+	}
+	
+	// path is Full Path, pathStr is the relative path, if any
+	// i.e. path = /longer/path/to/mount/some/file
+	// and  pathStr = mount/some/file
+	globbuf.gl_offs = 0;
+	globbuf.gl_pathc = 0;
+	i = 0;
+	p = 0;
+	c = 0;
+	do{
+		if(CheckFileHashMatch(path, "")){
+			// Hash code agrees with URL
+			missing = 0;
+			break;
+		}
+		// try to create another path with next prefix or next glob items
+		do{
+			if(i < globbuf.gl_pathc){
+				// next path in glob list
+				str_setstr(&path, globbuf.gl_pathv[i]);
+				i++;
+				break;
+			}else{
+				tmp = str_NthField(prefixList, ",", p);
+				if(tmp && strlen(pathStr)){
+					str_setstr(&path, tmp);
+					if(adjPathStr && c){
+						// trying the pathStr version with case adjustment
+						str_appendstr(&path, adjPathStr);
+						c = 0; // go back to original case next time
+					}else{
+						str_appendstr(&path, pathStr);
+						if(adjPathStr)
+							c = 1; // try case change next time
+					}
+					i = 0;
+					if(globbuf.gl_pathc){
+						globfree(&globbuf);
+						globbuf.gl_pathc = 0;
+					}
+					if(!glob(path, GLOB_NOSORT, NULL, &globbuf)){
+						if(globbuf.gl_pathc){
+							// found a path in new glob list
+							str_setstr(&path, globbuf.gl_pathv[0]);
+							i++;
+							if(!c)
+								p++;
+							free(tmp);
+							break;
+						}
+					}
+					free(tmp);
+					if(!c)
+						p++;
+				}else{
+					// no more prefixes
+					p = listSize+1;
+					if(tmp)
+						free(tmp);
+				}
+			}
+		}while(p < listSize);
+		
+	}while(missing && plen && (p <= listSize));
+	if(globbuf.gl_pathc){
+		globfree(&globbuf);
+	}
+	free(prefixList);
+
+	if(missing){
+		// can't find it: set missing metadata flag
+		msg = NULL;
+		str_setstr(&msg, "[media] findPrefixedFile-");
+		str_appendstr(&msg, inpath);
+		str_appendstr(&msg, ": Prefixed file not found.");
+		serverLogMakeEntry(msg);
+		free(msg);
+		free(path);
+		path = NULL;
+	}else{
+		// found it... set URL
+		tmp = NULL;
+		str_setstr(&tmp, path);
+		// insert a extra slash between the new prefix (ends with slath) and path - prefixed file indicator and token
+		str_insertstr(&tmp, "/", strlen(tmp) - strlen(pathStr));
+		newurl = uriEncodeKeepSlash(tmp);
+		free(tmp);
+		str_insertstr(&newurl, "file://", 0);
+		SetMetaData(UID, "URL", newurl);
+		free(newurl);
+	}
+cleanup:
+	if(adjPathStr)
+		free(adjPathStr);
+	if(pathStr)
+		free(pathStr);
+
+	return path;	// if not NULL, needs to be freed by caller
 }
 
 unsigned char filePLDetermineType(FILE *fpl)
@@ -803,13 +948,28 @@ void GetFileMetaData(uint32_t UID, const char *url){
 	char buf[4096];
 	uint32_t dbID;
 	
-    if(tmp = str_NthField(url, "://", 1)){
+	if(tmp = str_NthField(url, "://", 1)){
 		// ignore host, if any
 		if(path = strchr(tmp, '/'))
 			path = uriDecode(path);
 		else
 			path = uriDecode(tmp);
 		free(tmp);
+		
+		// handle "//" as prefix and path separator
+		if(tmp = str_NthField(path, "//", 1)){
+			prefix = str_NthField(path, "//", 0);
+			free(path);
+			str_appendstr(&prefix, directoryTokenStr);
+			path = findPrefixedFile(UID, prefix, tmp);
+			free(tmp);
+			free(prefix);
+			prefix = NULL;
+			if(!path){
+				SetMetaData(UID, "Missing", "1");
+				goto finish;
+			}
+		}
 		// check if it is a playlist file
 		if(fp = fopen(path, "rb")){
 			switch(filePLDetermineType(fp)){
@@ -828,7 +988,7 @@ void GetFileMetaData(uint32_t UID, const char *url){
 			fclose(fp);
 			fp = NULL;
 		}
-	
+
 		// not a playlist file... see if it is an audio file we can play.
 		// set name tag to the file name... updated later if there is a name meta tag in the file.
 		copy = strdup(path);
@@ -859,7 +1019,7 @@ void GetFileMetaData(uint32_t UID, const char *url){
 		}else{
 			SetMetaData(UID, "Missing", "1");
 			goto finish;
-		}	
+		}
 
 		// check for an associated script text file
 		str_appendstr(&path, ".txt");
@@ -873,7 +1033,7 @@ void GetFileMetaData(uint32_t UID, const char *url){
 	}else{
 		SetMetaData(UID, "Missing", "1");
 	}
-	
+
 finish:
 	if(prefix)
 		free(prefix);

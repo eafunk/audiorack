@@ -47,13 +47,30 @@ var browseType = new watchableValue("");
 var browseTypeList = false;
 var filesPath = false;
 var filesList;
+var stashList;
 var itemProps = false;
+var flatPlist = false;
+var curDrag = null;
 var catListCache = new watchableValue(false);
 var locListCache = new watchableValue(false);
 var artListCache = new watchableValue(false);
 var albListCache = new watchableValue(false);
 
 /***** Utility functions *****/
+
+function setStash(list){
+	localStorage.setItem("stash", JSON.stringify(list));
+}
+
+function getStash(){
+	let result;
+	let list = localStorage.getItem("stash");
+	if(list)
+		result = JSON.parse(list);
+	if(!result)
+		result = [];
+	return result; 
+}
 
 function quoteattr(s){
 	if(s){
@@ -98,6 +115,7 @@ function timeParse(str){
 }
 
 function timeFormat(timesec){
+	timesec = parseFloat(timesec);
 	if(isNaN(timesec))
 		return "";
 	else{
@@ -133,6 +151,55 @@ function timeFormat(timesec){
 	}
 }
 
+function updateListDuration(plprops){
+	// plprops is a flat array of objects.
+	let duration = 0.0;
+	let last = 0.0;
+	let offset = 0.0;
+	let calDur = 0.0;
+	let next = 0.0;
+	if(plprops && plprops.length){
+		// use Duration, Offset, SegIn, SegOut and FadeOut properties
+		for(let i=0; i<plprops.length; i++){
+			// possibly readjust the start time
+			if(plprops[i].Offset)
+				duration = parseFloat(plprops[i].Offset); // override time to last item with start of this one
+				
+			last = duration;
+			// and add the next items offset or this item's duration for the end time
+			if(((i+1) < plprops.length) && (plprops[i+1].Offset)){
+				next = parseFloat(plprops[i+1].Offset) // use offset of next item, if present
+				// add a duration if missing
+				if((plprops[i].Duration == undefined) || (plprops[i].Duration == null) || (parseFloat(plprops[i].Duration) == 0)){
+					let dur = next - last;
+					// adjust for seg values, etc.
+					if(plprops[i].SegIn)
+						dur = dur +parseFloat(plprops[i].SegIn);
+					if(plprops[i].FadeOut)
+						dur = dur + parseFloat(plprops[i].FadeOut);
+					else if(plprops[i].SegOut)
+						dur = dur + parseFloat(plprops[i].SegOut);
+					else
+						dur = dur + 5.0; // default segout time
+					plprops[i].Duration = dur;
+				}
+				duration = next;
+			}else if(plprops[i].Duration){
+				duration = duration + parseFloat(plprops[i].Duration);
+				if(plprops[i].SegIn)
+					duration = duration - parseFloat(plprops[i].SegIn);
+				if(plprops[i].FadeOut)
+					duration = duration - parseFloat(plprops[i].FadeOut);
+				else if(plprops[i].SegOut)
+					duration = duration - parseFloat(plprops[i].SegOut);
+				else
+					duration = duration - 5.0; // default segout time
+			}
+		}
+	}
+	return duration;
+}
+
 function findPropObjInArray(array, name, value){
 	if(array && array.length){
 		for(let i=0; i<array.length; i++){
@@ -143,6 +210,17 @@ function findPropObjInArray(array, name, value){
 		}
 	}
 	return null;
+}
+
+function flatClone(src){
+	let target = {};
+	let keys = Object.keys(src);
+	for(let i=0; i<keys.length; i++ ){
+		let key = keys[i];
+		let val = src[key];
+		target[key] = val;
+	}
+	return target;
 }
 
 /***** fetch functions from http API *****/
@@ -374,7 +452,6 @@ function selectAccordType(evt, cb, param){
 		}
 	}
 	cb(panel, param);
-
 }
 
 function toggleShowSearchList(evt){ ; 
@@ -559,7 +636,6 @@ function fileCatMenuRefresh(value){
 		element.innerHTML = inner;
 	}
 }
-
 
 function browseTypeRowSelUpdate(value){
 	// Get all elements with class="tselcell" and remove the class "active" from btype div
@@ -824,6 +900,14 @@ function genPopulateTableFromArray(list, el, colMap, rowClick, headClick, sortVa
 			let cell = trow.insertCell(-1);
 			if(actions){
 				let newac = actions.replaceAll("$i", i);
+				if(newac.indexOf("$") > -1){
+					let parts = newac.split("$");	// function to call
+					for(let n = 0; n < parts.length; n++){
+						if(n % 2 == 1)
+							parts[n] = window[parts[n]](list[i]);
+					}
+					newac = parts.join("");
+				}
 				cell.innerHTML = newac;
 			}else
 				cell.innerHTML = "";
@@ -927,11 +1011,313 @@ function insertTableRow(kvcols, el, idx, colMap, rowClick, actions, fieldTypes){
 		let cell = trow.insertCell(-1);
 		if(actions){
 			let newac = actions.replaceAll("$i", idx);
+			if(newac.indexOf("$") > -1){
+				let parts = newac.split("$");	// function to call
+				for(let n = 0; n < parts.length; n++){
+					if(n % 2 == 1)
+						parts[n] = window[parts[n]](list[i]);
+				}
+				newac = parts.join("");
+			}
 			cell.innerHTML = newac;
 		}else
 			cell.innerHTML = "";
 	}
-} 
+}
+
+function appendDragableItem(dragable, dropcb, item, idx, ul, format){
+	let li = document.createElement("li");
+	li.setAttribute("data-idx", idx);
+	// format: li contents set to format with all $key$ replaced with corrisponding key's value
+	// or $key->funcName$ replaced with the value returned from the named function with the key's value passed in.
+	let inner = format;
+	if(inner.indexOf("$") > -1){
+		let parts = inner.split("$");
+		let key;
+		for(let n = 0; n < parts.length; n++){
+			if(n % 2 == 1){
+				let key = parts[n];
+				let obj = item;
+				if(key.indexOf("/") > -1){	// handle sub-keys "parent-key/child-key/.."
+					let sub = inner.split("/");
+					for(let i = 0; i < sub.length; i++)
+						obj = obj[sub[i]];
+				}
+				if(key.indexOf("->") > -1){	// handle value conversion function "key->functionName"
+					let sub = key.split("->");
+					let fnName = sub[1];
+					key = sub[0];
+					parts[n] = window[fnName](obj[key]);
+				}else
+					parts[n] = quoteattr(obj[key]);
+				if(!parts[n])
+					parts[n] = "";
+			}
+		}
+		inner = parts.join("");
+	}
+	li.innerHTML = inner;
+	ul.appendChild(li);
+	if(dragable)
+		setDragItemEvents(li, false, dropcb)
+}
+
+function genDragableListFromObjectArray(dragable, dropcb, list, ul, format){
+	ul.innerHTML = "";
+	let idx = 0;
+	for(let item of list){
+		appendDragableItem(dragable, dropcb, item, idx, ul, format);
+		idx++;
+	}
+}
+
+function setDragItemEvents(i, dragcb, dropcb){
+	i.draggable = true;
+	i.addEventListener("dragstart", function(evt){
+		curDrag = this;
+		let target = evt.target.parentNode;
+		let items = target.getElementsByTagName("li");
+		for(let it of items){
+			if(it != curDrag)
+				it.classList.add("hint"); 
+		}
+		if(dragcb)
+			dragcb(this);
+	});
+
+	i.addEventListener("dragenter", function(){
+		if(this != curDrag){
+			this.classList.add("active");
+		}
+	});
+
+	i.addEventListener("dragleave", function(){
+		this.classList.remove("active");
+	});
+
+	i.addEventListener("dragend", function(evt){
+		let target = evt.target.parentNode;
+		let items = target.getElementsByTagName("li");
+		for(let it of items){
+			it.classList.remove("hint");
+			it.classList.remove("active");
+		}
+		curDrag = null;
+	});
+
+	i.addEventListener("dragover", function(evt){
+		evt.preventDefault();
+	});
+
+	i.addEventListener("drop", function(evt){
+		evt.preventDefault();
+		let target = evt.target.parentNode;
+		let items = target.getElementsByTagName("li");
+		if(this != curDrag){
+			let currentpos = 0, droppedpos = 0;
+			for(let it=0; it<items.length; it++){
+				if(curDrag == items[it])
+					currentpos = it;
+				if(this == items[it])
+					droppedpos = it;
+			}
+			if(dropcb)
+				dropcb(this, currentpos, droppedpos);
+			if(currentpos < droppedpos)
+				this.parentNode.insertBefore(curDrag, this.nextSibling);
+			else
+				this.parentNode.insertBefore(curDrag, this);
+			curDrag = null;
+		}
+	});
+}
+
+/***** Stash functions *****/
+
+function stashGetSelected(){
+	let list = [];
+	let sl = document.getElementById("stashlist");
+	let els = sl.querySelectorAll('input[type=checkbox]:checked');
+	if(els && els.length){
+		for(let i=0; i<els.length; i++){
+			let item = els[i].parentElement.parentElement;
+			let idx = item.getAttribute("data-idx");
+			list.push(stashList[idx]);
+		}
+	}
+	return list;
+}
+
+function updateStashDuration(){
+	let timeList = stashGetSelected();
+	if(!timeList.length)
+		timeList = stashList;
+	el = document.getElementById("stashdur");
+	if(el)
+		el.innerText = timeFormat(updateListDuration(timeList));
+}
+
+function loadStashRecallOnLoad(){
+	stashList = getStash();
+	if(!stashList)
+		stashList = [];
+	let el = document.getElementById("stashlist");
+	let format = `<span style='float: left;'><input type='checkbox' onchange='updateStashDuration()'></input></span>
+						<span style='float: right;'>$Duration->timeFormat$ <button class="editbutton" onclick="stashItemInfo(event)">Info</button></span>
+						<div style='clear:both;'></div>
+						<span style='float: left;'>$Name$</span><span style='float: right;'>$StashType$</span><div style='clear:both;'></div>
+						<span style='float: left;'>$Artist$</span>
+						<span style='float: right;'>Note:<input type=text onblur="stashNoteChange(event)" value="$note$"></text></span><div style='clear:both;'></div>`;
+	genDragableListFromObjectArray(true, moveItemInStash, stashList, el, format);
+	updateStashDuration();
+}
+
+function stashNoteChange(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let target = evt.target;
+	let val = target.value;
+	let item = target.parentElement.parentElement;
+	let idx = item.getAttribute("data-idx");
+	item = stashList[idx];
+	item.note = val;
+	setStash(stashList);
+}
+
+function flattenItemForStash(item){
+	let forStash = {
+		Type: item.Type,
+		Name: item.Name,
+		Duration: item.Duration
+	};
+	if(item.ID)
+		forStash.ID = item.ID;
+	if(item.tmpfile)
+		forStash.tmpfile = item.tmpfile;
+	if(item.URL)
+		forStash.URL = item.URL;
+	if(item.Artist)
+		forStash.Artist = item.Artist;
+	if(item.Album)
+		forStash.Album = item.Album;
+	if(item.Prefix)
+		forStash.Prefix = item.Prefix;
+	if(item.Path)
+		forStash.Path = item.Path;
+	if(item.Hash)
+		forStash.Hash = item.Hash;
+	if((item.Type === "file") && item.file){
+		// flatten out file properties
+		forStash.Artist = item.file.Artist;
+		forStash.Album = item.file.Album;
+		forStash.Prefix = item.file.Prefix;
+		forStash.Path = item.file.Path;
+		forStash.Hash = item.file.Hash;
+	};
+	return forStash;
+}
+
+function appendItemToStash(item){
+	// item format from Item view
+	item = flattenItemForStash(item);
+	if(item.Type === "file"){
+		if(item.ID)
+			item.StashType = "libfile";
+		else
+			item.StashType = "tmpfile";
+	}else if(item.Type === "playlist"){
+		if(item.ID)
+			item.StashType = "libpl";
+		else if(item.tmpfile)
+			item.StashType = "fpl";
+		else{
+			// invalid...
+			alert("Item "+item.Name+" can't be added to the stash:\nIt must have either an library ID or a file path.\nTry saving the item first.");
+			return;
+		}
+	}else if(item.URL && item.URL.length){
+		// handle URL (studio interface)
+		let type = item.URL.split("://")[0];
+		if(type === "file")
+			item.StashType = "tmpfile";
+		else
+			item.StashType = type;
+	}else
+		item.StashType = item.Type;
+	stashList.push(item);
+	let index = stashList.length -1;
+	setStash(stashList);
+	let el = document.getElementById("stashlist");
+	let format = `<span style='float: left;'><input type='checkbox'></input></span>
+						<span style='float: right;'>$Duration->timeFormat$ <button class="editbutton" onclick="stashItemInfo(event)">Info</button></span>
+						<div style='clear:both;'></div>
+						<span style='float: left;'>$Name$</span><span style='float: right;'>$StashType$</span><div style='clear:both;'></div>
+						<span style='float: left;'>$Artist$</span>
+						<span style='float: right;'>Note:<input type=text onblur="stashNoteChange(event)" value="$note$"></text></span><div style='clear:both;'></div>`;
+	appendDragableItem(true, moveItemInStash, item, index, el, format)
+	updateStashDuration();
+}
+
+function moveItemInStash(obj, fromIdx, toIdx){
+	stashList.splice(toIdx, 0, stashList.splice(fromIdx, 1)[0]);
+	setStash(stashList);
+	updateStashDuration();
+}
+
+function stashItemInfo(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let target = evt.target;
+	let item = target.parentElement.parentElement;
+	let idx = item.getAttribute("data-idx");
+	item = stashList[idx];
+	let credentials = cred.getValue();
+	if(credentials && ['admin', 'manager', 'library'].includes(credentials.permission))
+		showItem(item, true);
+	else
+		showItem(item, false);
+}
+
+function stashUnselectAll(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let list = document.getElementById("stashlist");
+	let els = list.querySelectorAll('input[type=checkbox]:checked');
+	if(els){
+		for(let i=0; i<els.length; i++)
+			els[i].checked = false;
+		updateStashDuration();
+	}
+}
+
+function stashSelectAll(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let list = document.getElementById("stashlist");
+	let els = list.querySelectorAll('input[type=checkbox]:not(:checked)');
+	if(els){
+		for(let i=0; i<els.length; i++)
+			els[i].checked = true;
+		updateStashDuration();
+	}
+}
+
+function stashDeleteSelected(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let list = document.getElementById("stashlist");
+	let els = list.querySelectorAll('input[type=checkbox]:checked');
+	if(els){
+		for(let i=0; i<els.length; i++){
+			let item = els[i].parentElement.parentElement;
+			let idx = item.getAttribute("data-idx");
+			stashList.splice(idx, 1);
+			list.removeChild(item);
+		}
+		setStash(stashList);
+		updateStashDuration();
+	}
+}
 
 /***** Item show/edit/delete functions *****/
 
@@ -1438,8 +1824,127 @@ async function saveItemTask(evt){
 async function saveItemPlaylist(evt){
 	evt.preventDefault();
 	evt.stopPropagation();
-	let els = document.getElementById("playlistitemform").elements;
-//!! handle new item too
+	if(!itemProps.ID){
+		alert("Something is wrong: You should not have been able to get here without first having created the playlist item.");
+		return;
+	}
+	let changed = false;
+	let el = document.getElementById("itemplaylist");
+	let items = el.children;
+	let old = itemProps.playlist;
+	// remove rows in itemProps.playlist not in the table
+	for(let i = 0; i<old.length; i++){
+		for(j=0; j<items.length; j++){
+			let idx = items[j].getAttribute("data-idx");	// new rows will have a value of -1 here
+			if(idx == i)
+				break;	// new list has reference to old row index, maybe not in the same place, but it's still there
+		}
+		if(j == items.length){
+			// not in new list: delete row
+			let row = old[i];
+			for(let k=0; k<row.length; k++){
+				let prop = row[k];
+				let rid = prop.RID;
+				let api = "library/delete/playlist/"+rid;
+				let resp = await fetchContent(api);
+				if(resp){
+					if(!resp.ok){
+						alert("Got an error saving data to server.\n"+resp.status);
+						return;
+					}
+				}else{
+					alert("Failed to save data to the server.");
+					return;
+				}
+				changed = true;
+			}
+		}
+	}
+
+	// add rows or update rows (having data-idx > -1) rows in table.
+	for(i=0; i<items.length; i++){
+		let idx = items[i].getAttribute("data-idx");	// new rows will have a value of -1 here
+		if(idx == -1){
+			// add new
+			let propObj = flatPlist[i];
+			let keys = Object.keys(propObj);
+			for(let k=0; k<keys.length; k++){
+				let key = keys[k];
+				let val = propObj[key];
+				let api = "library/set/playlist";
+				let data = {Position: i, Property: key, Value: val, ID: itemProps.ID};
+				let resp = await fetchContent(api, {
+					method: 'POST',
+					body: JSON.stringify(data),
+					headers: {
+						"Content-Type": "application/json",
+						"Accept": "application/json"
+					}
+				});
+				if(resp){
+					if(!resp.ok){
+						alert("Got an error saving playlist properties to server.\n"+resp.status);
+						return;
+					}
+				}else{
+					alert("Failed to save playlist properties to the server.");
+					return;
+				}
+				changed = true;
+				
+			}
+		}else if(idx != i){
+			// update existing to new playlist index position
+			let row = old[idx];
+			for(let k=0; k<row.length; k++){
+				// change the Position value of each property, using it's RID database row id
+				let rid = row[k].RID;
+				let api = "library/set/playlist/"+rid;
+				let data = {Position: i};
+				let resp = await fetchContent(api, {
+					method: 'POST',
+					body: JSON.stringify(data),
+					headers: {
+						"Content-Type": "application/json",
+						"Accept": "application/json"
+					}
+				});
+				if(resp){
+					if(!resp.ok){
+						alert("Got an error saving playlist properties to server.\n"+resp.status);
+						return;
+					}
+				}else{
+					alert("Failed to save playlist properties to the server.");
+					return;
+				}
+				changed = true;
+			}
+		}
+	}
+	if(changed){
+		// update duration
+		let api = "library/pldurcalc/"+itemProps.ID;
+		let resp = await fetchContent(api);
+		if(resp){
+			if(!resp.ok){
+				alert("Got an error updating playlist duration data to server.\n"+resp.status);
+				return;
+			}
+		}else{
+			alert("Failed to update playlist duration data to the server.");
+			return;
+		}
+		// refresh itemProps.playlist and reload section display
+		let reload = await itemFetchProps(itemProps.ID);
+		if(reload){
+			if(itemProps.canEdit)
+				reload.canEdit = true;
+			itemProps = reload;
+			reloadItemSection(el, "playlist");
+			alert("Item has been updated.");
+		}
+	}
 }
 
 async function saveItemCat(evt){
@@ -2151,9 +2656,6 @@ function taskModifiedCheckChange(evt){
 	let target = evt.target;
 	let ctl = document.getElementById("taskmodctl");
 	let nom = document.getElementById("tasknomod");
-console.log(target);
-console.log(ctl);
-console.log(nom);
 	if(target.checked){
 		ctl.disabled = false;
 		nom.disabled = false;
@@ -2203,6 +2705,151 @@ async function itemRemoveHash(evt){
 	let hashcol = row.children[1];
 	hashcol.innerText = "";
 	target.outerHTML = `<button class="editbutton" onclick="itemSetHash(event)">Set</button>`;
+}
+
+function updatePLDuration(){
+	let plprops = [];
+	
+	let list = document.getElementById("itemplaylist");
+	let els = list.querySelectorAll('input[type=checkbox]:checked');
+	if(els){
+		for(let i=0; i<els.length; i++){
+			let item = els[i].parentElement.parentElement;
+			let idx = item.getAttribute("data-idx");
+			plprops.push(flatPlist[idx]);
+		}
+	}
+	if(!plprops.length)
+		plprops = flatPlist;
+	el = document.getElementById("pldur");
+	if(el)
+		el.innerText = timeFormat(updateListDuration(plprops));
+}
+
+function plSelectAll(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let list = document.getElementById("itemplaylist");
+	let els = list.querySelectorAll('input[type=checkbox]:not(:checked)');
+	if(els){
+		for(let i=0; i<els.length; i++)
+			els[i].checked = true;
+	}
+	updatePLDuration();
+}
+
+function plUnselectAll(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let list = document.getElementById("itemplaylist");
+	let els = list.querySelectorAll('input[type=checkbox]:checked');
+	if(els){
+		for(let i=0; i<els.length; i++)
+			els[i].checked = false;
+	}
+	updatePLDuration();
+}
+
+function plDelItems(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let target = evt.target;	// the button
+	
+	let list = document.getElementById("itemplaylist");
+	let els = list.querySelectorAll('input[type=checkbox]:checked');
+	if(els){
+		for(let i=0; i<els.length; i++){
+			let el = els[i].parentElement.parentElement;  // the list item
+			let idx = Array.prototype.indexOf.call(list.children, el);
+			if(idx>-1){
+				flatPlist.splice(idx, 1);
+				list.removeChild(el);
+			}
+		}
+		updatePLDuration();
+	}
+}
+
+function plMoveItem(obj, fromIdx, toIdx){
+	flatPlist.splice(toIdx, 0, flatPlist.splice(fromIdx, 1)[0]);
+	updatePLDuration();
+}
+
+function plDupItems(evt){
+	// flatPlist has current list meta data
+	evt.preventDefault();
+	evt.stopPropagation();
+	let list = document.getElementById("itemplaylist");
+	let els = list.querySelectorAll('input[type=checkbox]:checked');
+	if(els){
+		for(let i=0; i<els.length; i++){
+			let el = els[i].parentElement.parentElement // the list item
+			let parent = el.parentElement; // the list
+			let idx = Array.prototype.indexOf.call(parent.children, el);
+			if(idx>-1){
+				let rec = flatPlist[idx];
+				flatPlist.push(flatClone(rec));
+				let clone = el.cloneNode(true);
+				clone.setAttribute("data-idx", -1); // new entry, no index in old metaData
+				let chk = clone.querySelector('input[type=checkbox]:checked');
+				if(chk)
+					chk.checked = false;
+				setDragItemEvents(clone);
+				parent.appendChild(clone);
+			}
+		}
+		updatePLDuration();
+	}
+}
+
+function itemSendToStash(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	appendItemToStash(itemProps);
+}
+
+function plSendToStash(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let list = document.getElementById("itemplaylist");
+	let els = list.querySelectorAll('input[type=checkbox]:checked');
+	if(els){
+		for(let i=0; i<els.length; i++){
+			let el = els[i].parentElement.parentElement // the list item
+			let parent = el.parentElement; // the list
+			let idx = Array.prototype.indexOf.call(parent.children, el);
+			if(idx>-1){
+				let rec = flatPlist[idx];
+				appendItemToStash(rec);
+			}
+		}
+	}
+}
+
+async function plImportStash(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	if(!itemProps.ID){
+		alert("You must save the item (general settings) before trying to add anything to it's playlist.");
+		return;
+	}
+	let stashlist = stashGetSelected();
+	if(stashlist.length && itemProps.canEdit){
+		let el = document.getElementById("itemplaylist");
+		for(let i=0; i<stashlist.length; i++){
+			let item = stashlist[i];
+			let props = await getItemData(item);
+			if(props){
+				item = flattenItemForStash(props);	// this works for the playlist entries as well
+				flatPlist.push(item);
+				let format = `<span style='float: left;'><input type='checkbox'></input></span><span style='float: right;'>$Duration->timeFormat$</span><div style='clear:both;'></div>
+									$Name$<br>
+									$Artist$`;
+				appendDragableItem(true, plMoveItem, item, -1, el, format); // all new items get a -1 index
+			}
+		}
+		updatePLDuration();
+	}
 }
 
 async function refreshItemArtists(evt){
@@ -2422,8 +3069,9 @@ var histdateVal = "";
 
 async function reloadItemSection(el, type){
 	if(type == "general"){
-		let inner = "<form id='genitemform'> ID: "+itemProps.ID+"<br>";
-		
+		let inner = "<form id='genitemform'>";
+		if(itemProps.ID || ((itemProps.Type !== "file") && (itemProps.Type !== "playlist")))
+			inner = "ID: "+itemProps.ID+"<br>";
 		inner += "Name: <input type='text' size='45' name='Name'";
 		inner += " value='"+quoteattr(itemProps.Name)+"'";
 		if(itemProps.canEdit)
@@ -2438,31 +3086,32 @@ async function reloadItemSection(el, type){
 			inner += "></input><br>";
 		else
 			inner += " readonly></input><br>";
-		
-		inner += "Tag: <input type='text' size='45' name='Tag'";
-		if(itemProps.Tag)
-			inner += " value='"+quoteattr(itemProps.Tag)+"'";
-		if(itemProps.canEdit)
-			inner += "></input><br>";
-		else
-			inner += " readonly></input><br>";
+		if(itemProps.ID || ((itemProps.Type !== "file") && (itemProps.Type !== "playlist"))){
+			inner += "Tag: <input type='text' size='45' name='Tag'";
+			if(itemProps.Tag)
+				inner += " value='"+quoteattr(itemProps.Tag)+"'";
+			if(itemProps.canEdit)
+				inner += "></input><br>";
+			else
+				inner += " readonly></input><br>";
+				
+			inner += "Added: ";
+			if(itemProps.Added)
+				inner += unixTimeToDateStr(itemProps.Added);
+			inner +="<br>";
 			
-		inner += "Added: ";
-		if(itemProps.Added)
-			inner += unixTimeToDateStr(itemProps.Added);
-		inner +="<br>";
-		
-		inner += "Script:<br>";
-		inner += "<textarea rows='6' cols='58' name='Script'";
+			inner += "Script:<br>";
+			inner += "<textarea rows='6' cols='58' name='Script'";
+			if(itemProps.canEdit)
+				inner += ">";
+			else
+				inner += " readonly>";
+			if(itemProps.Script)
+				inner += quoteattr(itemProps.Script);
+			inner += "</textarea>";
+		}
 		if(itemProps.canEdit)
-			inner += ">";
-		else
-			inner += " readonly>";
-		if(itemProps.Script)
-			inner += quoteattr(itemProps.Script);
-		inner += "</textarea>";
-		if(itemProps.canEdit)
-			inner += "<p><button id='savegenbut' name='submit' onclick='saveItemGeneral(event)'>Save General Properties</button>";
+			inner += "<p><button id='savegenbut' name='submit' onclick='saveItemGeneral(event)'>Save General Properties</button></p>";
 		el.innerHTML = inner + "</form>";
 	}else if(type == "categories"){
 		let actions = false;
@@ -2582,10 +3231,12 @@ async function reloadItemSection(el, type){
 		}
 	}else if(type == "file"){
 		let inner = "";
-		if(parseInt(itemProps.file.Missing))
-			inner += "<strong><center>File MISSING</center></strong>";
-		else
-			inner += "<strong><center>File Good</center></strong>";
+		if(itemProps.ID){
+			if(parseInt(itemProps.file.Missing))
+				inner += "<strong><center>File MISSING</center></strong>";
+			else
+				inner += "<strong><center>File Good</center></strong>";
+		}
 		inner += `<table class="tableleftj" stype="overflow-wrap: break-word;">`;
 		
 		inner += "<tr><td width='15%'>Artist</td><td>";
@@ -2627,70 +3278,73 @@ async function reloadItemSection(el, type){
 		else
 			inner += " readonly></input>";
 		inner += "</td>";
+		if(itemProps.ID){
+			inner += "<tr><td width='15%'>Intro</td><td>";
+			inner += "<input type='text' size='10' name='Intro'";
+			inner += " value='"+timeFormat(itemProps.file.Intro)+"'";
+			if(itemProps.canEdit)
+				inner += "></input>";
+			else
+				inner += " readonly></input>";
+			inner += "</td>";
 
-		inner += "<tr><td width='15%'>Intro</td><td>";
-		inner += "<input type='text' size='10' name='Intro'";
-		inner += " value='"+timeFormat(itemProps.file.Intro)+"'";
-		if(itemProps.canEdit)
-			inner += "></input>";
-		else
-			inner += " readonly></input>";
-		inner += "</td>";
+			inner += "<tr><td>SegIn</td><td>";
+			inner += "<input type='text' size='10' name='SegIn'";
+			inner += " value='"+timeFormat(itemProps.file.SegIn)+"'";
+			if(itemProps.canEdit)
+				inner += "></input>";
+			else
+				inner += " readonly></input>";
+			inner += "</td>";
 
-		inner += "<tr><td>SegIn</td><td>";
-		inner += "<input type='text' size='10' name='SegIn'";
-		inner += " value='"+timeFormat(itemProps.file.SegIn)+"'";
-		if(itemProps.canEdit)
-			inner += "></input>";
-		else
-			inner += " readonly></input>";
-		inner += "</td>";
+			inner += "<tr><td>SegOut</td><td>";
+			let fade = 0.0;
+			let seg = parseFloat(itemProps.file.SegOut);
+			if(isNaN(seg))
+				seg = 0.0;
+			if(itemProps.file.FadeOut)
+				fade = parseFloat(itemProps.file.FadeOut);
+			if(fade)
+				seg = fade;
+			inner += "<input type='text' size='10' name='SegOut'";
+			inner += " value='"+timeFormat(seg)+"'";
+			if(itemProps.canEdit)
+				inner += "></input>";
+			else
+				inner += " readonly></input>";
+				
+			if(fade)
+				inner += " Fade <input type='checkbox' id='itemFade' name='fade' checked";
+			else
+				inner += " Fade <input type='checkbox' id='itemFade' name='fade'";
+			if(!itemProps.canEdit)
+				inner += " disabled>";
+			else
+				inner += ">";
+			inner += "</td>";
 
-		inner += "<tr><td>SegOut</td><td>";
-		let fade = 0.0;
-		let seg = parseFloat(itemProps.file.SegOut);
-		if(isNaN(seg))
-			seg = 0.0;
-		if(itemProps.file.FadeOut)
-			fade = parseFloat(itemProps.file.FadeOut);
-		if(fade)
-			seg = fade;
-		inner += "<input type='text' size='10' name='SegOut'";
-		inner += " value='"+timeFormat(seg)+"'";
-		if(itemProps.canEdit)
-			inner += "></input>";
-		else
-			inner += " readonly></input>";
+			inner += "<tr><td>Outcue</td><td>";
+			inner += "<input type='text' size='45' name='OutCue'";
+			if(itemProps.Tag)
+				inner += " value='"+quoteattr(itemProps.file.Outcue)+"'";
+			if(itemProps.canEdit)
+				inner += "></input>";
+			else
+				inner += " readonly></input>";
+			inner += "</td>";
 			
-		if(fade)
-			inner += " Fade <input type='checkbox' id='itemFade' name='fade' checked";
-		else
-			inner += " Fade <input type='checkbox' id='itemFade' name='fade'";
-		if(!itemProps.canEdit)
-			inner += " disabled>";
-		else
-			inner += ">";
-		inner += "</td>";
+			let vol = parseFloat(itemProps.file.Volume);
+			if(!vol)
+				vol = 1.0; // zero or empty is unity gain
+			vol = Math.round(20.0 * Math.log10(vol));
+			inner += "<tr>";
+			inner += "<td>Volume</td><td>";
 
-		inner += "<tr><td>Outcue</td><td>";
-		inner += "<input type='text' size='45' name='OutCue'";
-		if(itemProps.Tag)
-			inner += " value='"+quoteattr(itemProps.file.Outcue)+"'";
-		if(itemProps.canEdit)
-			inner += "></input>";
-		else
-			inner += " readonly></input>";
-		inner += "</td>";
-		
-		let vol = parseFloat(itemProps.file.Volume);
-		if(!vol)
-			vol = 1.0; // zero or empty is unity gain
-		vol = Math.round(20.0 * Math.log10(vol));
-		inner += "<tr><td>Volume</td><td>";
-
-		inner += "<input type='range' name='Volume' min='-60' max='20' oninput='itemVolChange(this)' value='"+vol+"'>";
-		inner += "<div style='float:right;'>"+vol+" dB</div>";
-		inner += "</td></table></form>";
+			inner += "<input type='range' name='Volume' min='-60' max='20' oninput='itemVolChange(this)' value='"+vol+"'>";
+			inner += "<div style='float:right;'>"+vol+" dB</div>";
+			inner += "</td>";
+		}
+		inner += "</table></form>";
 
 		inner += `<table class="tableleftj" stype="overflow-wrap: break-word;"><form id='fileitemform'>`;
 		inner += "<tr><td width='15%'>Prefix</td><td>";
@@ -2785,48 +3439,44 @@ async function reloadItemSection(el, type){
 		el.innerHTML = inner;
 		itemLoadTaskDiv();
 	}else if(type == "playlist"){
-		let inner = "<form id='playlistitemform'>";
-		inner += "Name: <input type='text' name='Name'";
-		inner += " value='"+quoteattr(itemProps.Name)+"'";
+		let inner = "<span style='float: left;'>Total Duration:</span><span id='pldur' style='float: right;'>"+timeFormat(itemProps.Duration)+"</span><div style='clear:both;'></div><p>";
+		inner += 	`<button onclick="plSelectAll(event)">Selected all</button>
+						<button onclick="plUnselectAll(event)">Unselect all</button><br>
+						<ul class="ddlist" id="itemplaylist">
+						</ul><p>
+						<button onclick="plSendToStash(event)">Send selected to Stash</button>`;
 		if(itemProps.canEdit)
-			inner += "></input><br>";
-		else
-			inner += " readonly></input><br>";
-			
-		inner += "Duration: <input type='text' name='Duration'";
-		inner += " value='"+timeFormat(itemProps.Duration)+"'";
-		
-		if(itemProps.Type === "task")		// only tasks have editable durations
-			inner += "></input><br>";
-		else
-			inner += " readonly></input><br>";
-		
-		inner += "Tag: <input type='text' name='Tag'";
-		if(itemProps.Tag)
-			inner += " value='"+quoteattr(itemProps.Tag)+"'";
+			inner += `<button onclick="plImportStash(event)">Import selected from stash</button>
+			<button onclick="plDupItems(event)">Duplicate selected</button>
+			<button onclick="plDelItems(event)">Delete selected</button><p>
+			<button id='savegenbut' name='submit' onclick='saveItemPlaylist(event)'>Save Playlist Properties</button>`;
+		el.innerHTML = inner;
+		el = document.getElementById("itemplaylist");
+		flatPlist = flattenPlaylistArray(itemProps.playlist); // note: this is a global var.
+		let format = `<span style='float: left;'><input type='checkbox' onclick='updatePLDuration(event)'></input></span><span style='float: right;'>$Duration->timeFormat$</span><div style='clear:both;'></div>
+							$Name$<br>
+							$Artist$`;
 		if(itemProps.canEdit)
-			inner += "></input><br>";
+			genDragableListFromObjectArray(true, plMoveItem, flatPlist, el, format);
 		else
-			inner += " readonly></input><br>";
-			
-		inner += "Added: ";
-		if(itemProps.Added)
-			inner += unixTimeToDateStr(itemProps.Added);
-		inner +="<br>";
-		
-		inner += "Script:<br>";
-		inner += "<textarea rows='6' cols='58' name='Script'";
-		if(itemProps.canEdit)
-			inner += ">";
-		else
-			inner += " readonly>";
-		if(itemProps.Script)
-			inner += quoteattr(itemProps.Script);
-		inner += "</textarea>";
-		if(itemProps.canEdit)
-			inner += "<button id='savegenbut' name='submit' onclick='saveItemPlaylist(event)'>Save Playlist Properties</button>";
-		el.innerHTML = inner + "</form>";
+			genDragableListFromObjectArray(false, false, flatPlist, el, format);
 	}
+}
+
+function flattenPlaylistArray(playlist){
+	let newlist = [];
+	for(let i=0; i<playlist.length; i++){
+		let entry = playlist[i];
+		let flat = {};
+		for(let j=0; j<entry.length; j++){
+			let prop = entry[j];
+			flat[prop.Property] = prop.Value;
+		}
+		newlist.push(flat);
+	}
+	// calculate and back fill durration, in case it's missing
+	updateListDuration(newlist);
+	return newlist;
 }
 
 async function itemLoadTaskDiv(evt){
@@ -3272,7 +3922,7 @@ async function showPropItem(panel, container){
 
 async function showTocItem(panel, container){
 	let inner = "";
-	if(itemProps.Type === "file")
+	if(itemProps.ID && (itemProps.Type === "file"))
 		inner += "<audio controls id='itemcueplayer' width='100%'><source id='itemcuesource' src='library/download/"+itemProps.ID+"''>Your browser does not support the audio tag.</audio>";
 
 	inner += `<button class="accordion" id="genbut" onclick="selectAccordType(event, reloadItemSection, 'general')">General</button>
@@ -3283,32 +3933,34 @@ async function showTocItem(panel, container){
 	inner += itemProps.Type;
 	inner += `</button>
 	<div class="accpanel">
-	</div>
-	<button class="accordion" onclick="selectAccordType(event, reloadItemSection, 'categories')">Categories</button>
-	<div class="accpanel">
-	</div>
-	<button class="accordion" onclick="selectAccordType(event, reloadItemSection, 'schedule')">Schedule</button>
-	<div id="itemSchedPanel" class="accpanel">
-	</div>
-	<button class="accordion" onclick="selectAccordType(event, reloadItemSection, 'history')">History</button>
-	<div id="itemHistPanel" class="accpanel">
-	</div>
-	<button class="accordion" onclick="selectAccordType(event, reloadItemSection, 'custom')">Custom</button>
-	<div class="accpanel">
-	</div>
-	<button class="accordion" onclick="selectAccordType(event, reloadItemSection, 'rest')">Rest</button>
-	<div class="accpanel">
 	</div>`;
+	if(itemProps.ID || ((itemProps.Type !== "file") && (itemProps.Type !== "playlist"))){
+		inner += `<button class="accordion" onclick="selectAccordType(event, reloadItemSection, 'categories')">Categories</button>
+		<div class="accpanel">
+		</div>
+		<button class="accordion" onclick="selectAccordType(event, reloadItemSection, 'schedule')">Schedule</button>
+		<div id="itemSchedPanel" class="accpanel">
+		</div>
+		<button class="accordion" onclick="selectAccordType(event, reloadItemSection, 'history')">History</button>
+		<div id="itemHistPanel" class="accpanel">
+		</div>
+		<button class="accordion" onclick="selectAccordType(event, reloadItemSection, 'custom')">Custom</button>
+		<div class="accpanel">
+		</div>
+		<button class="accordion" onclick="selectAccordType(event, reloadItemSection, 'rest')">Rest</button>
+		<div class="accpanel">
+		</div>`;
+	}
 	if(itemProps.canEdit){
 		inner += "<p><button id='delitembut' onclick='itemDelete(event)'>Delete Item</button>";
-		if(itemProps.Type === "file"){
+		if(itemProps.ID && (itemProps.Type === "file")){
 			inner += " Delete file too: <input type='checkbox' id='delfiletoo' checked></input>";
 			inner += `<p><button id='expitembut' onclick='itemExport(event)'>Download</button>
 						<select id='downloadtype'>
 							<option value='file' $ifvalsel>Audio File</option>
 							<option value='json' $ifvalsel>jSON File</option>
 						</select>`;
-		}else if(itemProps.Type === "playlist")
+		}else if(itemProps.ID && (itemProps.Type === "playlist"))
 			inner += `<p><button id='expitembut' onclick='itemExport(event)'>Download</button>
 						<select id='downloadtype'>
 							<option value='fpl' $ifvalsel>Audiorack FPL file</option>
@@ -3317,10 +3969,12 @@ async function showTocItem(panel, container){
 							<option value='json' $ifvalsel>jSON File</option>
 						</select><br>
 						Add offset (seconds) to times: <input type='text' id='itemtimeoffset' size='5' value='0'></input>`;
-		else
+		else if(itemProps.ID)
 			inner += `<p><button id='expitembut' onclick='itemExport(event)'>Download</button> jSON File`;
 		inner += `<a id="filedltarget" style="display: none"></a>`;
 	}
+	inner += `<p><button onclick='itemSendToStash(event)'>Item to Stash</button>`;
+
 	container.innerHTML = inner;
 	panel.style.width = "400px";
 	let el = document.getElementById("showinfobtn");
@@ -3391,12 +4045,57 @@ async function itemPropsMeta(id, parent){
 	}
 }
 
-async function showItem(props, canEdit, noShow){
+async function getItemData(props){
 	if(props.tocID){
 		// query API for item properties
 		let response;
 		let data = false;
 		data = await itemFetchProps(props.tocID);
+		if(data)
+			return data;
+	}else if(props.ID){
+		// query API for item properties
+		let response;
+		let data = false;
+		data = await itemFetchProps(props.ID);
+		if(data)
+			return data;
+	}else if(props.tmpfile){
+		// query API for tmpfile properties
+		let data = false;
+		let api = "library/info" + props.tmpfile;
+		let resp = await fetchContent(api);
+		if(resp){
+			if(!resp.ok){
+				alert("Got an error retreaving file info from server.\n"+resp.status);
+				return false;
+			}
+			data = await resp.json();
+			data.tmpfile = props.tmpfile;
+		}else{
+			alert("Failed to retreaving file info from server.");
+			return false;
+		}
+		if(data)
+			return data;
+	}
+	return false;
+}
+
+async function showItem(props, canEdit, noShow){
+	if(props.tocID){
+		let data = await getItemData(props);
+		if(data){
+			itemProps = data;
+			itemProps.canEdit = canEdit;
+			if(noShow)
+				return;
+			let el = document.getElementById("infopane");
+			let da = document.getElementById("infodata");
+			showTocItem(el, da);
+		}
+	}else if(props.ID){
+		let data = await getItemData(props);
 		if(data){
 			itemProps = data;
 			itemProps.canEdit = canEdit;
@@ -3468,6 +4167,17 @@ async function showItem(props, canEdit, noShow){
 					el.style.display = "none";
 			}
 		}
+	}else if(props.tmpfile){
+		let data = await getItemData(props);
+		if(data){
+			itemProps = data;
+			itemProps.canEdit = false;
+			if(noShow)
+				return;
+			let el = document.getElementById("infopane");
+			let da = document.getElementById("infodata");
+			showTocItem(el, da);
+		}
 	}
 }
 
@@ -3535,7 +4245,7 @@ async function clickDbCrawl(evt){
 		let pass = {path: "", pace:1.0};
 		for(let i = 0 ; i < elements.length ; i++){
 			let item = elements.item(i);
-			if(item.type === "radio"){
+			if((item.type === "radio") || (item.type === "checkbox")){
 				if(!item.checked)
 					continue;
 			}
@@ -3569,6 +4279,8 @@ async function clickDbCrawl(evt){
 			alert("File path to directory needs to be specified.");
 			return;
 		}
+		if(obj.add)
+			pass.add = obj.add;
 		/* run the actual dbcrawl process */
 		resp = await fetch("library/crawl", {
 				method: 'POST',
@@ -4167,6 +4879,53 @@ function fileRowClick(event){
 	}
 }
 
+async function filesToStash(evt){
+	if(evt)
+		evt.preventDefault();
+	let rows = document.getElementById("filelist").firstChild.firstChild.childNodes;
+	for(let i=0; i<rows.length; i++){
+		let sel = rows[i].childNodes[0].firstChild;	// select column
+		if((sel.localName === "input") && sel.checked){
+			let path = filesPath+"/"+rows[i].childNodes[1].innerText;
+			// query API for tmpfile properties
+			let data = false;
+			let api = "library/info" + path;
+			let resp = await fetchContent(api);
+			if(resp){
+				if(!resp.ok){
+					alert("Got an error retreaving file info from server.\n"+resp.status);
+					return;
+				}
+				data = await resp.json();
+				data.tmpfile = path;
+			}else{
+				alert("Failed to retreaving file info from server.");
+				return;
+			}
+			if(data){
+				itemProps = data;
+				data.canEdit = false;
+				appendItemToStash(data);
+			}
+		}
+	}
+}
+
+async function getFileInfo(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let row = event.target.parentElement.parentElement;
+	let path = filesPath+"/"+row.childNodes[1].innerText;
+	showItem({tmpfile: path});
+}
+
+function setRowAction(obj){
+	if(!obj.isDir){
+		return `<button class="editbutton" onclick="getFileInfo(event)">Info</button>`;
+	}else
+		return "";
+}
+
 async function loadFilesTbl(){
 	let el = document.getElementById("filelist");
 	genPopulateTableFromArray(false, el); // clear any existing display
@@ -4180,13 +4939,14 @@ async function loadFilesTbl(){
 		if(resp.ok){
 			let list = await resp.json();
 			filesList = list;
+			let action = `$setRowAction$`;
 			let hidden = {isDir: "Select", id: "Name", created: false, modified: false, size: "Size (kiB)"};
 			let haction = `<button class="editbutton" onclick="selectAllFiles(event)">Select All</button>
 								<button class="editbutton" onclick="unselectAllFiles(event)">Unselect All</button>`;
 			let fields = {id: "<input type='hidden' name='Name' data-id='$id' data-index='$i'></input>$val",
 								isDir: "$iftrue<i class='fa fa-folder-open' aria-hidden='true'>$iftrue$iffalse<input type='checkbox'/>$iffalse"};
 			let colWidth = {action:"100px", size:"90px", isDir:"40px"};
-			genPopulateTableFromArray(list, el, hidden, fileRowClick, false, false, false, haction, fields, colWidth);
+			genPopulateTableFromArray(list, el, hidden, fileRowClick, false, false, action, haction, fields, colWidth);
 			return;
 		}
 	}
@@ -4369,9 +5129,9 @@ setInterval(function() {
 }, sseReconFreqMilliSec);
 
 function sseMsgObjShow(val){
-	let data = JSON.stringify(val);
-	let el = document.getElementById("ssemsg"); 
-	el.innerHTML ="Server Msg: "+data;
+//	let data = JSON.stringify(val);
+//	let el = document.getElementById("ssemsg"); 
+//	el.innerHTML ="Server Msg: "+data;
 	
 	let obj = val.dbsync;
 	if(obj){
@@ -4539,4 +5299,5 @@ window.onload = function(){
 	browseType.registerCallback(browseTypeRowSelUpdate);
 	sseMsgObj.registerCallback(sseMsgObjShow);
 	startupContent();
+	loadStashRecallOnLoad();
 }

@@ -1215,7 +1215,7 @@ function setIn(request, response, params, dirs){
 			return;
 		}
 		// check for permission
-		if((request.session.permission != "admin") &&  (request.session.permission != "manage")){
+		if(request.session.permission == "studio"){	// studio permission is not allowed to make changes, all others are
 			response.status(401);
 			response.end();
 			return;
@@ -1570,7 +1570,7 @@ function deleteID(request, response, params, dirs){
 			return;
 		}
 		// check for permission
-		if((request.session.permission != "admin") &&  (request.session.permission != "manage")){
+		if(request.session.permission == "studio"){	// studio permission is not allowed to make changes, all others are
 			response.status(401);
 			response.end();
 			return;
@@ -1854,6 +1854,27 @@ function deleteID(request, response, params, dirs){
 					response.end();
 				}else{
 					connection.query("DELETE FROM "+locConf['prefix']+"category_item WHERE RID = "+ID+";", function(err, results){
+						if(err){
+							connection.release();
+							response.status(304);
+							response.send(err.code);
+							response.end();
+						}else{
+							connection.release();
+							response.status(201);
+							response.end();
+						}
+					});
+				}
+			});
+		}else if(table == 'playlist'){
+			libpool.getConnection((err, connection) => {
+				if(err){
+					response.status(400);
+					response.send(err.code);
+					response.end();
+				}else{
+					connection.query("DELETE FROM "+locConf['prefix']+"playlist WHERE RID = "+ID+";", function(err, results){
 						if(err){
 							connection.release();
 							response.status(304);
@@ -2719,11 +2740,6 @@ function getItem(request, response, params, dirs){
 function calcLPLDuration(request, response, dirs){
 	let ID = 0;
 	if(dirs[3]  && (ID = parseInt(dirs[3], 10))){
-		if((request.session.permission != "admin") &&  (request.session.permission != "manage")){
-			response.status(401);
-			response.end();
-			return;
-		}
 		libpool.getConnection((err, connection) => {
 			if(err){
 				response.status(400);
@@ -2751,10 +2767,28 @@ function calcLPLDuration(request, response, dirs){
 							obj[results[i].Property] = results[i].Value;
 						}
 						let dur = calcFPLDuration(re, 0);
-						response.status(201);
-						response.json(dur);
-						connection.release();
-						response.end();
+						// check for permission to update
+						if(request.session.permission == "studio"){	// studio permission is not allowed to make changes, all others are
+							response.status(401);
+							response.end();
+							connection.release(); // return the connection to pool
+							return;
+						}
+						// Update Duration in the item's toc properties
+						let query = "UPDATE "+locConf['prefix']+"toc";
+						query += " SET Duration = "+dur;
+						query += " WHERE ID ="+libpool.escape(ID)+";";
+						connection.query(query, function (err, res, fields) {
+							if(err){
+								response.status(400);
+								response.send(err.code);
+							}else{
+								response.status(201);
+								response.json(dur);
+							}
+							connection.release(); // return the connection to pool
+							response.end();
+						});
 					}
 				});
 			}
@@ -3009,11 +3043,6 @@ function getDownload(request, response, params, dirs){
 			response.end();
 			return;
 		}
-		if((request.session.permission != "admin") &&  (request.session.permission != "manage")){
-			response.status(401);
-			response.end();
-			return;
-		}
 		libpool.getConnection((err, connection) => {
 			if(err){
 				response.status(400);
@@ -3242,18 +3271,27 @@ function fplLineInterp(line, last, donecb){
 			val = line.substring(pos+1);
 	}
 	if(key.length){
+		if(key === "type")
+			val = val.toLowerCase();	// enforce lower case requitrment for tyep value
 		if(this.params.index){	// playlist item level properties
-			if(this.params.props.filepl == undefined)
-				this.params.props.filepl = [];
-			if(this.params.props.filepl[this.params.index-1] == undefined)
-				this.params.props.filepl[this.params.index-1] = {};
-			this.params.props.filepl[this.params.index-1][key] = val;
+			if((["ArtistID", "AlbumID", "ID"].includes(key)) && !this.params.dbMatch){
+				// ignore these properties if db fingerprint doesn't match
+				donecb();
+				return;
+			}
+			if(!this.params.props.playlist[this.params.index-1])
+				this.params.props.playlist[this.params.index-1] = [];
+			this.params.props.playlist[this.params.index-1].push({Property: key, Value: val});
 		}else{		// top level playlist properties
 			this.params.props[key] = val;
+			if((key === "Fingerprint") && (dbFingerprint === val))
+				this.params.dbMatch = true;
 		}
 	}else if(line.length == 0){
 		// empty line...
 		this.params.index++;
+		if(this.params.props.playlist == undefined)
+			this.params.props.playlist = [];
 	}
 	donecb();
 }
@@ -3261,7 +3299,7 @@ function fplLineInterp(line, last, donecb){
 async function filePLGetMetaForFile(filepl, props){
 	var index = 0;	// start at zero for parent level.  1, 2,.. are item indexes in the playlist
 	var status = false;
-	let params = {index: 0, props: props};
+	let params = {index: 0, dbMatch: false, props: props};
 	try{
 		status = await processFileLines(filepl, {}, params, fplLineInterp);
 	}catch(err){
@@ -3274,12 +3312,18 @@ async function filePLGetMetaForFile(filepl, props){
 	}
 }
 
-async function getFileMeta(tmpDirFileName){
+async function getFileMeta(tmpDirFileName, fullpath){
 	const trans = {Duration: "Duration", title: "Name", artist: "Artist", album: "Album", "track number": "Track", composer: "Composer", audio: "Audio", Seekable: "Seekable"};
 	let obj = {};
 	let full = false;
-	if(tmpDir.length){
-		let fpath = tmpDir+tmpDirFileName;
+	if(tmpDir.length || fullpath){
+		let fpath = tmpDirFileName;
+		if(!fullpath)
+			fpath = tmpDir+tmpDirFileName;
+		let res = getFilePrefixPoint(fpath);
+		if(res.prefix.length)
+			res.path = res.prefix + "/" + res.path; // double slash between prefix and path as prefix separator in URL, if any
+		let URL = url.pathToFileURL(res.path).href;
 		let params = [fpath];
 		// check for playlist types
 		let fd = await openFile(fpath);
@@ -3291,15 +3335,16 @@ async function getFileMeta(tmpDirFileName){
 				let str = buf.toString();
 				if(str == "Type\tfilepl"){
 					// we have an audiorack playlist file
-					obj.Type = "filepl";
 					try{
 						full = await filePLGetMetaForFile(fpath, obj);
 					}catch(err){
 						full = false;
 					}
-					if(full)
+					if(full){
+						full.Type = "playlist";	// change type to toc playlist so it displays in client
+						full.URL = URL;
 						return full;	// all results
-					else
+					}else
 						return obj;	// empty list
 				}
 			}
@@ -3345,6 +3390,7 @@ async function getFileMeta(tmpDirFileName){
 			let pre = getFilePrefixPoint(fpath);
 			obj.Prefix = pre.prefix;
 			obj.Path = pre.path;
+			obj.URL = URL;
 			return obj;	// OK -> send results
 		}else
 			return {};	// no audio -> results are empty
@@ -3466,21 +3512,21 @@ async function addToCatID(connection, ItemID, catIDs){
 	return true;
 }
 
-async function importFileIntoLibrary(fpath, params){
-	let pass = {id:0, status:-2}; // status=-3 file copy failed, -2, bad file, -1 error, 0 skipped, 1 new/added, 2 cat update existing, 3 replaced existing, 4 fixed existing
+async function importFileIntoLibrary(fpath, params, fullpath){
+	let pass = {id:0, status:-2}; // status=-3 file copy failed, -2 bad file, -1 error, 0 skipped, 1 new/added, 2 cat update existing, 3 replaced existing, 4 fixed existing
 	let ID = 0;
 	let result = {};
 	let meta = {};
 	let dupmode = 0;
 	let dupInfo = false;
 	
-	if(tmpDir.length){
+	if(tmpDir.length || fullpath){
 		// Convert dup parameter to number: skip,catset,replace(delete old),update(if missing)
 		if(params.dup === undefined) dupmode = 0;
 		else if((params.dup === "catset") && params.catid && (params.catid > 0)) dupmode = 2;
 		else if(params.dup === "replace") dupmode = 3;
 		else if(params.dup === "update") dupmode = 4;
-		meta = await getFileMeta(fpath);
+		meta = await getFileMeta(fpath, fullpath);
 		if(meta && Object.keys(meta).length){
 			let conn = false;
 			// valid meta data.  Handle according to type
@@ -3732,20 +3778,24 @@ async function importFileIntoLibrary(fpath, params){
 					}
 				}
 				if(dupmode != 2){	// add new file to media dir and refernce it in the file properties
-					let newPath = await mkMediaDirs();
-					if(newPath.length){
-						fpath = tmpDir+fpath;
-						newPath = await copyFileToDir(fpath, newPath);
-						// attempt to copy an associated fileplaylist as well, if it exists.
-						await copyFileToDir(fpath+".fpl", newPath);
+					let newPath = fpath;
+					if(!fullpath){ // only copy file if not using full path and instead using temp dir relative path.
+						newPath = await mkMediaDirs();
+						if(newPath.length){
+							fpath = tmpDir+fpath;
+							newPath = await copyFileToDir(fpath, newPath);
+							// attempt to copy an associated fileplaylist as well, if it exists.
+							await copyFileToDir(fpath+".fpl", newPath);
+						}
+						if(newPath.length == 0){
+							// copy failed!
+							await asyncRollback(conn);
+							conn.release();
+							pass.status = -3;
+							return pass;
+						}
 					}
-					if(newPath.length == 0){
-						// copy failed!
-						await asyncRollback(conn);
-						conn.release();
-						pass.status = -3;
-						return pass;
-					}
+					
 					let pre = getFilePrefixPoint(newPath);
 					meta.Prefix = pre.prefix;
 					meta.Path = pre.path;
@@ -3855,13 +3905,23 @@ function getFileInfo(request, response, params, dirs){
 	if((tailIdx < 0) || (tailLen > 0)){
 		fpath = request.path.substring(tailIdx + dirs[2].length+1);
 		fpath = decodeURIComponent(fpath);
-		if((request.session.permission != "admin") &&  (request.session.permission != "manage")){
+		if(request.session.loggedin != true){
 			response.status(401);
 			response.end();
 			return;
 		}
 		getFileMeta(fpath).then(result => {
 			if(result && Object.keys(result).length){
+				if(result.Type === "file"){
+					let file = result;
+					result = {Name: file.Name};
+					delete file.Name;
+					result.Duration = file.Duration;
+					delete file.Duration;
+					result.Type = file.Type;
+					delete file.Type;
+					result.file = file;
+				}
 				response.status(200);
 				response.json(result);
 				response.end();
@@ -4049,11 +4109,6 @@ function handleDbInit(request, response, params){
 function getPrefix(request, response, params){
 	if(params.path && params.path.length){
 		let fpath = params.path;
-		if((request.session.permission != "admin") &&  (request.session.permission != "manage")){
-			response.status(401);
-			response.end();
-			return;
-		}
 		let result = getFilePrefixPoint(fpath);
 		if(result){
 			response.status(200); 
@@ -4220,12 +4275,12 @@ function abortDbFileSync(request, response){
 }
 
 function sleep(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-} 
+	return new Promise((resolve) => {
+		setTimeout(resolve, ms);
+	});
+}
 
-async function crawlDirectory(connection, fpath, pace, passStat){
+async function crawlDirectory(connection, fpath, pace, add, passStat){
 	let files = false;
 	let finfo = false;
 	let statistics = false;
@@ -4273,7 +4328,7 @@ async function crawlDirectory(connection, fpath, pace, passStat){
 		if(finfo.isDirectory()){
 			// recurse up down directory tree.  We pass statistics so they can be updates and so recusive calls 
 			// know not to start a status  message time... it's already running
-			await crawlDirectory(connection, thisFile, pace, statistics);
+			await crawlDirectory(connection, thisFile, pace, add, statistics);
 		}else{
 			// check file for matching hash and missing status in library
 			statistics.curPath = thisFile;
@@ -4317,7 +4372,11 @@ async function crawlDirectory(connection, fpath, pace, passStat){
 						statistics.error++;
 						console.log(err);
 					}
-					
+				}else if(add){ 
+					// not missing... see if it's new and add it if it is 
+					let stat = await importFileIntoLibrary(thisFile, {}, true); // no params defauls to skip duplicate mode
+					if(stat.status == 1)
+						statistics.found++;
 				}
 			}
 		}
@@ -4348,6 +4407,9 @@ function startDbFileSearch(request, response, params){
 				response.end();
 			}else{
 				let pace = 1.0;
+				let add = false;
+				if(params.add)
+					add = true;
 				if(params.pace && params.pace.length){
 					pace = parseFloat(params.pace);
 					if(pace == 0.0){
@@ -4363,7 +4425,7 @@ function startDbFileSearch(request, response, params){
 					response.status(400);
 					response.end("no default mediaDir path setting, or specific path set");
 				}
-				dbSearchRunning = crawlDirectory(connection, fpath, pace, false).then(() => {
+				dbSearchRunning = crawlDirectory(connection, fpath, pace, add, false).then(() => {
 					// done running: clear the dbSearchRunning variable
 					dbSearchRunning = false;
 					connection.release();
@@ -4504,6 +4566,7 @@ module.exports = {
 		}else if(dirs[2] == 'hash'){		// hash/ID
 			getHashForFileID(response, dirs);
 		}else if(dirs[2] == 'pldurcalc'){				// pldurcalc/ID -> returns the calculated duration from the actual list in seconds
+																	// and updates this duration in the item's properties
 			calcLPLDuration(request, response, dirs);
 		}else if(dirs[2] == 'download'){
 			getDownload(request, response, params, dirs);	// /download/ID	triggers a download of the file associated with the file type item
@@ -4544,9 +4607,11 @@ module.exports = {
 		}else if(dirs[2] == 'synchalt'){
 			abortDbFileSync(request, response);		// stops a dbSync process running in the background
 		}else if(dirs[2] == 'crawl'){
-			startDbFileSearch(request, response, params);		// /crawl?path=the/path/to/crawl&pace=0.5
+			startDbFileSearch(request, response, params);		// /crawl?path=the/path/to/crawl&pace=0.5{&add=1}
 																				// pace is in seconds, and defaults to 1.0
-																				// if no path is specified, the mediaDir setting path is used
+																				// if no path is specified, the mediaDir setting path is used.
+																				// add=1 specifies that found audio items are to be added to 
+																				// the library if they are not already present based on hash code.
 		}else if(dirs[2] == 'crawlhalt'){
 			abortDbFileSearch(request, response);		// stops a dbFileSearch process running in the background
 		}else{
