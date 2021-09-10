@@ -37,6 +37,7 @@ class watchableValue {
 includeScript("vumeter.js");
 var cred = new watchableValue(false);
 var locName = new watchableValue(false);
+var locationID;
 var studioName = new watchableValue("");
 var sseData = {};
 var browseData;
@@ -72,6 +73,14 @@ function getStash(){
 	return result; 
 }
 
+function setStorageLoc(locID){
+	localStorage.setItem("location", locID);
+}
+
+function getStorageLoc(){
+	return localStorage.getItem("location");
+}
+
 function quoteattr(s){
 	if(s){
 		return new Option(s).innerHTML;
@@ -96,6 +105,15 @@ function unixTimeToDateStr(ts){
 		let dateObj = new Date(millis);
 		const options = { year: 'numeric', month: 'long', day: 'numeric' };
 		return dateObj.toLocaleDateString(undefined, options);
+	}else
+		return "";
+}
+
+function unixTimeToTimeStr(ts){
+	if(ts){
+		let millis = ts * 1000;
+		let dateObj = new Date(millis);
+		return dateObj.toLocaleTimeString();
 	}else
 		return "";
 }
@@ -244,6 +262,13 @@ async function fetchContent(url, options){
 			logOut();
 	}else if(response.ok)
 		return response;
+	else{
+		let msg = await response.text();
+		if(msg && msg.length){
+			let obj = {statusText: msg, status: response.status, ok: response.ok};
+			return obj;
+		}
+	}
 	return false;
 }
 
@@ -295,7 +320,7 @@ async function getCatList(){
 			let list = await resp.json();
 			catListCache.setValue(list, true);
 		}else{
-			alert("Got an error fetching categories from server.\n"+resp.status);
+			alert("Got an error fetching categories from server.\n"+resp.statusText);
 		}
 	}else{
 		alert("Failed to fetch categories from the server.");
@@ -310,7 +335,7 @@ async function getArtistList(){
 			let list = await resp.json();
 			artListCache.setValue(list, true);
 		}else{
-			alert("Got an error fetching artists from server.\n"+resp.status);
+			alert("Got an error fetching artists from server.\n"+resp.statusText);
 		}
 	}else{
 		alert("Failed to fetch artists from the server.");
@@ -325,7 +350,7 @@ async function getAlbumList(){
 			let list = await resp.json();
 			albListCache.setValue(list, true);
 		}else{
-			alert("Got an error fetching albums from server.\n"+resp.status);
+			alert("Got an error fetching albums from server.\n"+resp.statusText);
 		}
 	}else{
 		alert("Failed to fetch albums from the server.");
@@ -342,7 +367,7 @@ async function getNameForCat(catID){
 				if(result.length)
 					return result[0].Name;
 			}else{
-				alert("Got an error fetching category name from server.\n"+resp.status);
+				alert("Got an error fetching category name from server.\n"+resp.statusText);
 				return "unknown";
 			}
 		}
@@ -359,8 +384,18 @@ async function getLocList(){
 		if(resp.ok){
 			let list = await resp.json();
 			locListCache.setValue(list, true);
+			locationID = getStorageLoc();
+			let name = false;
+			for(let i = 0; i<list.length; i++){
+				if(list[i].id == locationID){
+					name = list[i].Name;
+					break;
+				}
+			}
+			if(name)
+				locName.setValue(name);
 		}else{
-			alert("Got an error fetching categories from server.\n"+resp.status);
+			alert("Got an error fetching categories from server.\n"+resp.statusText);
 		}
 	}else{
 		alert("Failed to fetch categories from the server.");
@@ -407,6 +442,10 @@ async function loginSubmit(event){
 function locMenuChange(event){
 	let element = event.currentTarget;
 	locName.setValue(element.value);
+	if(element.selectedOptions && element.selectedOptions.length){
+		locationID = element.selectedOptions[0].getAttribute("data-id");
+		setStorageLoc(locationID);
+	}
 }
 
 function clickAccordType(evt, cb, param){
@@ -454,7 +493,7 @@ function selectAccordType(evt, cb, param){
 	cb(panel, param);
 }
 
-function toggleShowSearchList(evt){ ; 
+function toggleShowSearchList(evt){ 
 	// Expected html structure:
 	// <button>			the target (onClick)
 	// <div>			Toggle display (visibility)
@@ -505,7 +544,7 @@ function buildSearchList(el, list, cb){
 	// <button>			
 	// <div>			
 	//		<input>	Search field - the target (onKeyup)
-	//		<div>		List contents el - generate a div for each liste entry inside, with data-id is set 
+	//		<div>		List contents (el) - generate a div for each liste entry inside, with data-id is set 
 	//					to id property, element innerText is set to Name property. cb is the selection callabck.
 	el.innerHTML = "";
 	if(list){
@@ -620,7 +659,7 @@ function locMenuRefresh(value){
 	if(element && value){
 		let inner = "<option val='' onClick='getLocList()'>Reload List</option>";
 		for(let i=0; i < value.length; i++)
-			inner += "<option val="+value[i].Name+">"+value[i].Name+"</option>";
+			inner += "<option val='"+value[i].Name+"' data-id='"+value[i].id+"'>"+value[i].Name+"</option>";
 		element.innerHTML = inner;
 	}
 }
@@ -709,6 +748,8 @@ function showTabElement(el, id, pass){
 		loadLocationMgtTbl();
 	if((id === "files") && (filesPath === false))
 		loadFilesTbl();
+	if(id === "query")
+		libQueryRefreshList();
 } 
 
 function getRowInputProps(row){
@@ -837,7 +878,7 @@ function genPopulateTableFromArray(list, el, colMap, rowClick, headClick, sortVa
 					let val = list[i][cols[j]];
 					if(fieldTypes[cols[j]] instanceof Function){
 						// fieldType is a function... have the function process the value
-						inner = fieldTypes[cols[j]](val, list[i]);
+						inner = fieldTypes[cols[j]](val, list[i], i);
 					}else{
 						inner = fieldTypes[cols[j]];
 						if(list[i][cols[j]] == true)
@@ -949,7 +990,7 @@ function insertTableRow(kvcols, el, idx, colMap, rowClick, actions, fieldTypes){
 			let val = kvcols[cols[i]];
 			if(fieldTypes[cols[i]] instanceof Function){
 				// fieldType is a function... have the function process the value
-				inner = fieldTypes[cols[i]](val);
+				inner = fieldTypes[cols[i]](val, kvcols, idx);
 			}else{
 				inner = fieldTypes[cols[i]];
 				if(kvcols[cols[i]] == true)
@@ -999,7 +1040,7 @@ function insertTableRow(kvcols, el, idx, colMap, rowClick, actions, fieldTypes){
 					inner = inner.replaceAll("$RID", kvcols.RID);
 				else
 					inner = inner.replaceAll("$RID", "");
-				inner = inner.replaceAll("$i", i);
+				inner = inner.replaceAll("$i", idx);
 			}
 		}else if(cols[i] === "Duration")	// special case for displaying duration
 			inner = timeFormat(kvcols[cols[i]]);
@@ -1086,7 +1127,7 @@ function setDragItemEvents(i, dragcb, dropcb){
 	});
 
 	i.addEventListener("dragenter", function(){
-		if(this != curDrag){
+		if((this != curDrag) && (this.parentNode === curDrag.parentNode)){
 			this.classList.add("active");
 		}
 	});
@@ -1113,7 +1154,7 @@ function setDragItemEvents(i, dragcb, dropcb){
 		evt.preventDefault();
 		let target = evt.target.parentNode;
 		let items = target.getElementsByTagName("li");
-		if(this != curDrag){
+		if((this != curDrag) && (this.parentNode === curDrag.parentNode)){
 			let currentpos = 0, droppedpos = 0;
 			for(let it=0; it<items.length; it++){
 				if(curDrag == items[it])
@@ -1333,7 +1374,7 @@ async function getMetaPropsForParent(str, parent){
 				list[i] = list[i].Property;
 			return list;
 		}else{
-			alert("Got an error fetching live list from server.\n"+resp.status);
+			alert("Got an error fetching live list from server.\n"+resp.statusText);
 		}
 	}else{
 		alert("Failed to fetch live list from the server.");
@@ -1410,7 +1451,7 @@ async function saveItemGeneral(evt){
 				else
 					alert("Item has been updated.");
 			}else{
-				alert("Got an error saving data to server.\n"+resp.status);
+				alert("Got an error saving data to server.\n"+resp.statusText);
 			}
 		}else{
 			alert("Failed to save data to the server.");
@@ -1499,7 +1540,7 @@ async function saveItemFile(evt){
 					alert("Item has been updated.");
 				}
 			}else{
-				alert("Got an error saving data to server.\n"+resp.status);
+				alert("Got an error saving data to server.\n"+resp.statusText);
 			}
 		}else{
 			alert("Failed to save data to the server.");
@@ -1754,7 +1795,7 @@ async function saveItemTask(evt){
 				let resp = await fetchContent(api);
 				if(resp){
 					if(!resp.ok){
-						alert("Got an error saving data to server.\n"+resp.status);
+						alert("Got an error saving data to server.\n"+resp.statusText);
 						return;
 					}
 				}else{
@@ -1798,7 +1839,7 @@ async function saveItemTask(evt){
 			});
 			if(resp){
 				if(!resp.ok){
-					alert("Got an error saving task to server.\n"+resp.status);
+					alert("Got an error saving task to server.\n"+resp.statusText);
 					return;
 				}
 			}else{
@@ -1849,7 +1890,7 @@ async function saveItemPlaylist(evt){
 				let resp = await fetchContent(api);
 				if(resp){
 					if(!resp.ok){
-						alert("Got an error saving data to server.\n"+resp.status);
+						alert("Got an error saving data to server.\n"+resp.statusText);
 						return;
 					}
 				}else{
@@ -1883,7 +1924,7 @@ async function saveItemPlaylist(evt){
 				});
 				if(resp){
 					if(!resp.ok){
-						alert("Got an error saving playlist properties to server.\n"+resp.status);
+						alert("Got an error saving playlist properties to server.\n"+resp.statusText);
 						return;
 					}
 				}else{
@@ -1911,7 +1952,7 @@ async function saveItemPlaylist(evt){
 				});
 				if(resp){
 					if(!resp.ok){
-						alert("Got an error saving playlist properties to server.\n"+resp.status);
+						alert("Got an error saving playlist properties to server.\n"+resp.statusText);
 						return;
 					}
 				}else{
@@ -1928,7 +1969,7 @@ async function saveItemPlaylist(evt){
 		let resp = await fetchContent(api);
 		if(resp){
 			if(!resp.ok){
-				alert("Got an error updating playlist duration data to server.\n"+resp.status);
+				alert("Got an error updating playlist duration data to server.\n"+resp.statusText);
 				return;
 			}
 		}else{
@@ -1978,7 +2019,7 @@ async function saveItemCat(evt){
 				let resp = await fetchContent(api);
 				if(resp){
 					if(!resp.ok){
-						alert("Got an error saving data to server.\n"+resp.status);
+						alert("Got an error saving data to server.\n"+resp.statusText);
 						return;
 					}
 				}else{
@@ -2007,7 +2048,7 @@ async function saveItemCat(evt){
 			});
 			if(resp){
 				if(!resp.ok){
-					alert("Got an error saving category to server.\n"+resp.status);
+					alert("Got an error saving category to server.\n"+resp.statusText);
 					return;
 				}
 			}else{
@@ -2061,7 +2102,7 @@ async function saveItemCust(evt){
 				let resp = await fetchContent(api);
 				if(resp){
 					if(!resp.ok){
-						alert("Got an error saving data to server.\n"+resp.status);
+						alert("Got an error saving data to server.\n"+resp.statusText);
 						return;
 					}
 				}else{
@@ -2112,7 +2153,7 @@ async function saveItemCust(evt){
 			});
 			if(resp){
 				if(!resp.ok){
-					alert("Got an error saving custom properties to server.\n"+resp.status);
+					alert("Got an error saving custom properties to server.\n"+resp.statusText);
 					return;
 				}
 			}else{
@@ -2176,7 +2217,7 @@ async function saveItemRest(evt){
 				let resp = await fetchContent(api);
 				if(resp){
 					if(!resp.ok){
-						alert("Got an error saving data to server.\n"+resp.status);
+						alert("Got an error saving data to server.\n"+resp.statusText);
 						return;
 					}
 				}else{
@@ -2205,7 +2246,7 @@ async function saveItemRest(evt){
 			});
 			if(resp){
 				if(!resp.ok){
-					alert("Got an error saving rest location to server.\n"+resp.status);
+					alert("Got an error saving rest location to server.\n"+resp.statusText);
 					return;
 				}
 			}else{
@@ -2259,7 +2300,7 @@ async function saveItemSched(evt){
 				let resp = await fetchContent(api);
 				if(resp){
 					if(!resp.ok){
-						alert("Got an error saving data to server.\n"+resp.status);
+						alert("Got an error saving data to server.\n"+resp.statusText);
 						return;
 					}
 				}else{
@@ -2319,7 +2360,7 @@ async function saveItemSched(evt){
 				});
 				if(resp){
 					if(!resp.ok){
-						alert("Got an error retreaving location ID from server.\n"+resp.status);
+						alert("Got an error retreaving location ID from server.\n"+resp.statusText);
 						return;
 					}
 					let repdata = await resp.json();
@@ -2350,7 +2391,7 @@ async function saveItemSched(evt){
 			});
 			if(resp){
 				if(!resp.ok){
-					alert("Got an error saving rest location to server.\n"+resp.status);
+					alert("Got an error saving rest location to server.\n"+resp.statusText);
 					return;
 				}
 			}else{
@@ -2408,7 +2449,7 @@ async function saveItemProperties(evt){
 				else
 					alert(itemProps.Type+" has been updated.");
 			}else{
-				alert("Got an error saving data to server.\n"+resp.status);
+				alert("Got an error saving data to server.\n"+resp.statusText);
 			}
 		}else{
 			alert("Failed to save data to the server.");
@@ -2455,7 +2496,7 @@ async function itemDelete(evt){
 			});
 			if(resp){
 				if(!resp.ok){
-					alert("Got an error deleteing item from server.\n"+resp.status);
+					alert("Got an error deleteing item from server.\n"+resp.statusText);
 				}else{
 					alert("Item has been deleted.");
 					itemProps = false;
@@ -2494,7 +2535,7 @@ async function itemExport(evt){
 		});
 		if(resp){
 			if(!resp.ok){
-				alert("Got an error retreaving file from server.\n"+resp.status);
+				alert("Got an error retreaving file from server.\n"+resp.statusText);
 				return;
 			}
 			let blob = await resp.blob();
@@ -2632,7 +2673,7 @@ async function itemReplace(evt){
 				}else{
 					let msg = "Failed to reassign item to file.";
 					if(resp && resp.status)
-						msg += "\n"+resp.status;
+						msg += "\n"+resp.statusText;
 					alert(msg);
 				}
 				evt.target.disabled = false;
@@ -2641,7 +2682,7 @@ async function itemReplace(evt){
 				evt.target.disabled = false;
 			}
 		}else{
-			alert("Got an error posting data to server.\n"+resp.status);
+			alert("Got an error posting data to server.\n"+resp.statusText);
 			evt.target.disabled = false;
 		}
 	}else{
@@ -2686,7 +2727,7 @@ async function itemSetHash(evt){
 	let resp = await fetchContent(api);
 	if(resp){
 		if(!resp.ok){
-			alert("Got an error fetching hash from server.\n"+resp.status);
+			alert("Got an error fetching hash from server.\n"+resp.statusText);
 			return;
 		}
 	}else{
@@ -2996,7 +3037,7 @@ async function taskGetPathFrefix(evt){
 					el.innerText = result.prefix;
 				}
 			}else{
-				alert("Got an error fetching data from server.\n"+resp.status);
+				alert("Got an error fetching data from server.\n"+resp.statusText);
 			}
 		}else{
 			alert("Failed to fetch data from the server.");
@@ -3181,7 +3222,7 @@ async function reloadItemSection(el, type){
 		if(!histlimitVal)
 			histlimitVal = 10;
 		if(!histdateVal.length){
-			var tomor = new Date(Date.now() + 86400000);
+			let tomor = new Date(Date.now() + 86400000);
 			let dd = String(tomor.getDate()).padStart(2, '0');
 			let mm = String(tomor.getMonth() + 1).padStart(2, '0');
 			let yyyy = tomor.getFullYear();
@@ -3986,6 +4027,7 @@ async function showTocItem(panel, container){
 
 async function itemFetchProps(id){
 	let loc = locName.getValue();
+	let response;
 	try{
 		if(loc && loc.length){
 			let ds = document.getElementById("histdatesel");
@@ -4019,7 +4061,7 @@ async function itemFetchProps(id){
 	if(response.ok){
 		return await response.json();
 	}else{
-		alert("Got an error fetching data from server.\n"+response.status);
+		alert("Got an error fetching data from server.\n"+response.statusText);
 		return;
 	}
 }
@@ -4040,7 +4082,7 @@ async function itemPropsMeta(id, parent){
 		}
 		return res;
 	}else{
-		alert("Got an error fetching metadata from server.\n"+response.status);
+		alert("Got an error fetching metadata from server.\n"+response.statusText);
 		return false;
 	}
 }
@@ -4067,7 +4109,7 @@ async function getItemData(props){
 		let resp = await fetchContent(api);
 		if(resp){
 			if(!resp.ok){
-				alert("Got an error retreaving file info from server.\n"+resp.status);
+				alert("Got an error retreaving file info from server.\n"+resp.statusText);
 				return false;
 			}
 			data = await resp.json();
@@ -4193,7 +4235,7 @@ async function clickDbSync(evt){
 		resp = await fetch("library/synchalt");
 		if(resp){
 			if(!resp.ok){
-				alert("Got an error from server.\n"+resp.status);
+				alert("Got an error from server.\n"+resp.statusText);
 			}
 		}else{
 			alert("Failed to post request to the server.");
@@ -4215,7 +4257,7 @@ async function clickDbSync(evt){
 			});
 		if(resp){
 			if(!resp.ok){
-				alert("Got an error from server.\n"+resp.status);
+				alert("Got an error from server.\n"+resp.statusText);
 			}
 		}else{
 			alert("Failed to post request to the server.");
@@ -4233,7 +4275,7 @@ async function clickDbCrawl(evt){
 		resp = await fetch("library/crawlhalt");
 		if(resp){
 			if(!resp.ok){
-				alert("Got an error from server.\n"+resp.status);
+				alert("Got an error from server.\n"+resp.statusText);
 			}
 		}else{
 			alert("Failed to post request to the server.");
@@ -4264,7 +4306,7 @@ async function clickDbCrawl(evt){
 							pass.path = item.value;
 					}
 				}else{
-					alert("Got an error fetching data from server.\n"+resp.status);
+					alert("Got an error fetching data from server.\n"+resp.statusText);
 					return;
 				}
 			}else{
@@ -4292,7 +4334,7 @@ async function clickDbCrawl(evt){
 			});
 		if(resp){
 			if(!resp.ok){
-				alert("Got an error from server.\n"+resp.status);
+				alert("Got an error from server.\n"+resp.statusText);
 			}
 		}else{
 			alert("Failed to post request to the server.");
@@ -4326,7 +4368,7 @@ async function clickDbInit(evt){
 					obj[item.id] = item.value;
 				}
 			}else{
-				alert("Got an error fetching data from server.\n"+resp.status);
+				alert("Got an error fetching data from server.\n"+resp.statusText);
 				return;
 			}
 		}else{
@@ -4352,7 +4394,7 @@ async function clickDbInit(evt){
 			let el = document.getElementById("dbimsg");
 			el.innerHTML = await resp.text();
 		}else{
-			alert("Got an error fetching data from server.\n"+resp.status);
+			alert("Got an error fetching data from server.\n"+resp.statusText);
 		}
 	}else{
 		alert("Failed to fetch data from the server.");
@@ -4383,7 +4425,7 @@ async function updateLoc(evt){
 		return err;
 	}
 	if(!response.ok){
-		alert("response code from server.\n"+response.status);
+		alert("response code from server.\n"+response.statusText);
 		return;
 	}
 	// reload the table from the database
@@ -4420,7 +4462,7 @@ async function loadLocationMgtTbl(data){
 		// handle failure
 		genPopulateTableFromArray(false, el);
 		if(resp)
-			alert("Got an error fetching data from server.\n"+resp.status);
+			alert("Got an error fetching data from server.\n"+resp.statusText);
 		else
 			alert("Failed to fetch data from the server."); 
 	}else{
@@ -4498,7 +4540,7 @@ function reloadConfSection(el, type){
 		// handle failure
 		genPopulateTableFromArray(false, el);
 		if(resp)
-			alert("Got an error fetching data from server.\n"+resp.status);
+			alert("Got an error fetching data from server.\n"+resp.statusText);
 		else
 			alert("Failed to fetch data from the server.");  
 	});
@@ -4528,7 +4570,7 @@ async function updateConf(evt, type){
 				return;
 			}
 			if(!response.ok){
-				alert("response code from server.\n"+response.status);
+				alert("response code from server.\n"+response.statusText);
 				return;
 			}
 			let data = await response.json();
@@ -4587,7 +4629,7 @@ async function delConf(evt, type){
 		return err;
 	}
 	if(!response.ok){
-		alert("Bad status code from server.\n"+response.status);
+		alert("Bad status code from server.\n"+response.statusText);
 		return;
 	}
 	
@@ -4599,6 +4641,597 @@ async function delConf(evt, type){
 		}
 	}
 	loadConfigTypeTable(evt.target.parentNode.parentNode.parentNode.parentNode, type)
+}
+
+/***** Logs specific functions *****/
+
+var logList = [];
+
+async function refreshLogsLocationDep(val){
+	if(locName.getPrior() !== val){
+		await loadLogs();
+	}
+}
+
+function selectAllLogs(evt){
+	if(evt){
+		evt.preventDefault();
+		evt.stopPropagation();
+	}
+	let table = document.getElementById("logres").firstChild.firstChild;
+	let els = table.querySelectorAll('input[type=checkbox]:not(:checked)');
+	if(els){
+		for(let i=0; i<els.length; i++)
+			els[i].checked = true;
+	}
+}
+
+function unselectAllLogs(evt){
+	if(evt){
+		evt.preventDefault();
+		evt.stopPropagation();
+	}
+	let table = document.getElementById("logres").firstChild.firstChild;
+	let els = table.querySelectorAll('input[type=checkbox]:checked');
+	if(els){
+		for(let i=0; i<els.length; i++)
+			els[i].checked = false;
+	}
+}
+
+async function logRowClick(evt){
+	let row = evt.target.parentElement;
+	if((row.localName == "td") && (row.firstChild.localName !== "input"))
+		row = row.parentNode;
+	if(row.localName == "tr"){
+		let sel = row.childNodes[0].firstChild;	// select column
+		let idx = sel.getAttribute("data-idx");
+		item = logList[idx];
+		if(item.Item){
+			item.tocID = item.Item;
+			let credentials = cred.getValue();
+			if(credentials && ['admin', 'manager', 'library'].includes(credentials.permission))
+				showItem(item, true);
+			else
+				showItem(item, false);
+		}
+	}
+}
+
+async function logsToStash(evt){
+	if(evt){
+		evt.preventDefault();
+		evt.stopPropagation();
+	}
+	let table = document.getElementById("logres").firstChild.firstChild;
+	let els = table.querySelectorAll('input[type=checkbox]:checked');
+	if(els){
+		for(let i=0; i<els.length; i++){
+			let div = els[i].parentNode;
+			let idx = div.getAttribute("data-idx");
+			let item = logList[idx];
+			if(item){
+				let data = {};
+				if(item.Item){
+					// get library item properties
+					let response;
+					try{
+						response = await fetch("library/item/"+item.Item);
+					}catch(err){
+						alert("Caught an error fetching data from server.\n"+err);
+						return;
+					}
+					if(response.ok){
+						data = await response.json();
+					}else{
+						alert("Got an error fetching data from server.\n"+response.statusText);
+						return;
+					}
+				}else{
+					// use URL
+					data.URL = item.Source;
+					data.Name = item.Name;
+					data.Album = item.Album;
+					data.ARtist = item.Artist;
+				}
+				appendItemToStash(data);
+			}
+		}
+	}
+}
+
+async function loadLogs(evt){
+	if(evt){
+		evt.preventDefault();
+		evt.stopPropagation();
+	}
+	let div = document.getElementById("logres");
+	let datesel = document.getElementById("logdatesel");
+	let lname = locName.getValue();
+	if(!lname || !lname.length)
+		div.innerHTML = "Please select a Library Location for which to get the logs.";
+	else{
+		genPopulateTableFromArray(false, div);
+		if(!datesel.value.length){
+			// set default date to today
+			let today = new Date(Date.now());
+			let dd = String(today.getDate()).padStart(2, '0');
+			let mm = String(today.getMonth() + 1).padStart(2, '0');
+			let yyyy = today.getFullYear();
+			today = yyyy + '-' + mm + '-' + dd;
+			datesel.value = today;
+		}
+		let logs;
+		let api = "library/logs";
+		let resp = await fetchContent(api, {
+				method: 'POST',
+				body: JSON.stringify({location: lname, datetime: datesel.value+"-23:59"}),
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp){
+			if(resp.ok){
+				let result = await resp.json();
+				if(result && result.length){
+					let keys = Object.keys(result[0]);
+					let colmap = {};
+					for(let i=0; i<keys.length; i++)	// hide all fields
+						colmap[keys[i]] = false;
+					colmap.TimeStr = "Time";	// except for these two
+					colmap.Label = "Item";
+					let haction = false;
+					let actions = false;
+					let colWidth = {TimeStr:"60px"};
+					let fields = {TimeStr:logTimeView, Label: logItemView};
+					logList = result;
+					genPopulateTableFromArray(result, div, colmap, logRowClick, false, false, actions, haction, fields, colWidth);
+				}
+			}else{
+				genPopulateTableFromArray(false, div);
+				alert("Got an error fetching logs from server.\n"+resp.statusText);
+			}
+		}else{
+			genPopulateTableFromArray(false, div);
+			alert("Failed to fetch logs from the server.");
+		}
+	
+	}
+}
+
+function logTimeView(val, row, i){
+	let inner = "<div data-idx='"+i+"'>";
+	if(row.Item || (row.Source && row.Source.length))
+		inner += "<input type='checkbox'></input>";
+	return inner + "<center>"+val+"</center></div>";
+}
+
+function logItemView(val, row){
+	let inner = quoteattr(row.Name)+"<br>"+quoteattr(row.Artist)+"<br>"+quoteattr(row.Album); 
+	if(document.getElementById("logowner").checked)
+		inner += "<br>"+quoteattr(row.Owner);
+	if(document.getElementById("logsource").checked)
+		inner += "<br>"+quoteattr(row.Source);
+	if(document.getElementById("logids").checked)
+		inner += "<br>ItemID: "+row.Item+", ArtistID: "+row.ArtistID+", AlbumID: "+row.ArtistID+", OwnerID: "+row.OwnerID+", LogID: "+row.id;
+	return inner;
+}
+
+/***** Query specific functions *****/
+
+var queryList = false;
+var custDiaSelList = [];
+var lastCustomList;
+
+async function libQueryRefreshList(evt, keepSQL){
+	if(evt){
+		evt.preventDefault();
+		evt.stopPropagation();
+	}
+	let resp;
+	let div = document.getElementById("queryList");
+	div.innerHTML = "<div class='center'><i class='fa fa-circle-o-notch fa-spin' style='font-size:48px'></i></div>";
+	resp = await fetchContent("library/get/queries?sortBy=Name");
+	if(resp){
+		if(resp.ok){
+			let list = await resp.json();
+			queryList = list;
+			if(list && list.length){
+				let colmap = {SQLText: false, id: false, Name: "Saved Queries"};
+				genPopulateTableFromArray(list, div, colmap, queryListRowClick);
+				if(!keepSQL){
+					let el = document.getElementById("queryName");
+					el.setAttribute("data-id", "0");
+					el.setAttribute("data-idx", "-1");
+					el = document.getElementById("querySQL");
+					el.value = "";
+				}
+			}else
+				div.innerText = "No saved queries";
+			return;
+		}else{
+			alert("Got an error fetching categories from server.\n"+resp.statusText);
+		}
+	}else{
+		alert("Failed to fetch categories from the server.");
+	}
+	div.innerText = "No saved queries";
+}
+
+async function queryListRowClick(evt){
+	let row = evt.target.parentElement;
+	let idx = row.rowIndex-1;
+	let name = document.getElementById("queryName");
+	let text = document.getElementById("querySQL");
+	name.value = quoteattr(queryList[idx].Name);
+	name.setAttribute("data-id", queryList[idx].id);
+	name.setAttribute("data-idx", idx);
+	text.value = queryList[idx].SQLText;
+}
+
+function queryNew(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let name = document.getElementById("queryName");
+	let text = document.getElementById("querySQL");
+	name.value = "New Custom Query";
+	name.setAttribute("data-id", "0");
+	name.setAttribute("data-idx", "-1");
+	text.value = "";
+}
+
+async function queryRun(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let el = document.getElementById("queryName");
+	let id = el.getAttribute("data-id");
+	if(!id)
+		return;
+	let text = document.getElementById("querySQL");
+	query = text.value;
+	let inner = buildQueryDialog(query);
+	if(inner.length){
+		// show prompt/select dialog box to get user input
+		let div = document.getElementById("custQueryDiv");
+		div.innerHTML = inner;
+		let dia = document.getElementById("custQueryDialog");
+		dia.style.display = "block";
+	}else{
+		// run query unmodified
+		runFinalQuery(id, null, null);
+	}
+}
+
+async function querySave(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let name = document.getElementById("queryName");
+	let text = document.getElementById("querySQL");
+	let idv = name.getAttribute("data-id");
+	let id = 0;
+	if(idv)
+		id = parseInt(idv);
+	let idx = name.getAttribute("data-idx");
+	let i = -1;
+	if(idx)
+		i = parseInt(idx);
+	let obj = {SQLText: text.value};
+	if((i == -1) || (name.value !== queryList[i].Name))
+			// save new name for ID
+			obj.Name = name.value;
+	let api = "library/set/queries";
+	if(id)
+		api += "/"+id;
+	let resp = await fetchContent(api, {
+			method: 'POST',
+			body: JSON.stringify(obj),
+			headers: {
+				"Content-Type": "application/json",
+				"Accept": "application/json"
+			}
+		});
+	if(resp){
+		if(resp.ok){
+			let reload = await resp.json();
+			if(reload.insertId){
+				// new query saved
+				for(let j=0; j<queryList.length; j++){
+					if(queryList[j].id == reload.insertId){
+						i = j;
+						break;
+					}
+				}
+				name.setAttribute("data-id", reload.insertId);
+				name.setAttribute("data-idx", i);
+			}
+			if(!reload.affectedRows)
+				alert("Failed to update or get ID of new query.\n");
+			else{
+				alert("Query has been saved.");
+				libQueryRefreshList(false, true);
+			}
+		}else{
+			alert("Got an error saving data to server.\n"+resp.statusText);
+		}
+	}else{
+		alert("Failed to save data to the server.");
+	}
+}
+
+async function queryDelete(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let name = document.getElementById("queryName");
+	let text = document.getElementById("querySQL");
+	let idv = name.getAttribute("data-id");
+	let id = 0;
+	if(idv)
+		id = parseInt(idv);
+	if(id){
+		let api = "library/delete/queries/"+id;
+		let resp = await fetchContent(api);
+		if(resp){
+			if(!resp.ok){
+				alert("Got an error deleteing query from server.\n"+resp.statusText);
+			}else{
+				alert("Query has been deleted.");
+				name.setAttribute("data-id", 0);
+				name.setAttribute("data-idx", -1);
+				name.value = "";
+				text.value = "";
+				libQueryRefreshList();
+			}
+		}else{
+			alert("Failed to delete query from server.");
+		}
+	}
+}
+
+async function getQueryItemInfo(evt){
+	let row = evt.target.parentElement;
+	if((row.localName == "td") && (row.firstChild.localName !== "button"))
+		row = row.parentNode;
+	if(row.localName == "tr"){
+		let i = row.rowIndex;
+		let id = lastCustomList[i-1].ItemID;
+		if(id){
+			let credentials = cred.getValue();
+			if(credentials && ['admin', 'manager', 'library'].includes(credentials.permission))
+				showItem({tocID: id}, true);
+			else
+				showItem({tocID: id}, false);
+		}
+	}
+}
+
+async function queryItemToStash(evt){
+	let row = evt.target.parentNode.parentNode.rowIndex;
+	let id = lastCustomList[row-1].ItemID;
+	if(id){
+		// get library item properties
+		let response;
+		try{
+			response = await fetch("library/item/"+id);
+		}catch(err){
+			alert("Caught an error fetching data from server.\n"+err);
+			return;
+		}
+		if(response.ok){
+			data = await response.json();
+		}else{
+			alert("Got an error fetching data from server.\n"+response.statusText);
+			return;
+		}
+		appendItemToStash(data);
+	}
+}
+
+async function runFinalQuery(query, promptValues, selectValues){
+	let params = {locid: locationID};
+	if(promptValues && promptValues.length)
+		params.prompt = promptValues;
+	if(selectValues && selectValues.length)
+		params.select = selectValues;
+	let div = document.getElementById("queryResult");
+	div.innerHTML = "<div class='center'><i class='fa fa-circle-o-notch fa-spin' style='font-size:48px'></i></div>";
+	let api = "library/query/"+query;
+	let resp = await fetchContent(api, {
+		method: 'POST',
+		body: JSON.stringify(params),
+		headers: {
+			"Content-Type": "application/json",
+			"Accept": "application/json"
+		}
+	});
+	if(resp){
+		if(!resp.ok){
+			alert("Got an error running query from server.\n"+resp.statusText);
+			genPopulateTableFromArray(false, div);
+			return;
+		}
+		let repdata = await resp.json();
+		lastCustomList = repdata;
+		let actions = false;
+		if(repdata.length && repdata[0].ItemID)	// we have item IDs: allow get info on items
+			actions = `<button class="editbutton" onclick="queryItemToStash(event)">To Stash</button>`;
+		let colWidth = {ItemID: "60px", action:"40px"};
+		genPopulateTableFromArray(repdata, div, false, getQueryItemInfo, false, false, actions, false, false, colWidth);
+	}else{
+		alert("Query failed to run from server.");
+		genPopulateTableFromArray(false, div);
+	}
+}
+
+function buildQueryDialog(query){
+	let substr = query;
+	let inner = "";
+	let si = 0;
+	let pi = 0;
+	custDiaSelList = [];
+	while(1){
+		let sstart = substr.indexOf("[select(");
+		let pstart = substr.indexOf("[prompt(");
+		if((sstart > -1) && ((pstart == -1) || (pstart > sstart))){
+			// we have a select next
+			let subs = substr.substring(sstart);
+			sstart = subs.indexOf("(");
+			if(sstart == -1)
+				break;
+			let end = subs.indexOf(")");
+			if(end == -1)
+				break;
+			let prop = subs.substring(sstart+1,end);
+			// prop is the prompt text name
+			inner += prop + ": "+buildQueryDiaSelect(prop, si)+"<br>"
+			si++;
+			end = subs.indexOf("]");
+			substr = subs.substring(end+1);
+		}else if(pstart > -1){
+			// we have a prompt next
+			let subs = substr.substring(pstart);
+			pstart = subs.indexOf("(");
+			if(pstart == -1)
+				break;
+			let end = subs.indexOf(")");
+			if(end == -1)
+				break;
+			let prop = subs.substring(pstart+1,end);
+			// prop is the prompt text name
+			inner += prop + ": <input type='text' name='prompt-"+pi+"'><br>"
+			pi++;
+			end = subs.indexOf("]");
+			substr = subs.substring(end+1);
+		}else
+			break;
+	}
+	return inner;
+}
+
+function buildQueryDiaSelect(tableName, idx){
+	let inner = 
+	`<div class="dropdown">
+		<button class="editbutton" name="select-`+idx+`" data-id="0" onclick="toggleShowSearchList(event)">[None]</button>
+		<div class="search-list" data-idx="`+idx+`">
+			<button class="editbutton" onclick="refreshQueryDiaDropdown(event)">Refresh List</button><br>
+			<input type="text" onkeyup="filterSearchList(event)" placeholder="Enter Search..."></input>
+			<div></div>
+		</div>
+	</div>`;
+	custDiaSelList.push(tableName);
+	return inner;
+}
+
+async function custQueryDialogOK(evt){
+	if(evt){
+		evt.preventDefault();
+		evt.stopPropagation();
+	}
+	let dia = document.getElementById("custQueryDialog");
+	dia.style.display = "none";
+	let div = document.getElementById("custQueryDiv");
+	custDiaSelList = [];
+	let elements = document.getElementById("custDiaForm").elements;
+	let sel = [];
+	let prm = [];
+	for(let i = 0 ; i < elements.length ; i++){
+		let item = elements.item(i);
+		if(item.name){
+			let val;
+			let parts = item.name.split("-");
+			if(parts[0] == "select"){
+				val = item.getAttribute("data-id");
+				sel.push(val);
+			}else{
+				val = item.value;
+				prm.push(val);
+			}
+		}
+	}
+	let el = document.getElementById("queryName");
+	let id = el.getAttribute("data-id");
+	if(id)
+		runFinalQuery(id, prm, sel);
+}
+
+function custQueryDialogCanc(evt){
+	if(evt){
+		evt.preventDefault();
+		evt.stopPropagation();
+	}
+	let dia = document.getElementById("custQueryDialog");
+	dia.style.display = "none";
+	custDiaSelList = [];
+}
+
+function custDropdownChange(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let ddbut = evt.target.parentNode.parentNode.parentNode.firstElementChild;
+	// close search-list menu
+	toggleShowSearchList({target: ddbut});
+	// set the button values
+	ddbut.innerText = evt.target.innerText;
+	let id = evt.target.getAttribute("data-id");
+	ddbut.setAttribute("data-id", id);
+}
+
+async function refreshQueryDiaDropdown(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let target = evt.target;
+	let idx = target.parentNode.getAttribute("data-idx");
+	idx = parseInt(idx);
+	let table = custDiaSelList[idx];
+	let resp;
+	if(table == "playlist")
+		resp = await fetchContent("library/get/toc?Type=playlist&sortBy=Name");
+	else if(table == "task")
+		resp = await fetchContent("library/get/toc?Type=task&sortBy=Name");
+	else
+		resp = await fetchContent("library/get/"+table+"?sortBy=Name");
+	if(resp){
+		if(resp.ok){
+			let list = await resp.json();
+			// set custDropdownChange as list callback
+			let el = target.parentNode.children[3];
+			buildSearchList(el, list, custDropdownChange);
+		}else{
+			alert("Got an error fetching "+table+"s from server.\n"+resp.status);
+		}
+	}else{
+		alert("Failed to fetch "+table+"s from the server.");
+	}
+}
+
+function downloadCSV(csv, filename) {
+	let csvFile;
+	let downloadLink;
+	
+	csvFile = new Blob([csv], {type: "text/csv"});
+	downloadLink = document.createElement("a");
+	downloadLink.download = filename;
+	downloadLink.href = window.URL.createObjectURL(csvFile);
+	downloadLink.style.display = "none";
+	document.body.appendChild(downloadLink);
+	downloadLink.click();
+}
+
+function exportTableToCSV(evt, filename) {
+	evt.preventDefault();
+	evt.stopPropagation();
+	evt.target.parentNode;
+	let table = evt.target.parentNode.parentNode.parentNode;
+	let csv = [];
+	let rows = table.querySelectorAll("tr");
+	
+	for(let i = 0; i < rows.length; i++) {
+		let row = [], cols = rows[i].querySelectorAll("td, th");
+		for(let j = 0; j < cols.length-1; j++) // ignore last colum... actions
+			row.push(cols[j].innerText);
+		csv.push(row.join("\t"));
+	}
+	downloadCSV(csv.join("\n"), filename);
 }
 
 /***** Browse specific functions *****/
@@ -5282,6 +5915,7 @@ function startupContent(){
 
 window.onload = function(){
 	locName.registerCallback(locMenuTrack);
+	locName.registerCallback(refreshLogsLocationDep);
 	locName.registerCallback(refreshItemLocationDep);
 	locListCache.registerCallback(locMenuRefresh);
 	locListCache.registerCallback(refreshAddItemRest);

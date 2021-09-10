@@ -152,15 +152,20 @@ function replaceQueryMacros(query, params, clearlf){
 	query = query.replaceAll("[prefix]", locConf['prefix']);
 	query = query.replaceAll("[!prefix]", "[prefix]");
 
+//!! remove starting ' and ending ' if present
 	if(params && params.prompt){
 		if(Array.isArray(params.prompt) == false)
 			params.prompt = [params.prompt];
 		while(prtIdx < params.prompt.length){
 			let start = query.indexOf("[prompt(");
 			if(start > -1){
+				if((start > 0) && (query.charAt(start-1)))	// if previous char is ', include it in replacement
+					start--;
 				let subs = query.substring(start);
 				let end = subs.indexOf("]");
 				if(end > -1){
+					if((end < (subs.length-1)) && (subs.charAt(end+1)))	// if next char is ', include it in replacement
+						end++;
 					end = start + end;
 					query = replaceRangeWithString(query, start, end, libpool.escape(params.prompt[prtIdx]));
 					prtIdx++;
@@ -175,9 +180,13 @@ function replaceQueryMacros(query, params, clearlf){
 		while(selIdx < params.select.length){
 			let start = query.indexOf("[select(");
 			if(start > -1){
+				if((start > 0) && (query.charAt(start-1)))	// if previous char is ', include it in replacement
+					start--;
 				let subs = query.substring(start);
 				let end = subs.indexOf("]");
 				if(end > -1){
+					if((end < (subs.length-1)) && (subs.charAt(end+1)))	// if next char is ', include it in replacement
+						end++;
 					end = start + end;
 					query = replaceRangeWithString(query, start, end, libpool.escape(params.select[selIdx]));
 					selIdx++;
@@ -2120,7 +2129,7 @@ function getLogs(request, response, params){
 				if(params.sortBy)
 					delete params.sortBy;
 					
-				let select = "SELECT FROM_UNIXTIME("+locConf['prefix']+"logs.Time) As TimeStr, "+locConf['prefix']+"logs.Name As Label, "+locConf['prefix']+"logs.* ";
+				let select = "SELECT TIME(FROM_UNIXTIME("+locConf['prefix']+"logs.Time)) As TimeStr, "+locConf['prefix']+"logs.Name As Label, "+locConf['prefix']+"logs.* ";
 				let from = "FROM ("+locConf['prefix']+"logs, "+locConf['prefix']+"locations) ";
 				let where = "WHERE "+locConf['prefix']+"locations.Name = "+libpool.escape(loc)+" AND "+locConf['prefix']+"logs.Location = "+locConf['prefix']+"locations.ID ";
 				if(params.added){
@@ -3219,10 +3228,18 @@ function executeQuery(request, response, params, dirs){
 							let queries = replaceQueryMacros(results[0].SQLText, params, true);
 							let qArray = queries.split(";");
 							sequencialQuery(connection, qArray).then(result => {
-								response.status(201);
-								response.json(result);
-								connection.release();
-								response.end();
+								if(result.errno){
+									response.status(404);
+									response.send(result.sqlMessage);
+									connection.release();
+									response.end();
+									return;
+								}else{
+									response.status(201);
+									response.json(result);
+									connection.release();
+									response.end();
+								}
 							});
 						}else{
 							response.status(400);
@@ -3551,7 +3568,7 @@ async function importFileIntoLibrary(fpath, params, fullpath){
 				}
 			}
 			
-			if(meta.Type == "filepl"){		// handle playlist file import
+			if(meta.Type == "playlist"){		// handle playlist file import
 				let dbMatch = false;
 				if(dbFingerprint == meta.Fingerprint)
 					dbMatch = true;	// itemID, artistID albumID, etc., are valid... keep them in the conversion
@@ -3644,18 +3661,18 @@ async function importFileIntoLibrary(fpath, params, fullpath){
 					}
 				}
 				if(dupmode != 2){	// add these entries
-					if(meta.filepl && meta.filepl.length){
-						for(let pos=0; pos<meta.filepl.length; pos++){
-							let entry = meta.filepl[pos];
-							let keys = Object.keys(entry);
-							for(let i=0; i<keys.length; i++){
-								if(!dbMatch && ["ArtistID", "AlbumID", "ID"].includes(keys[i]))	// skip these if different library
+					if(meta.playlist && meta.playlist.length){
+						for(let pos=0; pos<meta.playlist.length; pos++){
+							let entry = meta.playlist[pos];
+							for(let i=0; i<entry.length; i++){
+								let prop = entry[i].Property;
+								if(!dbMatch && ["ArtistID", "AlbumID", "ID"].includes(prop))	// skip these if different library
 									continue; // arserver will use remaining properties to try to find item
-								insert = "INSERT INTO "+locConf['prefix']+"playlist (ID, Position, Property, Value) "
-								setstr = " VALUES ("+ID;
+								let insert = "INSERT INTO "+locConf['prefix']+"playlist (ID, Position, Property, Value) "
+								let setstr = "VALUES ("+ID;
 								setstr = buildInsValString(setstr, pos);
-								setstr = buildInsValString(setstr, keys[i]);
-								setstr = buildInsValString(setstr, entry[keys[i]]);
+								setstr = buildInsValString(setstr, prop);
+								setstr = buildInsValString(setstr, entry[i].Value);
 								setstr += ");";
 								try{
 									result = await asyncQuery(conn, insert+setstr);
@@ -4580,7 +4597,7 @@ module.exports = {
 		}else if(dirs[2] == 'query'){
 			executeQuery(request, response, params, dirs);	// /query/ID?select=[selval1, selval2,..]&prompt=[promptval1, promptval2,..]
 																			//		runs the specified query number, replacing macros [select(...)],
-																			//		and [prompt(..)] text with the parameter array values in sequence as 
+																			//		and [prompt(...)] text with the parameter array values in sequence as 
 																			//		they occur. And replacing [loc-id] with it's single parameter.  And
 																			//		finally, replacing [prefix] with the database table refix setting value.
 																			//		It is the clients job to ensure that matching parameters for macros are set.

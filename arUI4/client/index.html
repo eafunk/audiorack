@@ -10,14 +10,21 @@
 	<script src="index.js"></script>
 	<div class="container">
 		<div class="wrapper">
-			<div id="navtab" class="navtab">
-				<button id="navabout" class="tabitem" onclick="showTab(event, 'about')">About</button>
-			</div> 
+			<div id="custQueryDialog" class="modal">
+				<form id="custDiaForm">
+					<div id="custQueryDiv">Some text in the Modal..</div>
+				</form><br>
+				<button id="custdialCanc" onclick="custQueryDialogCanc(event)">Cancel</button>
+				<button id="custdialOK" onclick="custQueryDialogOK(event)">OK</button>
+			</div>
 			<div class="panel" id="infopane">
 				<button style="float:right;" onclick="closeInfo(event)">&gt;</button>
 				<div id="infodata" class="scroll" style="text-align: left;">
 					<p>Info Panel</p>
 				</div>
+			</div>
+			<div id="navtab" class="navtab">
+				<button id="navabout" class="tabitem" onclick="showTab(event, 'about')">About</button>
 			</div>
 			<button id="showinfobtn" onclick="showInfo(event)">&lt;</button>
 			<div id="about" class="tabcontent">
@@ -31,7 +38,8 @@
 				<button onclick="stashUnselectAll(event)">Unselect all</button><br>
 				<ul class="ddlist" id="stashlist" style="float: left;">
 				</ul>
-				<button onclick="stashDeleteSelected(event)">Delete selected</button>
+				<div style="padding: 5px;"><button onclick="stashDeleteSelected(event)">Delete selected</button></div>
+				<br>
 			</div>
 			<div id="files" class="tabcontent">
 				<div class="scroll">
@@ -113,15 +121,51 @@
 			</div>
 			<div id="logs" class="tabcontent">
 				<h2>Logs</h2>
-				<p>Radio is fun...</p>
+				<div>
+					Date: <input type='date' id='logdatesel' name='logdate' value='' onchange='loadLogs()'></input>
+				</div>
+				<div class="boxed">
+					Show Additional Properties
+					<input type="checkbox" id="logowner" name="owner" onchange="loadLogs()">Item Owner
+					<input type="checkbox" id="logsource" name="source" onchange="loadLogs()">Item Source (URL)
+					<input type="checkbox" id="logids" name="ids" onchange="loadLogs()">Various library IDs
+				</div>
+				<div>
+					<button onclick="selectAllLogs(event)">Select All</button>
+					<button onclick="unselectAllLogs(event)">Unselect All</button><br>
+					<button id="logtostashbtn" onclick="logsToStash(event)">Copy selected to Stash</button></div>
+				<div id="logres" class="scroll">
+					Please select a Library Location for which to get the logs.
+				</div>
 			</div>
 			<div id="query" class="tabcontent">
 				<h2>Custom Queries</h2>
-				<p>Radio is fun...</p>
+				<table>
+					<tr>
+						<td>
+							<div id="queryList" class="scroll" style="height: 180px;">
+								No Saved Queries
+							</div>
+							<button onclick="queryNew(event)">New</button>
+						</td>
+						<td>
+							<div id="queryInfo">
+								<input id="queryName" type="text" size="20" value="">
+								<button onclick="queryDelete(event)">Delete</button>
+								<button onclick="querySave(event)">Save</button><br>
+								<textarea id="querySQL" rows="12" cols="40"></textarea><br>
+								<button onclick="queryRun(event)">Run Query</button>
+							</div>
+						</td>
+					</tr>
+				</table>
+				<div id="queryResult" class="scroll">
+				</div>
+				<div style="padding: 5px;"><button onclick="exportTableToCSV(event, 'CustomQueryResult')">download CSV</button></div>
 			</div>
 			<div id="libmanage" class="tabcontent">
+				<h2>Manage Database</h2>
 				<div class="scroll">
-					<h2>Manage Database</h2>
 					<div id="dbinit" class="boxed">
 						<h3>Initialize/Update Library Database</h3>
 						<form id="dbiform">

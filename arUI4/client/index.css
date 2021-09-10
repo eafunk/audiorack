@@ -105,7 +105,6 @@ i {
 	flex: auto;
 	display: flex;
 	align-items: stretch;
-	overflow: auto;
 	height: 100%;
 }
 
@@ -173,6 +172,15 @@ footer {
 	padding-right: 8px;
 }
 
+.scroll {
+	flex: 1;
+	display: block;
+	overflow: auto;
+	text-align: center;
+	padding: 5px;
+	margin: 5px;
+}
+
 /* Style the tab content */
 .tabcontent {
 	flex: 1;
@@ -187,8 +195,8 @@ footer {
 }
 
 .dropdown {
-  position: relative;
-  display: inline-block;
+	position: relative;
+	display: inline-block;
 }
 
 .liveSearch {
@@ -214,7 +222,7 @@ footer {
 	background-color: #f6f6f6;
 	min-width: 230px;
 	border: 1px solid #ddd;
-	z-index: 10;
+	z-index: 20;
 }
 
 .search-list-right {
@@ -227,7 +235,7 @@ footer {
 	background-color: #f6f6f6;
 	min-width: 230px;
 	border: 1px solid #ddd;
-	z-index: 10;
+	z-index: 20;
 }
 
 /* Go from zero to full opacity */
@@ -294,12 +302,22 @@ textarea {
 	font-weight: bold;
 	color: #ffffff;
 }
+
 #browsres {
 	display: flex;
+	flex: 1;
 	flex-flow: row;
 	padding: 10px;
 	width: 100%;
 	height: 100%;
+}
+
+.tablecont {
+	display:table-row;
+	width:100%;
+	overflow: auto;
+	text-align: center;
+	padding: 5px;
 }
 
 #brefine * {
@@ -309,16 +327,6 @@ textarea {
 audio {
 	width: 100%;
 }​
-
-div.scroll {
-	flex: 1;
-	display: block;
-	overflow-x: auto;
-	overflow-y: auto;
-	height: 100%;
-	text-align: center;
-	padding: 5px;
-}
 
 #btype {
 	flex: none;
@@ -357,16 +365,16 @@ button.active {
 	padding: 0 18px;
 	background-color: white;
 	display: none;
-	overflow-x: auto;
-	overflow-y: auto;
+	overflow: auto;
 	padding: 5px;
 }
 
 /* drag and drop lists */
 .ddlist {
 	list-style: none;
-	padding: 0;
-	margin: 0;
+	overflow: auto;
+	padding: 5px;
+	margin: 5px;
 }
 
 .ddlist li {
@@ -382,4 +390,21 @@ button.active {
 }
 .ddlist li.active {
 	background: #ffd4d4;
+}
+
+.modal {
+	display: none;
+	position: fixed;
+	text-align: center;
+	z-index: 15;
+	left: 0;
+	top: 0;
+	width: 100%;
+	height: 50%;
+	padding: 10px;
+	margin: 10px;
+	overflow: auto;
+	background-color: rgb(240,240,240); /* Fallback color */
+	background-color: rgba(240,240,240,0.9); /* Black w/ opacity */
+	transition: 0.5s; /* 0.5 second transition effect to slide in the */
 }
