@@ -632,7 +632,7 @@ int main(int argc, const char *argv[])
 	log_busses = 0x0c;	// default log busses: main and alt only.
 	loadConfiguration(&session, startup_path);
 	if(db_preflight())
-		serverLogMakeEntry("[main] db_preflight-:Failed to initialize dtatbase libraries. This is trouble!");
+		serverLogMakeEntry("[main] db_preflight-:Failed to initialize database libraries. This is trouble!");
 	
 /* No IAX support yet 
 	if(iaxp_initialize()){
@@ -668,14 +668,14 @@ int main(int argc, const char *argv[])
 	
 	// notify launcher that we have started
 	write(STDOUT_FILENO, "*", 1);
-		
+	
  	// run queueManager task loop until run is false.  This function also
  	// calls the watchdog timer reset each time through it's loop, which 
  	// sends a 'W' out STDOUT. The spauing process that started us watches 
  	// for this, and will kill and relaunch us if it doesn't get a 'W' 
  	// often enough.
-	QueManagerTask(&quit);	
-					
+	QueManagerTask(&quit);
+	
 	run = 0;					// tell all other threads to finish
 	
 	shutdownSessions();

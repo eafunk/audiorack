@@ -117,7 +117,14 @@
 			</div>
 			<div id="schedule" class="tabcontent">
 				<h2>Schedule</h2>
-				<p>Radio is fun...</p>
+				<div>
+					<button class="editbutton" onclick="loadSchedule()">Reload</button>
+					Date: <input type='date' id='scheddatesel' name='scheddate' value='' onchange='loadSchedule()'></input>
+					<div id="schedkey" class="boxed">
+					</div>
+				</div>
+				<div id="scheddiv" class="scroll">
+				</div>
 			</div>
 			<div id="logs" class="tabcontent">
 				<h2>Logs</h2>

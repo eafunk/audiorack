@@ -35,6 +35,7 @@ class watchableValue {
 /***** Global Variables *****/
 
 includeScript("vumeter.js");
+var infoWidth = "450px";
 var cred = new watchableValue(false);
 var locName = new watchableValue(false);
 var locationID;
@@ -132,7 +133,7 @@ function timeParse(str){
 		return 0;
 }
 
-function timeFormat(timesec){
+function timeFormat(timesec, noDP){
 	timesec = parseFloat(timesec);
 	if(isNaN(timesec))
 		return "";
@@ -163,8 +164,9 @@ function timeFormat(timesec){
 			result += ":0";
 		else
 			result += ":";
-		result += secs;
-		result += "." + frac;
+			result += secs;
+		if(!noDP)
+			result += "." + frac;
 		return result;
 	}
 }
@@ -777,6 +779,266 @@ function getRowInputProps(row){
 	}
 	return props;
 }
+function getSchedItemMinute(list, idx){
+	if(list && list.length>idx){
+		return list[idx].mapHour * 60 + list[idx].Minute;
+	}
+	return -1;	// no more items scheduled
+}
+
+function schedCellColor(cell, entry){
+	let colorStr = "#";
+
+	if(entry.Date)
+		colorStr += "F0";
+	else if(entry.dbDay)
+		colorStr += "C0";
+	else
+		colorStr += "80";
+	
+	if(entry.Month)
+		colorStr += "D0";
+	else
+		colorStr += "80";
+		
+	if(entry.dbHour > -1)
+		colorStr += "D0";
+	else
+		colorStr += "80";
+	cell.style.backgroundColor = colorStr;
+}
+
+function genPopulateSchedLegend(el){
+	// Create a table element
+	let table = document.createElement("table");
+	table.className = "tablecenterj";
+	// Create table row tr element of a table for header
+	let tr = table.insertRow(-1);
+	let theader = document.createElement("th");
+	theader.width = 100;
+	theader.innerHTML = " ";
+	tr.appendChild(theader);
+	theader = document.createElement("th");
+	theader.width = 100;
+	theader.innerHTML = "Date";
+	tr.appendChild(theader);
+	theader = document.createElement("th");
+	theader.width = 100;
+	theader.innerHTML = "Weekday";
+	tr.appendChild(theader);
+	theader = document.createElement("th");
+	theader.width = 100;
+	theader.innerHTML = "Every Day";
+	tr.appendChild(theader);
+	
+	tr = table.insertRow(-1);
+	let cell = tr.insertCell(-1);
+	cell.innerText = "Hour & Month"
+	
+	cell = tr.insertCell(-1);
+	schedCellColor(cell, {dbHour:1, Month:1, Date:1});
+	cell.innerText = " ";
+
+	cell = tr.insertCell(-1);
+	schedCellColor(cell, {dbHour:1, Month:1, dbDay:1});
+	cell.innerText = " ";
+	
+	cell = tr.insertCell(-1);
+	schedCellColor(cell, {dbHour:1, Month:1});
+	cell.innerText = " ";
+	
+	tr = table.insertRow(-1);
+	cell = tr.insertCell(-1);
+	cell.innerText = "Hourly & Month"
+	
+	cell = tr.insertCell(-1);
+	schedCellColor(cell, {dbHour:-1, Month:1, Date:1});
+	cell.innerText = " ";
+
+	cell = tr.insertCell(-1);
+	schedCellColor(cell, {dbHour:-1, Month:1, dbDay:1});
+	cell.innerText = " ";
+	
+	cell = tr.insertCell(-1);
+	schedCellColor(cell, {dbHour:-1, Month:1});
+	cell.innerText = " ";
+	
+	tr = table.insertRow(-1);
+	cell = tr.insertCell(-1);
+	cell.innerText = "Hour & Monthly"
+	
+	cell = tr.insertCell(-1);
+	schedCellColor(cell, {dbHour:1, Month:0, Date:1});
+	cell.innerText = " ";
+
+	cell = tr.insertCell(-1);
+	schedCellColor(cell, {dbHour:1, Month:0, dbDay:1});
+	cell.innerText = " ";
+	
+	cell = tr.insertCell(-1);
+	schedCellColor(cell, {dbHour:1, Month:0});
+	cell.innerText = " ";
+	
+	tr = table.insertRow(-1);
+	cell = tr.insertCell(-1);
+	cell.innerText = "Hourly & Monthly"
+	
+	cell = tr.insertCell(-1);
+	schedCellColor(cell, {dbHour:-1, Month:0, Date:1});
+	cell.innerText = " ";
+
+	cell = tr.insertCell(-1);
+	schedCellColor(cell, {dbHour:-1, Month:0, dbDay:1});
+	cell.innerText = " ";
+	
+	cell = tr.insertCell(-1);
+	schedCellColor(cell, {dbHour:-1});
+	cell.innerText = " ";
+	
+	el.innerHTML = "Insert items may be re-ordered to get them as close to their target times as possible.";
+	el.appendChild(table);
+}
+
+function genPopulateSchedTable(insert, fill, el, cellClick){
+	if(!insert && !fill){
+		el.innerHTML = "";
+		return;
+	}
+	// Create a grid div element
+	let table = document.createElement("div");
+	table.className = "schedGrid";
+	// Create 24 cells as the column header
+	let theader;
+	for(let i = 0; i <= 11; i++) {
+		theader = document.createElement("div");
+		if(i==11){
+			theader.innerHTML = "Fill Item";
+		}else{
+			theader.innerHTML = "";
+		}
+		table.appendChild(theader);
+	}
+	
+	theader = document.createElement("div");
+	theader.innerHTML = "Time";
+	table.appendChild(theader);
+	for(let i = 0; i <= 10; i++) {
+		theader = document.createElement("div");
+		if(i==0){
+			theader.innerHTML = "Insert Item";
+		}else{
+			theader.innerHTML = "";
+		}
+		table.appendChild(theader);
+	}
+	theader = document.createElement("div");
+	theader.innerHTML = "Target";
+	table.appendChild(theader);
+	theader = document.createElement("div");
+	theader.innerHTML = "";
+	table.appendChild(theader);
+	let fillIdx = 0;
+	let instIdx = 0;
+	let nextFillMin = 0;
+	let nextInstMin = 0;
+	let nextFillPrio = -1;
+	let instOffset = 0;
+	let lastInst = 0;
+	let min = -1;
+	nextFillMin = getSchedItemMinute(fill, fillIdx);
+	nextFillPrio = -1;
+	nextInstMin = getSchedItemMinute(insert, instIdx);
+	// Adding a row to the table for every minute of the day
+	for(let i = 0; i < 1440; i++){
+		// fill items cols
+		if(i == nextFillMin){
+			let prio = fill[fillIdx].Priority;
+			let por = fill[fillIdx].Fill;	// priority override minues
+			cell = document.createElement("div");
+			cell.style.border = "1px solid #000000";
+			// set column & span
+			cell.style.gridColumn = String(12-prio)+" / span "+String(prio+1);
+			cell.innerText = fill[fillIdx].Label;
+			if(fill[fillIdx].ItemID > 0){
+				cell.setAttribute("data-id", fill[fillIdx].ItemID);
+				cell.onclick = cellClick;
+			}
+			schedCellColor(cell, fill[fillIdx]);
+			// next
+			while(nextFillMin == i){
+				// ignore lessor-priority fills at the same time
+				fillIdx++;
+				nextFillMin = getSchedItemMinute(fill, fillIdx);
+				if(nextFillMin > -1)
+					nextFillPrio = fill[fillIdx].Priority;
+				else
+					nextFillPrio = -1;
+			}
+			// set row & span.
+			if(nextFillMin > -1){
+				if((prio > nextFillPrio) && ((por+i) > nextFillMin))
+					cell.style.gridRow = String(i+2)+" / span "+String(por);
+				else
+					cell.style.gridRow = String(i+2)+" / span "+String(nextFillMin - i);
+			}else
+				cell.style.gridRow = String(i+2)+" / span "+String(1440 - i);
+			table.appendChild(cell);
+		}
+		// time col
+		cell = document.createElement("div");
+		cell.style.gridColumn = "13 / span 1";
+		cell.style.gridRow = String(i+2)+" / span 1";
+		cell.innerHTML = timeFormat(i, true);
+		table.appendChild(cell);
+
+		// insert items cols
+		if((nextInstMin >= 0) && (i == (nextInstMin+instOffset))){
+			let prio = insert[instIdx].Priority;
+			let target;
+			cell = document.createElement("div");
+			cell.style.border = "1px solid #000000";
+			// set column & span
+			cell.style.gridColumn = "14 / span "+String(prio+1);
+			cell.innerText = insert[instIdx].Label;
+			if(insert[instIdx].ItemID > 0){
+				cell.setAttribute("data-id", insert[instIdx].ItemID);
+				cell.onclick = cellClick;
+			}
+			schedCellColor(cell, insert[instIdx]);
+			// handle offset from target due to previous item's duration
+			let dur = Math.ceil(insert[instIdx].Duration);
+			if(!dur)
+				dur = 1;
+			instOffset += dur;
+			// set row span.
+			cell.style.gridRow = String(i+2)+" / span "+String(dur);
+			table.appendChild(cell);
+
+			target = document.createElement("div");
+			target.innerText = timeFormat((insert[instIdx].mapHour * 60) + insert[instIdx].Minute, true);
+			target.style.gridRow = String(i+2)+" / span "+String(dur);
+			target.style.gridColumn = "25 / span 1";
+			table.appendChild(target);
+
+			// next
+			instIdx++;
+			nextInstMin = getSchedItemMinute(insert, instIdx);
+			if(nextInstMin != lastInst){
+				if(nextInstMin >= i + dur){
+					// gap to next
+					instOffset = 0;
+				}else{
+					// no gap to next
+					instOffset = i + instOffset - nextInstMin;
+				}
+				lastInst = nextInstMin;
+			}
+		}
+	}
+	// Add the newely created table to the specified <div>
+	el.innerHTML = "";
+	el.appendChild(table);
+} 
 
 function genPopulateTableFromArray(list, el, colMap, rowClick, headClick, sortVar, actions, haction, fieldTypes, colWidth){
 	if(!list && !haction){
@@ -1388,7 +1650,7 @@ function showInfo(evt){
 	let el = document.getElementById("showinfobtn");
 	el.style.display = "none";
 	el = document.getElementById("infopane");
-	el.style.width = "400px";
+	el.style.width = infoWidth;
 }
 
 function closeInfo(event){
@@ -2329,7 +2591,7 @@ async function saveItemSched(evt){
 								Month: cols[2].firstElementChild.value,
 								Hour: cols[3].firstElementChild.value,
 								Minute: cols[4].firstElementChild.value,
-								Fill: (cols[5].firstElementChild.checked?1:0),
+								Fill: cols[5].firstElementChild.value,
 								Priority: cols[6].firstElementChild.value };
 		if(RID){ // check for value changes
 			for(let i=0; i<itemProps.sched.length; i++){
@@ -2611,10 +2873,10 @@ function itemAddSched(evt){
 						Month: itemMonRender,
 						Hour: itemHrRender,
 						Minute: "<input type='number' min='0' max='59' name='min' value='$val' data-rid='$RID'></input>", // number
-						Fill: "<input type='checkbox' name='fill' $ifvalchk>",
+						Fill: "<input type='number' min='0' max='1440' name='fill' value='$val'></input>",
 						Priority: itemPrioRender};
-	insertTableRow(newRow, div, 1, {Day: "Day", Date: "Date", Month: "Month", Hour: "Hour", Minute: "Minute", Fill: "Fill", Priority: "Priority", RID: false}, false, actions, fields);
-}
+	insertTableRow(newRow, div, 1, {Day: "Day", Date: "Date", Month: "Month", Hour: "Hour", Minute: "Minute", Fill: "Fill", Priority: "Prio", RID: false}, false, actions, fields);
+}//!!
 
 function itemChangeArtist(evt){
 	// close search-list menu
@@ -3254,17 +3516,17 @@ async function reloadItemSection(el, type){
 				actions = `<button class="editbutton" onclick="itemRemoveRow(event)">-</button>`;
 				haction = `<button id='addItemSchedBtn' class="editbutton" onclick="itemAddSched(event)">+</button>`;
 			}
-			el.innerHTML = inner + "</form>";
+			el.innerHTML = inner + "</form><br>Set Fill value to zero for insert mode.<br> Fill value is minutes to over-ride lower prioity fill items.<br>Prioity level * indicates supression of lower priority items scheduled for the same time, with Max setting causing fadeout of previous items for exact time airing.";
 			let div = document.getElementById("itemschedlist");
 			let fields = {	Day: itemWDOMRender, // Weekday of Month
 								Date: itemDateRender, 
 								Month: itemMonRender,
 								Hour: itemHrRender,
 								Minute: "<input type='number' min='0' max='59' name='min' value='$val' data-rid='$RID'></input>", // number
-								Fill: "<input type='checkbox' name='fill' $ifvalchk>",
+								Fill: "<input type='number' min='0' max='1440' name='fill' value='$val' data-rid='$RID'></input>",
 								Priority: itemPrioRender};
-			let colWidth = {action:"18px", Fill:"20px"};
-			genPopulateTableFromArray(itemProps.sched, div, {Day: "Day", Date: "Date", Month: "Month", Hour: "Hour", Minute: "Minute", Fill: "Fill", Priority: "Priority", RID: false}, false, false, false, actions, haction, fields, colWidth);
+			let colWidth = {action:"18px"};
+			genPopulateTableFromArray(itemProps.sched, div, {Day: "Day", Date: "Date", Month: "Month", Hour: "Hour", Minute: "Minute", Fill: "Fill", Priority: "Prio", RID: false}, false, false, false, actions, haction, fields, colWidth);
 		}else{
 			el.innerHTML = inner + "</form>";
 			let div = document.getElementById("itemschedlist");
@@ -3785,7 +4047,7 @@ function itemWDOMRender(val){
 	let wk = day;
 	if(day){
 		day = ((day-1) % 7) + 1; // 1 thru 7
-		wk = parseInt((wk-1) / 7)+1; // 1 thru 5
+		wk = parseInt((wk-1) / 7) + 1; // 1 thru 6, 1 =  every week, 2..6 = wk 1..5
 	}
 	let inner = "<select name='day' onchange='itemChkWeekEn(event)'>";
 	inner += "<option value='0' "+(day===0?"selected":"")+">Any</option>";
@@ -3799,11 +4061,12 @@ function itemWDOMRender(val){
 	inner += "</select><br>";
 
 	inner += "<select name='itemwk' "+(wk?"":"disabled")+">";
-	inner += "<option value='1' "+(wk===1?"selected":"")+">1st</option>";
-	inner += "<option value='2' "+(wk===2?"selected":"")+">2nd</option>";
-	inner += "<option value='3' "+(wk===3?"selected":"")+">3rd</option>";
-	inner += "<option value='4' "+(wk===4?"selected":"")+">4th</option>";
-	inner += "<option value='5' "+(wk===5?"selected":"")+">5th</option>";
+	inner += "<option value='1' "+(wk===1?"selected":"")+">Any</option>";
+	inner += "<option value='2' "+(wk===2?"selected":"")+">1st</option>";
+	inner += "<option value='3' "+(wk===3?"selected":"")+">2nd</option>";
+	inner += "<option value='4' "+(wk===4?"selected":"")+">3rd</option>";
+	inner += "<option value='5' "+(wk===5?"selected":"")+">4th</option>";
+	inner += "<option value='6' "+(wk===6?"selected":"")+">5th</option>";
 	inner += "</select>";
 	return inner;
 }
@@ -3950,7 +4213,7 @@ async function showPropItem(panel, container){
 							</div>`;
 	}
 	container.innerHTML = inner;
-	panel.style.width = "400px";
+	panel.style.width = infoWidth;
 	let el = document.getElementById("showinfobtn");
 	if(el)
 		el.style.display = "none";
@@ -4017,7 +4280,7 @@ async function showTocItem(panel, container){
 	inner += `<p><button onclick='itemSendToStash(event)'>Item to Stash</button>`;
 
 	container.innerHTML = inner;
-	panel.style.width = "400px";
+	panel.style.width = infoWidth;
 	let el = document.getElementById("showinfobtn");
 	if(el)
 		el.style.display = "none";
@@ -4163,7 +4426,7 @@ async function showItem(props, canEdit, noShow){
 			if(noShow)
 				return;
 			showPropItem(el, da);
-			el.style.width = "400px"
+			el.style.width = infoWidth;
 			el = document.getElementById("showinfobtn");
 			if(el)
 				el.style.display = "none";
@@ -4178,7 +4441,7 @@ async function showItem(props, canEdit, noShow){
 					return;
 				showPropItem(el, da);
 				itemProps.Name = ""; // change name to make it save the default name
-				el.style.width = "400px"
+				el.style.width = infoWidth;
 				el = document.getElementById("showinfobtn");
 				if(el)
 					el.style.display = "none";
@@ -4203,7 +4466,7 @@ async function showItem(props, canEdit, noShow){
 				if(noShow)
 					return;
 				showTocItem(el, da);
-				el.style.width = "400px"
+				el.style.width = infoWidth;
 				el = document.getElementById("showinfobtn");
 				if(el)
 					el.style.display = "none";
@@ -4816,6 +5079,106 @@ function logItemView(val, row){
 	if(document.getElementById("logids").checked)
 		inner += "<br>ItemID: "+row.Item+", ArtistID: "+row.ArtistID+", AlbumID: "+row.ArtistID+", OwnerID: "+row.OwnerID+", LogID: "+row.id;
 	return inner;
+}
+
+/***** Schedule specific functions *****/
+
+var schedInst = false;
+var schedFill = false;
+
+async function refreshSchedLocationDep(val){
+	if(locName.getPrior() !== val){
+		await loadSchedule();
+	}
+}
+
+async function schedCellClick(evt){
+	let sel = evt.target;
+	let id = sel.getAttribute("data-id");
+	if(id){
+		let item = {tocID: id};
+		let credentials = cred.getValue();
+		if(credentials && ['admin', 'manager', 'library'].includes(credentials.permission))
+			showItem(item, true);
+		else
+			showItem(item, false);
+	}
+}
+
+async function loadSchedule(evt){
+	if(evt){
+		evt.preventDefault();
+		evt.stopPropagation();
+	}
+	// generate legend
+	let div = document.getElementById("schedkey");
+	genPopulateSchedLegend(div);
+	// generate actual schedule table
+	div = document.getElementById("scheddiv");
+	let datesel = document.getElementById("scheddatesel");
+	let lname = locName.getValue();
+	if(!lname || !lname.length)
+		div.innerHTML = "Please select a Library Location for which to get the schedule.";
+	else{
+		genPopulateSchedTable(false, false, div);
+		if(!datesel.value.length){
+			// set default date to today
+			let today = new Date(Date.now());
+			let dd = String(today.getDate()).padStart(2, '0');
+			let mm = String(today.getMonth() + 1).padStart(2, '0');
+			let yyyy = today.getFullYear();
+			today = yyyy + '-' + mm + '-' + dd;
+			datesel.value = today;
+		}
+		let logs;
+		let api = "library/sched";
+		let resp = await fetchContent(api, {
+				method: 'POST',
+				body: JSON.stringify({location: lname, date: datesel.value, fill: 1}),
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp){
+			if(resp.ok){
+				let result = await resp.json();
+				if(result)
+					schedFill = result;
+			}else{
+				genPopulateTableFromArray(false, div);
+				alert("Got an error fetching logs from server.\n"+resp.statusText);
+				return;
+			}
+		}else{
+			alert("Failed to fetch logs from the server.");
+			return;
+		}
+		resp = await fetchContent(api, {
+				method: 'POST',
+				body: JSON.stringify({location: lname, date: datesel.value, fill: 0}),
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp){
+			if(resp.ok){
+				let result = await resp.json();
+				if(result){
+					schedInst = result;
+					genPopulateSchedTable(schedInst, schedFill, div, schedCellClick);
+				}
+			}else{
+				genPopulateTableFromArray(false, div);
+				alert("Got an error fetching logs from server.\n"+resp.statusText);
+			}
+		}else{
+			genPopulateTableFromArray(false, div);
+			alert("Failed to fetch logs from the server.");
+		}
+
+	}
 }
 
 /***** Query specific functions *****/
@@ -5916,6 +6279,7 @@ function startupContent(){
 window.onload = function(){
 	locName.registerCallback(locMenuTrack);
 	locName.registerCallback(refreshLogsLocationDep);
+	locName.registerCallback(refreshSchedLocationDep);
 	locName.registerCallback(refreshItemLocationDep);
 	locListCache.registerCallback(locMenuRefresh);
 	locListCache.registerCallback(refreshAddItemRest);

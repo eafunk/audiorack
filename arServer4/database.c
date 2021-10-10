@@ -1970,12 +1970,13 @@ uint32_t dbGetFillID(time_t *when){
 	int hr, min;
 	struct tm tm_rec;
 	struct dbErr errRec;
-	int dbday;
+	int dbday, dbdaywk;
 	
 	result = 0;
 	// fill time record
 	localtime_r(when, &tm_rec);
-	dbday = ((tm_rec.tm_mday - 1) / 7) * 7 + tm_rec.tm_wday + 1;
+	dbdaywk = ((tm_rec.tm_mday - 1) / 7) * 7 + tm_rec.tm_wday + 8;
+	dbday = tm_rec.tm_wday + 1;
 	instance = db_get_and_connect();
 	if(!instance)
 		goto cleanup;
@@ -1994,7 +1995,7 @@ uint32_t dbGetFillID(time_t *when){
 						"AND [PFX]schedule.Fill <> 0 AND ([PFX]schedule.Location IS NULL OR "
 						"[PFX]schedule.Location = %s) AND [PFX]schedule.Priority > 0 "
 						"AND ([PFX]schedule.Date = 0 OR [PFX]schedule.Date = %d) AND ([PFX]schedule.Day = 0 "
-						"OR [PFX]schedule.Day = %d) AND ([PFX]schedule.Month = 0 OR [PFX]schedule.Month = %d) "
+						"OR [PFX]schedule.Day = %d OR [PFX]schedule.Day = %d) AND ([PFX]schedule.Month = 0 OR [PFX]schedule.Month = %d) "
 						"AND ([PFX]hourmap.Map < %d OR ([PFX]hourmap.Map = %d AND [PFX]schedule.Minute <= %d)) "
 					"ORDER BY override DESC, [PFX]hourmap.Map DESC, [PFX]schedule.Minute DESC LIMIT 1");
 					
@@ -2002,7 +2003,7 @@ uint32_t dbGetFillID(time_t *when){
 
 	// perform the sql query function, including only items with priority greater than or equal to the over-riding priority above
 	if(db_queryf(instance, sql, tm_rec.tm_hour, tm_rec.tm_hour, tm_rec.tm_min, loc, loc, 
-								tm_rec.tm_mday, dbday, tm_rec.tm_mon+1, tm_rec.tm_hour, tm_rec.tm_hour, tm_rec.tm_min))
+								tm_rec.tm_mday, dbday, dbdaywk, tm_rec.tm_mon+1, tm_rec.tm_hour, tm_rec.tm_hour, tm_rec.tm_min))
 		goto cleanup;
 
 	str_setstr(&sql,"SELECT [PFX]schedule.Item, [PFX]hourmap.Map AS Hour, "
@@ -2014,14 +2015,14 @@ uint32_t dbGetFillID(time_t *when){
 						"AND [PFX]schedule.Fill <> 0 AND ([PFX]schedule.Location IS NULL "
 						"OR [PFX]schedule.Location = %s) AND [PFX]schedule.Priority >= @orPriority "
 						"AND ([PFX]schedule.Date = 0 OR [PFX]schedule.Date = %d) AND ([PFX]schedule.Day = 0 "
-						"OR [PFX]schedule.Day = %d) AND ([PFX]schedule.Month = 0 OR [PFX]schedule.Month = %d) "
+						"OR [PFX]schedule.Day = %d OR [PFX]schedule.Day = %d) AND ([PFX]schedule.Month = 0 OR [PFX]schedule.Month = %d) "
 						"AND ([PFX]hourmap.Map < %d OR ([PFX]hourmap.Map = %d AND [PFX]schedule.Minute <= %d)) "
 					"ORDER BY Hour DESC, Minute DESC, Priority DESC LIMIT 1");
 					
 	str_ReplaceAll(&sql, "[PFX]", prefix);
 
 	// perform the sql query function
-	if(db_queryf(instance, sql, loc, loc, tm_rec.tm_mday, dbday, 
+	if(db_queryf(instance, sql, loc, loc, tm_rec.tm_mday, dbday, dbdaywk,
 									tm_rec.tm_mon+1, tm_rec.tm_hour, tm_rec.tm_hour, tm_rec.tm_min))
 		goto cleanup;
 	// get first record (should be the only record)
@@ -2144,7 +2145,7 @@ uint32_t dbGetNextScheduledItem(void **result, time_t *targetTime, short *priori
 	uint32_t ID;
 	struct tm from_rec, to_rec;
 	short min, hr;
-	int fromwday, towday;
+	int fromwday, towday, fromwdaywk, towdaywk;
 	
 	if(!result)
 		return 0;
@@ -2154,9 +2155,10 @@ uint32_t dbGetNextScheduledItem(void **result, time_t *targetTime, short *priori
 	localtime_r(&from_t, &from_rec);
 	localtime_r(&to_t, &to_rec);
 	ID = 0;
-	fromwday = ((from_rec.tm_mday - 1) / 7) * 7 + from_rec.tm_wday + 1;
-	towday = ((to_rec.tm_mday - 1) / 7) * 7 + to_rec.tm_wday + 1;
-	
+	fromwdaywk = ((from_rec.tm_mday - 1) / 7) * 7 + from_rec.tm_wday + 8;
+	towdaywk = ((to_rec.tm_mday - 1) / 7) * 7 + to_rec.tm_wday + 8;
+	fromwday = from_rec.tm_wday + 1;
+	towday = to_rec.tm_wday + 1;
 	// set up database access
 	instance = db_get_and_connect();
 	if(!instance)
@@ -2194,6 +2196,9 @@ uint32_t dbGetNextScheduledItem(void **result, time_t *targetTime, short *priori
 			str_appendstr(&sql, " ) ");
 			str_appendstr(&sql, "AND ([prefix]schedule.Day = 0 OR [prefix]schedule.Day = ");
 			str_appendstr(&sql, (tmp = istr(fromwday)));
+			free(tmp);
+			str_appendstr(&sql, " OR [prefix]schedule.Day = ");
+			str_appendstr(&sql, (tmp = istr(fromwdaywk)));
 			free(tmp);
 			str_appendstr(&sql, ") ");
 			if(from_rec.tm_hour == to_rec.tm_hour){
@@ -2242,8 +2247,10 @@ uint32_t dbGetNextScheduledItem(void **result, time_t *targetTime, short *priori
 			str_appendstr(&sql, ") AND ([prefix]schedule.Day = 0 OR [prefix]schedule.Day = ");
 			str_appendstr(&sql, (tmp = istr(fromwday)));
 			free(tmp);
+			str_appendstr(&sql, " OR [prefix]schedule.Day = ");
+			str_appendstr(&sql, (tmp = istr(fromwdaywk)));
+			free(tmp);
 			str_appendstr(&sql, ") ");
-			
 			str_appendstr(&sql, " AND ([prefix]hourmap.Map > ");
 			str_appendstr(&sql, (tmp = istr(from_rec.tm_hour)));
 			free(tmp);
@@ -2264,8 +2271,10 @@ uint32_t dbGetNextScheduledItem(void **result, time_t *targetTime, short *priori
 			str_appendstr(&sql, ") AND ([prefix]schedule.Day = 0 OR [prefix]schedule.Day = ");
 			str_appendstr(&sql, (tmp = istr(towday)));
 			free(tmp);
+			str_appendstr(&sql, " OR [prefix]schedule.Day = ");
+			str_appendstr(&sql, (tmp = istr(towdaywk)));
+			free(tmp);
 			str_appendstr(&sql, ") ");
-			
 			str_appendstr(&sql, " AND ([prefix]hourmap.Map < ");
 			str_appendstr(&sql, (tmp = istr(to_rec.tm_hour)));
 			free(tmp);

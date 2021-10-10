@@ -869,10 +869,10 @@ void watchdogReset(void){
 							// add trailing slash
 							str_appendstr(&triggerDir, directoryTokenStr);
 						}
-						str_appendstr(&triggerDir, "silence.fault"); //!!! "silence.detect"
+						str_appendstr(&triggerDir, "silence.fault"); // "silence.fault"
 						createTaskItem(triggerDir, loadConfigFromTask, NULL, 0, 0, 0, 0); // no timeout
 						free(triggerDir);
-						return;	// silence.fail script take precidence over default action
+						return;	// silence.fault script take precidence over default action
 					}
 					free(triggerDir);
 

@@ -2222,11 +2222,15 @@ function getSched(request, response, params){
 					where += "AND ("+locConf['prefix']+"schedule.Location IS NULL OR "+locConf['prefix']+"schedule.Location = "+locConf['prefix']+"locations.ID) ";
 					where += "AND "+locConf['prefix']+"schedule.Priority > 0 ";
 					if(params.date){
-						where += "AND ("+locConf['prefix']+"schedule.Day = 0 OR ("+locConf['prefix']+"schedule.Day = (FLOOR((DATE_FORMAT("+libpool.escape(params.date)+",'%e')-1)/7)*7+(DATE_FORMAT("+libpool.escape(params.date)+", '%w')+1)) ) ) ";
+						where += "AND ("+locConf['prefix']+"schedule.Day = 0 OR (";
+						where += locConf['prefix']+"schedule.Day = (FLOOR((DATE_FORMAT("+libpool.escape(params.date)+",'%e')-1)/7)*7+(DATE_FORMAT("+libpool.escape(params.date)+", '%w')+8)) ) OR (";
+						where += locConf['prefix']+"schedule.Day = ((DATE_FORMAT("+libpool.escape(params.date)+", '%w')+1)) ) ) ";
 						where += "AND ("+locConf['prefix']+"schedule.Date = 0 OR "+locConf['prefix']+"schedule.Date = DATE_FORMAT("+libpool.escape(params.date)+", '%e') ) ";
 						where += "AND ("+locConf['prefix']+"schedule.Month = 0 OR "+locConf['prefix']+"schedule.Month = DATE_FORMAT("+libpool.escape(params.date)+", '%c') ) ";
 					}else{
-						where += "AND ("+locConf['prefix']+"schedule.Day = 0 OR ("+locConf['prefix']+"schedule.Day = (FLOOR((DATE_FORMAT(NOW(),'%e')-1)/7)*7+(DATE_FORMAT(NOW(), '%w')+1)) ) ) ";
+						where += "AND ("+locConf['prefix']+"schedule.Day = 0 OR (";
+						where += locConf['prefix']+"schedule.Day = (FLOOR((DATE_FORMAT(NOW(),'%e')-1)/7)*7+(DATE_FORMAT(NOW(), '%w')+8)) ) OR (";
+						where += locConf['prefix']+"schedule.Day = ((DATE_FORMAT(NOW(), '%w')+1)) ) ) ";
 						where += "AND ("+locConf['prefix']+"schedule.Date = 0 OR "+locConf['prefix']+"schedule.Date = DATE_FORMAT(NOW(), '%e') ) ";
 						where += "AND ("+locConf['prefix']+"schedule.Month = 0 OR "+locConf['prefix']+"schedule.Month = DATE_FORMAT(NOW(), '%c') ) ";
 					}
@@ -2261,11 +2265,15 @@ function getSched(request, response, params){
 					where += "AND ("+locConf['prefix']+"schedule.Location IS NULL OR "+locConf['prefix']+"schedule.Location = "+locConf['prefix']+"locations.ID) ";
 					where += "AND "+locConf['prefix']+"schedule.Priority > 0 ";
 					if(params.date){
-						where += "AND ("+locConf['prefix']+"schedule.Day = 0 OR ("+locConf['prefix']+"schedule.Day = (FLOOR((DATE_FORMAT("+libpool.escape(params.date)+",'%e')-1)/7)*7+(DATE_FORMAT("+libpool.escape(params.date)+", '%w')+1)) ) ) ";
+						where += "AND ("+locConf['prefix']+"schedule.Day = 0 OR (";
+						where += locConf['prefix']+"schedule.Day = (FLOOR((DATE_FORMAT("+libpool.escape(params.date)+",'%e')-1)/7)*7+(DATE_FORMAT("+libpool.escape(params.date)+", '%w')+8)) ) OR (";
+						where += locConf['prefix']+"schedule.Day = ((DATE_FORMAT("+libpool.escape(params.date)+", '%w')+1)) ) ) ";
 						where += "AND ("+locConf['prefix']+"schedule.Date = 0 OR "+locConf['prefix']+"schedule.Date = DATE_FORMAT("+libpool.escape(params.date)+", '%e') ) ";
 						where += "AND ("+locConf['prefix']+"schedule.Month = 0 OR "+locConf['prefix']+"schedule.Month = DATE_FORMAT("+libpool.escape(params.date)+", '%c') ) ";
 					}else{
-						where += "AND ("+locConf['prefix']+"schedule.Day = 0 OR ("+locConf['prefix']+"schedule.Day = (FLOOR((DATE_FORMAT(NOW(),'%e')-1)/7)*7+(DATE_FORMAT(NOW(), '%w')+1)) ) ) ";
+						where += "AND ("+locConf['prefix']+"schedule.Day = 0 OR (";
+						where += locConf['prefix']+"schedule.Day = (FLOOR((DATE_FORMAT(NOW(),'%e')-1)/7)*7+(DATE_FORMAT(NOW(), '%w')+8)) ) OR (";
+						where += locConf['prefix']+"schedule.Day = ((DATE_FORMAT(NOW(), '%w')+1)) ) ) ";
 						where += "AND ("+locConf['prefix']+"schedule.Date = 0 OR "+locConf['prefix']+"schedule.Date = DATE_FORMAT(NOW(), '%e') ) ";
 						where += "AND ("+locConf['prefix']+"schedule.Month = 0 OR "+locConf['prefix']+"schedule.Month = DATE_FORMAT(NOW(), '%c') ) ";
 					}

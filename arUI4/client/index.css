@@ -38,6 +38,13 @@ html, body {
 	transition: 0.5s; /* 0.5 second transition effect to slide in the */
 }
 
+.tablecenterj {
+	overflow-wrap: break-word;
+	table-layout: fixed;
+	text-align: center;
+	margin: auto;
+}
+
 .tableleftj {
 	overflow-wrap: break-word;
 	table-layout: fixed;
@@ -179,6 +186,16 @@ footer {
 	text-align: center;
 	padding: 5px;
 	margin: 5px;
+}
+
+.schedGrid {
+	display: grid;
+	grid-template-columns: 1fr repeat(10, 10px) 100px 35px 100px repeat(10, 10px) 35px 1fr;
+	grid-template-rows: repeat(1401, auto);
+	grid-gap: 0px;
+	overflow-wrap: break-word;
+	text-align: center;
+	vertical-align: middle;
 }
 
 /* Style the tab content */
