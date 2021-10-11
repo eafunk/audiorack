@@ -769,6 +769,12 @@ function getRowInputProps(row){
 				if(els[j].name === "password"){
 					els[j].value = "";
 				}
+				if(els[j].name === "startup"){
+					if(els[j].checked)
+						props[els[j].name] = true;
+					else
+						props[els[j].name] = false;
+				}
 			}
 		}
 		els = cells[i].getElementsByTagName("select");
@@ -2876,7 +2882,7 @@ function itemAddSched(evt){
 						Fill: "<input type='number' min='0' max='1440' name='fill' value='$val'></input>",
 						Priority: itemPrioRender};
 	insertTableRow(newRow, div, 1, {Day: "Day", Date: "Date", Month: "Month", Hour: "Hour", Minute: "Minute", Fill: "Fill", Priority: "Prio", RID: false}, false, actions, fields);
-}//!!
+}
 
 function itemChangeArtist(evt){
 	// close search-list menu
@@ -4766,19 +4772,24 @@ function loadConfigTypeTable(el, type){
 									</select>`};
 		colWidth.action = "60px";
 	}else if(type === "confstudios"){
-		actions = `<button class="editbutton" onclick="updateConf(event, '`+type+`')">Update</button>
+		actions = `<button class="editbutton" onclick="runStudioConf(event)">run</button>
+						<button class="editbutton" onclick="updateConf(event, '`+type+`')">Update</button>
 						<button class="editbutton" onclick="delConf(event, '`+type+`')">-</button>`;
 		haction = `<button class="editbutton" onclick="newConf(event, '`+type+`')">+</button>`;
 		fields = {id: "<input type='text' size='8' name='id' value='$val'/>", 
 					host: "<input type='text' name='host' value='$val'></input>",
 					port: "<input type='text' size='2' name='port' value='$val'></input>",
 					run: "<input type='text' name='run' value='$val'></input>",
+					startup: "<input type='checkbox' name='startup' $ifvalchk></input>",
 					minpool: "<input type='number' min='1' max='8' name='minpool' value='$val'></input>",
-					maxpool: "<input type='number' min='1' max='8' name='maxpool' value='$val'></input>"};
+					maxpool: "<input type='number' min='1' max='8' name='maxpool' value='$val'></input>"
+		};
+		colWidth.id = "90px";
 		colWidth.minpool = "65px";
 		colWidth.maxpool = "65px";
 		colWidth.port = "65px";
-		colWidth.action = "60px";
+		colWidth.startup = "55px";
+		colWidth.action = "80px";
 	}else{
 		actions = `<button class="editbutton" onclick="updateConf(event, '`+type+`')">Update</button>`;
 		fields = {id: "<input type='hidden' name='id' value='$val'/>$val", value: "<input type='text' name='value' value='$val'></input>"};
@@ -4809,10 +4820,38 @@ function reloadConfSection(el, type){
 	});
 }
 
+async function runStudioConf(evt, type){
+	evt.preventDefault();
+	let cols = evt.target.parentNode.parentNode.childNodes;
+	let name = "";
+	for(let i=0; i < cols.length; i++){
+		if(cols[i].firstChild.name === "id"){
+			name = cols[i].firstChild.value;
+			break;
+		}
+	}
+	if(name.length){
+		let response;
+		try{
+			response = await fetch("studio/run/"+name);
+		}catch(err){
+			alert("Caught an error sending request to server.\n"+err);
+			return;
+		}
+		if(!response.ok){
+			alert("response code from server.\n"+response.statusText);
+			return;
+		}
+		let msg = await response.text();
+		alert(msg);
+	}
+}
+
 async function updateConf(evt, type){
 	if(evt)
 		evt.preventDefault();
 	let props = getRowInputProps(evt.target.parentNode.parentNode);
+console.log(props);
 	let id = props.id;
 	delete props.id;
 	type = type.replace("conf", "");
@@ -4820,7 +4859,7 @@ async function updateConf(evt, type){
 		if(props.password.length){
 		// special handing for user settings (i.e. password hashing, etc)
 			try{
-				response = await fetch("genpass", {
+				let response = await fetch("genpass", {
 					method: 'POST',
 					body: JSON.stringify({password: props.password}),
 					headers: {
@@ -4866,6 +4905,7 @@ function newConf(evt, type){
 		props.host = "";
 		props.port = 9550;
 		props.run = "";
+		props.startup = false;
 		props.minpool = 2;
 		props.maxpool = 5;
 	}else if(type === "confusers"){

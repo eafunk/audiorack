@@ -777,6 +777,15 @@ app.post('/library/\*', function(request, response){
 	}
 });
 
+app.get('/studio/run/\*', function(request, response){
+	if(request.session.loggedin)
+		studio.runStudio(request, response);
+	else{
+		response.status(401);
+		response.end();
+	}
+});
+
 app.get('/studio/\*', function(request, response){
 	if(request.session.loggedin)
 		studio.handleRequest(request, response);

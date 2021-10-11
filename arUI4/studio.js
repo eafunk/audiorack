@@ -327,18 +327,19 @@ function removeConnectionPool(name){
 
 async function runLocalStudioServer(name, run){
 	console.log("starting studio server '"+name+"', with command: "+run);
+	let text;
 	try{
 		let cmdresult = await execShellCommand("/opt/audiorack/bin/"+run);
 		const lines = cmdresult.split('\n');
 		let last = lines.length-2;
 		if(last < 0)
 			last = 0;
-		console.log("studio server '"+name+"':"+lines[last]);
+		text = "studio server '"+name+"':\n"+cmdresult;
 	}catch(error){
-		console.log("studio server run error '"+name+"':"+error);
-		return false;
+		text = "studio server run error '"+name+"':\n"+error;
+		return {status:false, msg: text};
 	}
-	return true;
+	return {status:true, msg: text};
 }
 
 function reconfigureStudios(curSettings, newSettings){
@@ -369,11 +370,12 @@ function reconfigureStudios(curSettings, newSettings){
 		if(curSettings[key] === undefined){
 			// this is a new studio
 			let val = vals[i];
-			if(val.run && val.run.length)
+			if(val.run && val.run.length && val.startup)
 				runLocalStudioServer(key, val.run).then((running) => {
-					if(running){
+					if(running.status){
 						createConnectionPool(key, val.host, val.port, val.maxpool, val.minpool);
 					}
+					console.log(running.msg);
 				});
 			else
 				createConnectionPool(key, val.host, val.port, val.maxpool, val.minpool);
@@ -501,7 +503,38 @@ module.exports = {
 																				// only the last response is retunred
 		}else{
 			response.status(400);
-			response.end("Missing studio");
+			response.end("Missing studio name");
+		}
+	},
+	
+	runStudio: function (request, response) { // /run/studioName
+		// check for permission: admin only
+		if(request.session.permission != "admin"){
+			response.status(401);
+			response.end();
+			return;
+		}
+		// find named studio
+		let dirs = request.path.split('/');
+		if(dirs[3] && dirs[3].length){
+			let rec = studiolist[dirs[3]];
+			if(rec){
+				runLocalStudioServer(dirs[3], rec.run).then((running) => {
+					if(running.status){
+						createConnectionPool(dirs[3], rec.host, rec.port, rec.maxpool, rec.minpool);
+						response.status(201);
+					}else
+						response.status(500);
+					response.send(running.msg);
+					response.end();
+				});
+			}else{
+				response.status(400);
+				response.end("Invalid studio name");
+			}
+		}else{
+			response.status(400);
+			response.end("Missing studio name");
 		}
 	}
 };

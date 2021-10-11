@@ -190,7 +190,7 @@ footer {
 
 .schedGrid {
 	display: grid;
-	grid-template-columns: 1fr repeat(10, 10px) 100px 35px 100px repeat(10, 10px) 35px 1fr;
+	grid-template-columns: 1fr repeat(10, 15px) 100px 35px 100px repeat(10, 15px) 35px 1fr;
 	grid-template-rows: repeat(1401, auto);
 	grid-gap: 0px;
 	overflow-wrap: break-word;
