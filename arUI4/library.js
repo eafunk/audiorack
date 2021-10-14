@@ -255,17 +255,22 @@ function buildWhereDate(whereStr, table, key, dateStr){
 }
 
 // Make sure hard coded string befor call use escaped names
-function buildFromString(fromStr, table){
-	table = libpool.escapeId(locConf['prefix']+table);
+function buildFromString(fromStr, table, query){
+	// query should be added after all tables have already been added
+	let value;
+	if(query && query.length)
+		value = query;
+	else
+		value = libpool.escapeId(locConf['prefix']+table);
 	if(!fromStr)
 		fromStr = "";
-	if(fromStr.indexOf(table) == -1){
-		if(fromStr.length == 0)
-			fromStr += "FROM (";
-		else
-			fromStr += ", ";
-		fromStr += table;
-	}
+	if(table && (fromStr.indexOf(table) > -1))
+		return fromStr;
+	if(fromStr.length == 0)
+		fromStr += "FROM (";
+	else
+		fromStr += ", ";
+	fromStr += value;
 	return fromStr;
 }
 
@@ -284,6 +289,7 @@ function includeJoin(whereStr, includeStr){
 
 function includeSearchKeys(queryParts, params){
 	// additional "where" values: toc table is assumed to already be in the from clause.
+	let subselect = "";
 	let keys = Object.keys(params);
 	let vals = Object.values(params);
 	let added = false;
@@ -404,19 +410,20 @@ function includeSearchKeys(queryParts, params){
 					subwhere += "="+libpool.escape(valstr)+" ";
 				else
 					subwhere += " LIKE "+libpool.escape(valstr)+" ";
-			count = 1;
+				count = 1;
 			}
-			let subselect = locConf['prefix']+"toc.ID IN (SELECT "+locConf['prefix']+"toc.ID AS ID ";
+			subselect = "(SELECT "+locConf['prefix']+"toc.ID AS ID ";
 			subselect += "FROM ("+locConf['prefix']+"toc, "+locConf['prefix']+"category, "+locConf['prefix']+"category_item) ";
 			subselect += "WHERE "+locConf['prefix']+"category_item.Item = "+locConf['prefix']+"toc.ID ";
 			subselect += "AND "+locConf['prefix']+"category.ID = "+locConf['prefix']+"category_item.Category AND "; 
 			subselect += subwhere;
-			subselect += "GROUP BY "+locConf['prefix']+"toc.ID HAVING COUNT("+locConf['prefix']+"toc.ID) = "+count+") ";
+			subselect += "GROUP BY "+locConf['prefix']+"toc.ID HAVING COUNT("+locConf['prefix']+"toc.ID) = "+count+") AS subcat";
+			
 			if(queryParts.where.length == 0)
 				queryParts.where += "WHERE ";
 			else
 				queryParts.where += "AND ";
-			queryParts.where += subselect;
+			queryParts.where += locConf['prefix']+"toc.ID = subcat.ID ";
 			added = true;
 		}else if(key == "comment"){
 			let val = vals[i];
@@ -463,6 +470,8 @@ function includeSearchKeys(queryParts, params){
 			// unknow key... ignore
 			continue;
 	}
+	if(subselect.length)
+		queryParts.subquery = subselect;
 	return added;
 }
 
@@ -506,6 +515,7 @@ function restQueryRequest(connection, table, request, response, select, from, wh
 			tail += "LIMIT "+cnt+" OFFSET "+offset;
 	}
 	let query = select+from+where+tail;
+console.log(query);
 	connection.query(query, function (err, results, fields) {
 		if(err){
 			response.status(400);
@@ -514,6 +524,7 @@ function restQueryRequest(connection, table, request, response, select, from, wh
 			response.end();
 		}else{
 			let cquery = "SELECT COUNT(*) As Num FROM ("+select+from+where+") AS Subqry";
+console.log(cquery);
 			connection.query(cquery,function (cerr, cres, cfields) {
 				if(cerr){
 					response.status(400);
@@ -2338,6 +2349,8 @@ function searchFor(request, response, params, dirs){
 						// if there are seach fields, we don't show all, only those that match
 						from = buildFromString(from, "toc");
 						from = buildFromString(from, "file");
+						if(parts.subquery && parts.subquery.length)
+							from = buildFromString(from, false, parts.subquery);
 						where += "AND "+locConf['prefix']+"toc.Type = 'file' AND "+locConf['prefix']+"file.ID = "+locConf['prefix']+"toc.ID ";
 						where += "AND "+locConf['prefix']+"artist.ID = "+locConf['prefix']+"file.Artist "; 
 					}
@@ -2361,6 +2374,8 @@ function searchFor(request, response, params, dirs){
 						// if there are seach fields, we don't show all, only those that match
 						from = buildFromString(from, "toc");
 						from = buildFromString(from, "file");
+						if(parts.subquery && parts.subquery.length)
+							from = buildFromString(from, false, parts.subquery);
 						where += "AND "+locConf['prefix']+"toc.Type = 'file' AND "+locConf['prefix']+"file.ID = "+locConf['prefix']+"toc.ID ";
 						where += "AND "+locConf['prefix']+"album.ID = "+locConf['prefix']+"file.Album "; 
 					}
@@ -2380,6 +2395,8 @@ function searchFor(request, response, params, dirs){
 					let parts = {from: from, where: where};
 					includeSearchKeys(parts, params);
 					from = parts.from;
+					if(parts.subquery && parts.subquery.length)
+						from = buildFromString(from, false, parts.subquery);
 					where = parts.where;
 					from += ") ";
 				}else if(type == 'task'){
@@ -2397,6 +2414,8 @@ function searchFor(request, response, params, dirs){
 					let parts = {from: from, where: where};
 					includeSearchKeys(parts, params);
 					from = parts.from;
+					if(parts.subquery && parts.subquery.length)
+						from = buildFromString(from, false, parts.subquery);
 					where = parts.where;
 					from += ") ";
 				}else if(type == 'category'){
@@ -2418,6 +2437,8 @@ function searchFor(request, response, params, dirs){
 						// if there are seach fields, we don't show all, only those that match
 						from = buildFromString(from, "toc");
 						from = buildFromString(from, "category_item");
+						if(parts.subquery && parts.subquery.length)
+							from = buildFromString(from, false, parts.subquery);
 						where += "AND "+locConf['prefix']+"category_item.Item = "+locConf['prefix']+"toc.ID ";
 						where += "AND "+locConf['prefix']+"category.ID = "+locConf['prefix']+"category_item.Category "; 
 					}
@@ -2437,6 +2458,8 @@ function searchFor(request, response, params, dirs){
 					let parts = {from: from, where: where};
 					includeSearchKeys(parts, params);
 					from = parts.from;
+					if(parts.subquery && parts.subquery.length)
+						from = buildFromString(from, false, parts.subquery);
 					where = parts.where;
 					from += ") ";
 				}else if(type == 'added'){
@@ -2453,6 +2476,8 @@ function searchFor(request, response, params, dirs){
 					let parts = {from: from, where: where};
 					includeSearchKeys(parts, params);
 					from = parts.from;
+					if(parts.subquery && parts.subquery.length)
+						from = buildFromString(from, false, parts.subquery);
 					where = parts.where;
 					from += ") ";
 				}else if(type == 'comment'){
@@ -2469,6 +2494,8 @@ function searchFor(request, response, params, dirs){
 					let parts = {from: from, where: where};
 					includeSearchKeys(parts, params);
 					from = parts.from;
+					if(parts.subquery && parts.subquery.length)
+						from = buildFromString(from, false, parts.subquery);
 					where = parts.where;
 					from += ") ";
 				}else if(type == 'missing'){
@@ -2488,6 +2515,8 @@ function searchFor(request, response, params, dirs){
 					let parts = {from: from, where: where};
 					includeSearchKeys(parts, params);
 					from = parts.from;
+					if(parts.subquery && parts.subquery.length)
+						from = buildFromString(from, false, parts.subquery);
 					where = parts.where;
 					from += ") ";
 				}else if(type == 'rested'){
@@ -2507,6 +2536,8 @@ function searchFor(request, response, params, dirs){
 					let parts = {from: from, where: where};
 					includeSearchKeys(parts, params);
 					from = parts.from;
+					if(parts.subquery && parts.subquery.length)
+						from = buildFromString(from, false, parts.subquery);
 					where = parts.where;
 					from += ") ";
 				}else{
@@ -2515,7 +2546,6 @@ function searchFor(request, response, params, dirs){
 					connection.release(); // return the connection to pool
 					return;
 				}
-				
 				restQueryRequest(connection, table, request, response, select, from, where, tail, sort, 0); // NOTE: connection will be returned to the pool.
 				
 			}
@@ -2970,8 +3000,9 @@ async function pathForID(connection, ID){
 		return "";
 	}
 	if(result[0]){
-		if(result && Array.isArray(result) && result[0].Prefix && result[0].Prefix.length && result[0].Path && result[0].Path.length){
-			// require that the file is prefixed, for security reasons
+		if(result && Array.isArray(result) && ((result[0].Mount && result[0].Mount.length) ||
+			(result[0].Prefix && result[0].Prefix.length && result[0].Path && (result[0].Path.length > 3)))){
+			// require that the file is prefixed, or has an old Mount for security reasons
 			let properties = result[0];
 			await resolveFileFromProperties(properties);
 			if(properties.Missing == 0)

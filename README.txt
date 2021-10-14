@@ -94,7 +94,7 @@ database structure for use by arServer4.  The old ARManager can still
 use an updated libraray/database.
 
 
-*** REQUIRED BUILD LIBRARIES AND C HEADER FILES ***
+*** REQUIRED BUILD LIBRARIES, PROGRAMS, AND C HEADER FILES ***
 
 arPlayer4, arRecorder4, and arServer4 depend on the following libraries 
 being installed on your system.  You will likely need the header files 
@@ -115,6 +115,12 @@ jackd 			version 2, and any support libraries/programs for
 arServer4, in addition, depends on the following libraries:
 
 libmysqlclient
+
+The User Interface Server requires the following programs to be installed:
+
+nodejs	The node.js runtime system
+
+npm		The node.js package manager
 
 *** BUILDING ***
 

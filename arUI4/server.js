@@ -447,12 +447,13 @@ function loadConfiguration(){
 				if(err){
 					console.log('No configuration found. Creating minimal configuarion file.');
 					let hash = generatePwdHash("configure");
-					let str = "{ \"http\": {\"http_port\": 3000, \"ses_secret\": \""+crypto.randomBytes(64).toString('base64')+"\"} ";
+					let str = "{ \"http\": {\"http_port\": 3000, \"ses_secret\": \""+crypto.randomBytes(64).toString('base64')+"\"}, ";
 					str += " \"users\": { \"admin\": { \"salt\": \"";
 					str += hash.salt;
 					str += "\", \"password\": \""
 					str += hash.hash;
-					str += "\", \"permission\": \"admin\" } } }";
+					str += "\", \"permission\": \"admin\" } },";
+					str += "\"studios\": { } }";
 					saveConfiguration(JSON.parse(str));
 				}else{
 					console.log('No configuration found. Creating from default configuarion file.');
@@ -1083,7 +1084,7 @@ app.get('/', function(request, response){
 });
 
 // everything else assumed to be requests from the client directory
-app.use('/', express.static('client'));
+app.use('/', express.static(__dirname + '/client'));
 
 // periodically check for removing sseClient when logged out
 sse.startSessionClearing(sessionStore, 60000);

@@ -4,7 +4,7 @@ all: uiserver
 
 uiserver:
 	echo "making arui-server"
-	npm install
+	npm install --unsafe-perm=true --allow-root
 
 install:
 	mkdir -m 775 -p /opt/audiorack/bin/arui
@@ -13,5 +13,6 @@ install:
 	cp -ut /opt/audiorack/bin/arui *.json
 	cp -rt /opt/audiorack/bin/arui node_modules
 	cp -rt /opt/audiorack/bin/arui/client client/*
-
+	cp -rt /opt/audiorack/support ../support/arui_defconf.json
+	
 clean:

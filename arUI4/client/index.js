@@ -4857,9 +4857,10 @@ console.log(props);
 	type = type.replace("conf", "");
 	if(type === "users"){
 		if(props.password.length){
-		// special handing for user settings (i.e. password hashing, etc)
+			// special handing for user settings (i.e. password hashing, etc)
+			let response;
 			try{
-				let response = await fetch("genpass", {
+				response = await fetch("genpass", {
 					method: 'POST',
 					body: JSON.stringify({password: props.password}),
 					headers: {
