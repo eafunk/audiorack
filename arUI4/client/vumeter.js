@@ -1,105 +1,114 @@
-function vumeter(elem, config){
+// Colours
+const vuredOn     = 'rgba(255,65,30,0.9)';
+const vuredOff    = 'rgba(64,12,8,0.9)';
+const vuyellowOn  = 'rgba(255,215,5,0.9)';
+const vuyellowOff = 'rgba(64,53,0,0.9)';
+const vugreenOn   = 'rgba(53,255,30,0.9)';
+const vugreenOff  = 'rgba(13,64,8,0.9)';
 
-    // Settings
-    var max             = config.max || 100;
-    var boxCount        = config.boxCount || 20;
-    var boxCountRed     = config.boxCountRed || 4;
-    var boxCountYellow  = config.boxCountYellow || 4;
-    var boxGapFraction  = config.boxGapFraction || 0.2;
-    var jitter          = config.jitter || 0.02;
-
-    // Colours
-    var redOn     = 'rgba(255,65,30,0.9)';
-    var redOff    = 'rgba(64,12,8,0.9)';
-    var yellowOn  = 'rgba(255,215,5,0.9)';
-    var yellowOff = 'rgba(64,53,0,0.9)';
-    var greenOn   = 'rgba(53,255,30,0.9)';
-    var greenOff  = 'rgba(13,64,8,0.9)';
-
-    // Derived and starting values
-    var width = elem.width;
-    var height = elem.height;
-    var curVal = 0;
-
-    // Gap between boxes and box height
-    var boxHeight = height / (boxCount + (boxCount+1)*boxGapFraction);
-    var boxGapY = boxHeight * boxGapFraction;
-
-    var boxWidth = width - (boxGapY*2);
-    var boxGapX = (width - boxWidth) / 2;
-
-    // Canvas starting state
-    var c = elem.getContext('2d');
-
-    // Main draw loop
-    var draw = function(){
-
-        var avr = parseInt(elem.dataset.avr, 10);
-        var pk = parseInt(elem.dataset.pk, 10);
-        if(avr>max)
-          avr = max;
-        if(pk>max)
-          pk = max;
-        c.save();
-        c.beginPath();
-        c.rect(0, 0, width, height);
-        c.fillStyle = 'rgb(32,32,32)';
-        c.fill();
-        c.restore();
-        drawBoxes(c, avr, pk);
-
-        requestAnimationFrame(draw);
-    };
-
-    // Draw the boxes
-    function drawBoxes(c, avr, pk){
-        c.save(); 
-        c.translate(boxGapX, boxGapY);
-        for (var i = 0; i < boxCount; i++){
-            var id = getId(i);
-
-            c.beginPath();
-            if (isOn(id, avr, 0)){
-                c.shadowBlur = 10;
-                c.shadowColor = getBoxColor(id, avr, 0);
-            }
-            c.rect(0, 0, boxWidth, boxHeight);
-            c.fillStyle = getBoxColor(id, avr, pk);
-            c.fill();
-            c.translate(0, boxHeight + boxGapY);
-        }
-        c.restore();
-    }
-
-    // Get the color of a box given it's ID and the current value
-    function getBoxColor(id, val, pk){
-        // on colours
-        if (id > boxCount - boxCountRed){
-            return isOn(id, val, pk)? redOn : redOff;
-        }
-        if (id > boxCount - boxCountRed - boxCountYellow){
-            return isOn(id, val, pk)? yellowOn : yellowOff;
-        }
-        return isOn(id, val, pk)? greenOn : greenOff;
-    }
-
-    function getId(index){
-        // The ids are flipped, so zero is at the top and
-        // boxCount-1 is at the bottom. The values work
-        // the other way around, so align them first to
-        // make things easier to think about.
-        return Math.abs(index - (boxCount - 1)) + 1;
-    }
-
-    function isOn(id, avr, pk){
-        // We need to scale the input value (0-max)
-        // so that it fits into the number of boxes
-        var avrOn = Math.ceil((avr/max) * boxCount);
-        var pkOn = Math.ceil((pk/max) * boxCount);
-        return ((id <= avrOn) || (id == pkOn));
-    }
-
-    // Trigger the animation
-    draw();
+class vumeter{
+	constructor(elem, config){
+		// last values
+		this.avr = -1;
+		this.pk = -1;
+		this.newavr = 0;
+		this.newpk = 0;
+		
+		// Settings
+		this.max             = config.max || 100;
+		this.boxCount        = config.boxCount || 20;
+		this.boxCountRed     = config.boxCountRed || 4;
+		this.boxCountYellow  = config.boxCountYellow || 4;
+		this.boxGapFraction  = config.boxGapFraction || 0.2;
+		
+		// Derived and starting values
+		this.width = elem.width;
+		this.height = elem.height;
+		
+		// Gap between boxes and box height
+		this.boxHeight = this.height / (this.boxCount + (this.boxCount+1)*this.boxGapFraction);
+		this.boxGapY = this.boxHeight * this.boxGapFraction;
+		
+		this.boxWidth = this.width - (this.boxGapY*2);
+		this.boxGapX = (this.width - this.boxWidth) / 2;
+		
+		// Canvas starting state
+		this.c = elem.getContext('2d');
+		
+		this.vuDraw = (function (){
+			if((this.newavr != this.avr) || (this.newpk != this.pk)){
+				// draw only if values have changed
+				this.avr = this.newavr;
+				this.pk = this.newpk;
+				if(this.avr > this.max)
+					this.avr = this.max;
+				if(this.pk > this.max)
+					this.pk = this.max;
+				this.c.save();
+				this.c.beginPath();
+				this.c.rect(0, 0, this.width, this.height);
+				this.c.fillStyle = 'rgb(32,32,32)';
+				this.c.fill();
+				this.c.restore();
+				vumeter.vuDrawBoxes(this);
+			}
+			requestAnimationFrame(this.vuDraw);
+		}).bind(this);
+	
+		// Trigger the animation
+		this.vuDraw();
+	}
+	
+	// set the values
+	vuSetValue(avr, pk){
+		this.newavr = avr;
+		this.newpk = pk;
+	}
+	
+	// Draw the boxes
+	static vuDrawBoxes(ref){
+		ref.c.save(); 
+		ref.c.translate(ref.boxGapX, ref.boxGapY);
+		for(let i = 0; i < ref.boxCount; i++){
+			let id = vumeter.vuGetId(ref, i);
+			ref.c.beginPath();
+			if(vumeter.vuIsOn(ref, id, ref.avr, 0)){
+				ref.c.shadowBlur = 10;
+				ref.c.shadowColor = vumeter.vuGetBoxColor(ref, id, ref.avr, 0);
+			}
+			ref.c.rect(0, 0, ref.boxWidth, ref.boxHeight);
+			ref.c.fillStyle = vumeter.vuGetBoxColor(ref, id, ref.avr, ref.pk);
+			ref.c.fill();
+			ref.c.translate(0, ref.boxHeight + ref.boxGapY);
+		}
+		ref.c.restore();
+	}
+	
+	// Get the color of a box given it's ID and the current value
+	static vuGetBoxColor(ref, id, val, pk){
+		// on colours
+		if(id > ref.boxCount - ref.boxCountRed){
+			return vumeter.vuIsOn(ref, id, val, pk) ? vuredOn : vuredOff;
+		}
+		if(id > ref.boxCount - ref.boxCountRed - ref.boxCountYellow){
+			return vumeter.vuIsOn(ref, id, val, pk) ? vuyellowOn : vuyellowOff;
+		}
+		return vumeter.vuIsOn(ref, id, val, pk) ? vugreenOn : vugreenOff;
+	}
+	
+	static vuGetId(ref, index){
+		// The ids are flipped, so zero is at the top and
+		// boxCount-1 is at the bottom. The values work
+		// the other way around, so align them first to
+		// make things easier to think about.
+		return Math.abs(index - (ref.boxCount - 1)) + 1;
+	}
+	
+	static vuIsOn(ref, id, avr, pk){
+		// We need to scale the input value (0-max)
+		// so that it fits into the number of boxes
+		let avrOn = Math.ceil((avr/ref.max) * ref.boxCount);
+		let pkOn = Math.ceil((pk/ref.max) * ref.boxCount);
+		return ((id <= avrOn) || (id == pkOn));
+	}
 }
-

@@ -458,7 +458,7 @@ int process(jack_nframes_t nframes, void *arg){
 
 		if((inchrec->status & status_loading) && (inchrec->attached)){
 			/* check for failed player process load */
-			if(waitpid(inchrec->attached, NULL, WNOHANG)){
+			if(waitpid(inchrec->attached, NULL, WNOHANG) == inchrec->attached){
 				inchrec->status = status_empty;
 				inchrec->changed = inchrec->changed | change_unloaded;
 			}

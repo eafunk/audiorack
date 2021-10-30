@@ -12,7 +12,7 @@
 		<div class="wrapper">
 			<div id="custQueryDialog" class="modal">
 				<form id="custDiaForm">
-					<div id="custQueryDiv">Some text in the Modal..</div>
+					<div id="custQueryDiv"></div>
 				</form><br>
 				<button id="custdialCanc" onclick="custQueryDialogCanc(event)">Cancel</button>
 				<button id="custdialOK" onclick="custQueryDialogOK(event)">OK</button>
@@ -214,8 +214,12 @@
 			</div>
 			<div id="studio" class="tabcontent">
 				<h2>Studio</h2>
-				<p>Radio is fun...</p>
-				<div id='busvu'></div>
+				<div id="studiodiv" class="scroll">
+					<div id="studiogrid" class="studioGrid">
+						<div id="busvu" class="stQueue"></div>
+						<div id="studioOuts" class="stOuts"></div>
+					</div>
+				</div>
 			</div>
 			<div id="configure" class="tabcontent">
 				<h2>UI Configuration</h2>

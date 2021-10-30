@@ -1142,7 +1142,6 @@ void AutomatorTask(void){
 	flags = GetMetaInt(0, "auto_live_flags", NULL);
 	if((autoState == auto_unatt) || ((autoState == auto_live) && (flags & live_fill))){
 		PlayListFiller(&lastFillID, &listPos);
-fprintf(stderr, "F");
 	}else{
 		pthread_rwlock_wrlock(&queueLock);
 		if(strlen(fillStr))
@@ -1153,14 +1152,11 @@ fprintf(stderr, "F");
 	// Schedule Inserts
 	if(autoState == auto_unatt){
 		SchedulerInserter(&lastSchedTime, 0);
-fprintf(stderr, "Iu");
 	}else if(autoState == auto_live){
 		if(flags & live_schedule){
 			SchedulerInserter(&lastSchedTime, 0);
-fprintf(stderr, "Il");
 		}else{ 
 			SchedulerInserter(&lastSchedTime, 1);
-fprintf(stderr, "Ih");
 		}
 	}else{
 		// not doing schedule checks...

@@ -118,7 +118,7 @@ libmysqlclient
 
 The User Interface Server requires the following programs to be installed:
 
-nodejs	The node.js runtime system
+nodejs	The node.js runtime system, v.12.10 or newer.
 
 npm		The node.js package manager
 

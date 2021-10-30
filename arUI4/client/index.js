@@ -1,3 +1,5 @@
+/***** Watchable Variable Class *****/
+
 class watchableValue {
 	constructor(value) {
 		this.value = value;
@@ -35,6 +37,7 @@ class watchableValue {
 /***** Global Variables *****/
 
 includeScript("vumeter.js");
+
 var infoWidth = "450px";
 var cred = new watchableValue(false);
 var locName = new watchableValue(false);
@@ -84,18 +87,8 @@ function getStorageLoc(){
 
 function quoteattr(s){
 	if(s){
-		return new Option(s).innerHTML;
-/*
-		 preserveCR = preserveCR ? '&#13;' : '\n';
-		 return ('' + s) // Forces the conversion to string.
-			.replace(/&/g, '&amp;') // This MUST be the 1st replacement.
-			.replace(/'/g, '&apos;') // The 4 other predefined entities, required.
-			.replace(/"/g, '&quot;')
-			.replace(/</g, '&lt;')
-			.replace(/>/g, '&gt;')
-			.replace(/\r\n/g, preserveCR) // Must be before the next replacement.
-			.replace(/[\r\n]/g, preserveCR);
-*/
+		let result = new Option(s).innerHTML;
+		return result.replace(/'/g, '&apos;').replace(/"/g, '&quot;'); // handle single/double quotes too.
 	}else
 		return "";
 }
@@ -244,6 +237,14 @@ function flatClone(src){
 }
 
 /***** fetch functions from http API *****/
+
+function includeScript(file) {
+	let script  = document.createElement('script');
+	script.src  = file;
+	script.type = 'text/javascript';
+	script.defer = true;
+	document.getElementsByTagName('head').item(0).appendChild(script);
+}
 
 async function fetchContent(url, options){
 	let response;
@@ -409,11 +410,10 @@ async function getLocList(){
 function dropClick(evt){
 	let id = evt.currentTarget.getAttribute("data-childdiv");
 	let content = document.getElementById(id);
-	if(content.style.display === "block"){
+	if(content.style.display === "block")
 		content.style.display = "none";
-	}else{
+	else
 		content.style.display = "block";
-	}
 }
 
 async function loginSubmit(event){
@@ -699,13 +699,13 @@ function browseTypeRowSelUpdate(value){
 
 /***** HTML manipulation functions *****/
 
-function includeScript(file) {
-	let script  = document.createElement('script');
-	script.src  = file;
-	script.type = 'text/javascript';
-	script.defer = true;
-	document.getElementsByTagName('head').item(0).appendChild(script);
-}
+//function includeScript(file) {
+//	let script  = document.createElement('script');
+//	script.src  = file;
+//	script.type = 'text/javascript';
+//	script.defer = true;
+//	document.getElementsByTagName('head').item(0).appendChild(script);
+//}
 
 function showTab(event, id, pass){
 	// pass is the studio name, if set.
@@ -1046,7 +1046,7 @@ function genPopulateSchedTable(insert, fill, el, cellClick){
 	el.appendChild(table);
 } 
 
-function genPopulateTableFromArray(list, el, colMap, rowClick, headClick, sortVar, actions, haction, fieldTypes, colWidth){
+function genPopulateTableFromArray(list, el, colMap, rowClick, headClick, sortVar, actions, haction, fieldTypes, colWidth, showCount){
 	if(!list && !haction){
 		el.innerHTML = "";
 		return;
@@ -1224,6 +1224,10 @@ function genPopulateTableFromArray(list, el, colMap, rowClick, headClick, sortVa
 	}
 	// Add the newely created table to the specified <div>
 	el.innerHTML = "";
+	if(showCount){
+		let sc = document.createTextNode(list.length + " Items"); 
+		el.appendChild(sc);
+	}
 	el.appendChild(table);
 } 
 
@@ -1522,7 +1526,7 @@ function flattenItemForStash(item){
 		forStash.Prefix = item.file.Prefix;
 		forStash.Path = item.file.Path;
 		forStash.Hash = item.file.Hash;
-	};
+	}
 	return forStash;
 }
 
@@ -1683,6 +1687,8 @@ async function saveItemGeneral(evt){
 		let item = els.item(i);
 		let was = itemProps[item.name];
 		let is = item.value;
+console.log(was);
+console.log(is);
 		if(item.name == "Duration"){
 			is = timeParse(is);
 			if(Math.floor(is * 10) == Math.floor(was * 10))
@@ -2902,6 +2908,15 @@ function itemChangeAlbum(evt){
 	el.setAttribute("data-id", id);
 }
 
+function itemReplaceSelection(evt){
+	// close search-list menu
+	let el = document.getElementById("itemreassignbtn");
+	toggleShowSearchList({target: el});
+	el.innerText = evt.target.innerText;
+	let id = evt.target.getAttribute("data-id");
+	el.setAttribute("data-id", id);
+}
+
 async function itemReplace(evt){
 	evt.preventDefault();
 	evt.stopPropagation();
@@ -3199,6 +3214,8 @@ async function refreshItemReassign(evt){
 		evt.preventDefault();
 		evt.stopPropagation();
 		if(itemProps && itemProps.Type){
+			// the following getXXXList functions will trigger callback of this function
+			// again, with out the event, running the the outer "else" below.
 			if(itemProps.Type === "category")
 				await getCatList();
 			else if(itemProps.Type === "artist")
@@ -3211,11 +3228,11 @@ async function refreshItemReassign(evt){
 			let div = document.getElementById("itemReassignList");
 			if(div){
 				if(itemProps.Type === "category")
-					buildSearchList(div, catListCache.getValue());
+					buildSearchList(div, catListCache.getValue(), itemReplaceSelection);
 				else if(itemProps.Type === "artist")
-					buildSearchList(div, artListCache.getValue());
+					buildSearchList(div, artListCache.getValue(), itemReplaceSelection);
 				else if(itemProps.Type === "album")
-					buildSearchList(div, albListCache.getValue());
+					buildSearchList(div, albListCache.getValue(), itemReplaceSelection);
 				else
 					return;
 				let el = document.getElementById("itemReassignText");
@@ -3380,7 +3397,7 @@ async function reloadItemSection(el, type){
 	if(type == "general"){
 		let inner = "<form id='genitemform'>";
 		if(itemProps.ID || ((itemProps.Type !== "file") && (itemProps.Type !== "playlist")))
-			inner = "ID: "+itemProps.ID+"<br>";
+			inner += "ID: "+itemProps.ID+"<br>";
 		inner += "Name: <input type='text' size='45' name='Name'";
 		inner += " value='"+quoteattr(itemProps.Name)+"'";
 		if(itemProps.canEdit)
@@ -5812,7 +5829,7 @@ function browseQuery(evt){
 							hactions = `<button class="editbutton" onclick="browseNewItem(event, '`+post.type+`')">+</button>`;
 					}
 					let colWidth = {action:"25px", Duration:"70px"};
-					genPopulateTableFromArray(data, document.getElementById("bres"), {id: false, qtype: false, tocID: false}, browseRowClick, browseCellClick, browseSort, actions, hactions, false, colWidth);
+					genPopulateTableFromArray(data, el, {id: false, qtype: false, tocID: false}, browseRowClick, browseCellClick, browseSort, actions, hactions, false, colWidth, true);
 				});
 				return;
 			}
@@ -5832,20 +5849,18 @@ async function displayFilesPath(){
 	let el = document.getElementById("filefolder");
 	let parts = filesPath.split("/");
 	let inner = "<button class='editbutton' data-index='0' onclick='refreshFiles(event)'>Temp. Media</button>";
-	for(let i = 0; i < parts.length; i++){
-		if(i)
-			inner += " / <button class='editbutton' data-index='"+i+"' onclick='refreshFiles(event)'>"+parts[i]+"</button>";
-	}
+	for(let i = 1; i < parts.length; i++)
+		inner += " / <button class='editbutton' data-index='"+i+"' onclick='refreshFiles(event)'>"+parts[i]+"</button>";
 	el.innerHTML = inner;
 }
 
 async function refreshFiles(evt){
 	if(evt){
 		evt.preventDefault();
-		let i = evt.target.getAttribute("data-index");
+		let i = parseInt(evt.target.getAttribute("data-index"));
 		let parts = filesPath.split("/");
-		parts = parts.slice(0, i+1);
-		filesPath = parts.join("/");
+		let trimed = parts.slice(0, i+1);
+		filesPath = trimed.join("/");
 		displayFilesPath();
 	}
 	loadFilesTbl();
@@ -5901,9 +5916,12 @@ function fileRowClick(event){
 	if(row.localName == "tr"){
 		let sel = row.childNodes[0].firstChild;	// select column
 		if(sel.localName === "i"){
-			let name = row.childNodes[1].firstChild.nodeValue;	// name column
+			let name = row.childNodes[1].innerText;	// name column
 			// directory row
-			filesPath += "/" + name;
+			if(filesPath)
+				filesPath += "/" + name;
+			else
+				filesPath = "/" + name;
 			displayFilesPath();
 			refreshFiles();
 		}else if(sel.localName === "input"){
@@ -6075,6 +6093,8 @@ async function importSelectFiles(evt){
 
 /***** Studio functions *****/
 
+var busmeters = [];
+
 function studioChangeCallback(value){
 	// clear existing VU meters
 	let busvu = document.getElementById('busvu');
@@ -6088,6 +6108,7 @@ function studioChangeCallback(value){
 	eventTypeReg(value, studioHandleNotice);
 	// new VU meter canvases will be built once we receive the first VU data event
 	eventTypeReg("vu_"+value, studioVuUpdate);
+	busmeters = [];
 }
 
 function studioHandleNotice(data){
@@ -6103,30 +6124,26 @@ function studioVuUpdate(data){
 	if(data[0]){
 		if(!busvu.firstChild){
 			// first data for new vu session... create view
+			busmeters = [];
 			for(let i = 0; i < data[0].pk.length; i++){
 				canv = document.createElement("canvas");
-				canv.setAttribute('id', 'bus'+i);
 				canv.setAttribute('width',10);
 				canv.setAttribute('height',128);
-				vumeter(canv, {
+				busvu.appendChild(canv);
+				busmeters.push(new vumeter(canv, {
 					"boxCount": 32,
 					"boxCountRed": 9,
 					"boxCountYellow": 7,
 					"boxGapFraction": 0.25,
 					"max": 255,
-				});
-				busvu.appendChild(canv);
+				}));
 			}
 		}
 		// update meter displays with new values
-		let id;
 		for(let c = 0; c < data[0].pk.length; c++){
-			id = "ch"+c;
-			canv = document.getElementById('bus'+c);
-			if(canv){
-				canv.setAttribute('data-avr', data[0].avr[c]);
-				canv.setAttribute('data-pk', data[0].pk[c]);
-			}
+			let vu = busmeters[c];
+			if(vu)
+				vu.vuSetValue(data[0].avr[c], data[0].pk[c]);
 		}
 	}
 }
@@ -6136,6 +6153,8 @@ function studioVuUpdate(data){
 var sseMsgObj = new watchableValue({});
 var es;
 const sseReconFreqMilliSec = 10000;	// 10 seconds
+
+
 
 function sseSetup(credVal){
 	// login status changed callback or reconnecting
@@ -6149,6 +6168,9 @@ function sseSetup(credVal){
 		es.onopen = function(e) {
 			es.addEventListener('msg', sseListener); // listen for 'msg' general messages at a minimum
 			addListenersForAllSubscriptions();
+			// if a studio is already selected, make the sse session get studio's events
+			if(studioName.getValue().length)
+				studioChangeCallback(studioName.getValue());
 		};
 		es.onerror = function(e) {
 			es.close();

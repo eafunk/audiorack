@@ -822,7 +822,7 @@ void *playerChangeWatcher(void *refCon){
 				}
 				
 				/* all handled: clear flags */
-				instance->changed = 0;	
+				instance->changed = 0;
 			}
 			
 			/* we need to check for failed player loads here */
@@ -845,7 +845,7 @@ void *playerChangeWatcher(void *refCon){
 				releaseMetaRecord(instance->UID);
 				instance->UID = 0;
 			}
-			/* Likewise, if a player staus is not empty or loading, but 
+			/* Likewise, if a player staus is not remove or loading, but 
 			 * it's UID is zero, then an external connection was made, 
 			 * and we should creat a UID for it here. */
 			if((instance->status & ~(status_remove | status_loading)) && !instance->UID){

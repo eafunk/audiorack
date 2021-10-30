@@ -208,7 +208,7 @@ function listTmpDirFilesFunc(request, response){
 			let tmpDir = files['tmpMediaDir'];
 			if(tmpDir && tmpDir.length){
 				let tail ="";
-				let tailIdx =request.path.search("/tmplist/");
+				let tailIdx = request.path.search("/tmplist/");
 				if(tailIdx > -1){
 					tail = request.path.substring(tailIdx + 9);
 					tail = decodeURIComponent(tail);
@@ -273,20 +273,30 @@ function clearTmpDirAgedFilesFunc(){
 							if(diffHrs > tmpAge){
 								if(stats.isFile()){
 									// delete this file, it's too old
-									fs.unlink(thisFile, function (err){
-										if(err)
-											console.log("aged tempMediaDir file remove failed: " + file + "err="+ err);
-										else
-											console.log("aged tempMediaDir file removed: " + file);
-									});
+									try{
+										fs.unlink(thisFile, function (err){
+											if(err)
+												console.log("aged tempMediaDir file remove failed: " + file + "err="+ err);
+											else
+												console.log("aged tempMediaDir file removed: " + file);
+										});
+									}catch(e){
+										console.log('Temp. file deletion error:');
+										console.log(e);
+									}
 								}else if(stats.isDirectory()){
 									// recursivly remove directory and contents regardless of contents age
-									fs.rmdir(thisFile, {recursive: true}, function (err){ 
-										if(err)
-											console.log("aged tempMediaDir directory remove failed: " + file + "err="+ err);
-										else
-											console.log("aged tempMediaDir directory removed: " + file);
-									});
+									try{
+										fs.rmdir(thisFile, {recursive: true}, function (err){
+											if(err)
+												console.log("aged tempMediaDir directory remove failed: " + file + "err="+ err);
+											else
+												console.log("aged tempMediaDir directory removed: " + file);
+										});
+									}catch(e){
+										console.log('Temp. directory deletion error:');
+										console.log(e);
+									}
 								}
 							}
 						});
@@ -921,7 +931,7 @@ app.post('/tmpupload', function(req, res){
 		return;
 	}
 	if(storage){
-		var uploader = multer({storage: storage}).array('filestoupload', 25);
+		var uploader = multer({storage: storage}).any('filestoupload');
 		uploader(req,res,function(err){
 			if(err){
 				res.status(400);
@@ -929,7 +939,7 @@ app.post('/tmpupload', function(req, res){
 			}
 			// check for .zip file expantion
 			for(let i = 0; i< req.files.length; i++){
-				if(req.files[i].filename.lastIndexOf("zip") == (req.files[i].filename.length-3)){
+				if(req.files[i].filename && (req.files[i].filename.lastIndexOf("zip") == (req.files[i].filename.length-3))){
 					// we have a zip file... expand it.
 					let path = req.files[i].path;
 					let dest = req.files[i].destination;

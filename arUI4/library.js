@@ -152,7 +152,6 @@ function replaceQueryMacros(query, params, clearlf){
 	query = query.replaceAll("[prefix]", locConf['prefix']);
 	query = query.replaceAll("[!prefix]", "[prefix]");
 
-//!! remove starting ' and ending ' if present
 	if(params && params.prompt){
 		if(Array.isArray(params.prompt) == false)
 			params.prompt = [params.prompt];
@@ -515,7 +514,7 @@ function restQueryRequest(connection, table, request, response, select, from, wh
 			tail += "LIMIT "+cnt+" OFFSET "+offset;
 	}
 	let query = select+from+where+tail;
-console.log(query);
+//console.log(query); // Used to help debug SQL queries
 	connection.query(query, function (err, results, fields) {
 		if(err){
 			response.status(400);
@@ -524,7 +523,6 @@ console.log(query);
 			response.end();
 		}else{
 			let cquery = "SELECT COUNT(*) As Num FROM ("+select+from+where+") AS Subqry";
-console.log(cquery);
 			connection.query(cquery,function (cerr, cres, cfields) {
 				if(cerr){
 					response.status(400);
@@ -3792,7 +3790,7 @@ async function importFileIntoLibrary(fpath, params, fullpath){
 					colstr = buildInsColumnString(colstr, "Duration");
 					setstr = buildInsValString(setstr, meta.Duration);
 					colstr += ", Added) ";
-					setstr += ", UNIX_TIMESTAMP());";
+					setstr += ", UNIX_TIMESTAMP(CURDATE()));";
 					try{
 						result = await asyncQuery(conn, insert+colstr+setstr);
 					}catch(err){
@@ -3855,19 +3853,25 @@ async function importFileIntoLibrary(fpath, params, fullpath){
 					let pre = getFilePrefixPoint(newPath);
 					meta.Prefix = pre.prefix;
 					meta.Path = pre.path;
-					meta.URL = url.pathToFileURL(newPath).href;
-					// Old OSX: Mount -> Prefix + mountName (first dir in path) 
-					// if fpath=/some/path, mountName = /
-					// if fpath=some/path, mountName = Some, Mount = /Volumes/Some
+					// Old OSX: Mount -> prefix + mountName (first dir in path) 
+					// if prefix = (empty), path=/some/path/etc, mountName = /, Mount = /
+					// if prefix = /pre/fix/of/ path=some/path/etc, mountName = Some, Mount = /Volumes/Some
+					// Note: first char of mountName is upper-case.
+					// URL -> 
+					// if prefix = (empty), URL = path
+					// if prefix = /pre/fix/of/, URL = Mount (from above) + /path/etc (everything in path including and beyond first /)
 					let Mount = "/";
+					let urlPath = pre.path;
 					if(pre.prefix.length){
 						let idx = pre.path.indexOf("/");
 						if(idx > 0){
 							let mountName = pre.path.substring(0, idx);
 							mountName = mountName[0].toUpperCase() + mountName.substr(1);
 							Mount = "/Volumes/" + mountName;
+							urlPath = Mount + pre.path.substring(idx);
 						}
 					}
+					meta.URL = url.pathToFileURL(urlPath).href;
 					if(dupmode == 1){ //insert new file row
 						let insert = "INSERT INTO "+locConf['prefix']+"file "
 						let colstr = "";
@@ -3903,7 +3907,8 @@ async function importFileIntoLibrary(fpath, params, fullpath){
 							pass.status = -1;
 							return pass;
 						}
-					}else{	// update existing file row, leave segs, fades, vol, etc alone.
+					}else{	
+						// update existing file row, leave segs, fades, vol, etc alone.
 						let query = "UPDATE "+locConf['prefix']+"file ";
 						query += "SET Hash = "+libpool.escape(meta.Hash)+" ";
 						query += ", Path = "+libpool.escape(meta.Path)+" ";
@@ -4529,12 +4534,24 @@ module.exports = {
 			let prx_list = files['prefixes'];
 			if(prx_list && Array.isArray(prx_list) && prx_list.length)
 				prefix_list = prx_list;
-			if(files['tmpMediaDir'] && files['tmpMediaDir'].length)
+			if(files['tmpMediaDir'] && files['tmpMediaDir'].length){
 				tmpDir = files['tmpMediaDir'];
-			if(files['mediaDir'] && files['mediaDir'].length)
+				// add trailing slash if not present
+				if(tmpDir.substr(-1) != '/')
+					tmpDir += '/';
+			}
+			if(files['mediaDir'] && files['mediaDir'].length){
 				mediaDir = files['mediaDir'];
-			if(files['supportDir'] && files['supportDir'].length)
-				supportDir = files['mediaDir'];
+				// add trailing slash if not present
+				if(mediaDir.substr(-1) != '/')
+					mediaDir += '/';
+			}
+			if(files['supportDir'] && files['supportDir'].length){
+				supportDir = files['supportDir'];
+				// add trailing slash if not present
+				if(supportDir.substr(-1) != '/')
+					supportDir += '/';
+			}
 		}
 		let libc = config['library'];
 		if(libc){
