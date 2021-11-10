@@ -948,7 +948,6 @@ function genPopulateSchedTable(insert, fill, el, cellClick){
 	let nextFillMin = 0;
 	let nextInstMin = 0;
 	let nextFillPrio = -1;
-	let instOffset = 0;
 	let lastInst = 0;
 	let min = -1;
 	nextFillMin = getSchedItemMinute(fill, fillIdx);
@@ -998,7 +997,8 @@ function genPopulateSchedTable(insert, fill, el, cellClick){
 		table.appendChild(cell);
 
 		// insert items cols
-		if((nextInstMin >= 0) && (i == (nextInstMin+instOffset))){
+		if((nextInstMin >= 0) && (i == nextInstMin)){
+			lastInst = nextInstMin;
 			let prio = insert[instIdx].Priority;
 			let target;
 			cell = document.createElement("div");
@@ -1015,7 +1015,6 @@ function genPopulateSchedTable(insert, fill, el, cellClick){
 			let dur = Math.ceil(insert[instIdx].Duration);
 			if(!dur)
 				dur = 1;
-			instOffset += dur;
 			// set row span.
 			cell.style.gridRow = String(i+2)+" / span "+String(dur);
 			table.appendChild(cell);
@@ -1029,15 +1028,9 @@ function genPopulateSchedTable(insert, fill, el, cellClick){
 			// next
 			instIdx++;
 			nextInstMin = getSchedItemMinute(insert, instIdx);
-			if(nextInstMin != lastInst){
-				if(nextInstMin >= i + dur){
-					// gap to next
-					instOffset = 0;
-				}else{
-					// no gap to next
-					instOffset = i + instOffset - nextInstMin;
-				}
-				lastInst = nextInstMin;
+			if((nextInstMin >= 0) && (nextInstMin < (lastInst + dur))){
+				// pushed ahead, no gap
+				nextInstMin = lastInst + dur;
 			}
 		}
 	}
@@ -6097,7 +6090,7 @@ var busmeters = [];
 
 function studioChangeCallback(value){
 	// clear existing VU meters
-	let busvu = document.getElementById('busvu');
+	let busvu = document.getElementById('studioOuts');
 	while(busvu.firstChild)
 		busvu.removeChild(busvu.firstChild);
 	let old = studioName.getPrior();
@@ -6120,7 +6113,7 @@ function studioVuUpdate(data){
 		return;
 	// update mix bus meters
 	let canv;
-	let busvu = document.getElementById('busvu');
+	let busvu = document.getElementById('studioOuts');
 	if(data[0]){
 		if(!busvu.firstChild){
 			// first data for new vu session... create view

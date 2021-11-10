@@ -148,7 +148,7 @@ function replaceQueryMacros(query, params, clearlf){
 	let prtIdx = 0;
 	
 	if(clearlf)
-		query = query.replaceAll("\n", "");
+		query = query.replaceAll("\n", " "); // replace with a space to preserve "white space-ness" of \n
 	query = query.replaceAll("[prefix]", locConf['prefix']);
 	query = query.replaceAll("[!prefix]", "[prefix]");
 
