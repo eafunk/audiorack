@@ -694,6 +694,7 @@ function browseTypeRowSelUpdate(value){
 			}
 		}
 	}
+	browseSort = "Label";	// Eric request: always default to Label asending when new type is clicked/changed
 	browseQuery();
 }
 
@@ -1674,14 +1675,13 @@ function closeInfo(event){
 async function saveItemGeneral(evt){
 	evt.preventDefault();
 	evt.stopPropagation();
+	let newName = "";
 	let els = document.getElementById("genitemform").elements;
 	let obj ={};
 	for(let i = 0 ; i < els.length ; i++){
 		let item = els.item(i);
 		let was = itemProps[item.name];
 		let is = item.value;
-console.log(was);
-console.log(is);
 		if(item.name == "Duration"){
 			is = timeParse(is);
 			if(Math.floor(is * 10) == Math.floor(was * 10))
@@ -1691,6 +1691,8 @@ console.log(is);
 		if(was === null) was = "";
 		if(was != is){
 			obj[item.name] = is;
+			if(item.name == "Name")
+				newName = is;
 		}
 	}
 	delete obj["submit"];
@@ -1715,8 +1717,13 @@ console.log(is);
 					showItem({tocID: reload.insertId}, itemProps.canEdit, false);
 				if(!reload.affectedRows)
 					alert("Failed to update or get ID of new item.\n");
-				else
+				else{
 					alert("Item has been updated.");
+					showItem({tocID: itemProps.ID}, itemProps.canEdit, true);
+					let label = document.getElementById("itemName");
+					if(newName.length)
+						label.innerText = newName;
+				}
 			}else{
 				alert("Got an error saving data to server.\n"+resp.statusText);
 			}
@@ -2886,8 +2893,9 @@ function itemAddSched(evt){
 function itemChangeArtist(evt){
 	// close search-list menu
 	let el = document.getElementById("itemArtistBtn");
+	let nm = document.getElementById("itemArtistName");
 	toggleShowSearchList({target: el});
-	el.innerText = evt.target.innerText;
+	nm.innerText = evt.target.innerText;
 	let id = evt.target.getAttribute("data-id");
 	el.setAttribute("data-id", id);
 }
@@ -2895,8 +2903,9 @@ function itemChangeArtist(evt){
 function itemChangeAlbum(evt){
 	// close search-list menu
 	let el = document.getElementById("itemAlbumBtn");
+	let nm = document.getElementById("itemAlbumName");
 	toggleShowSearchList({target: el});
-	el.innerText = evt.target.innerText;
+	nm.innerText = evt.target.innerText;
 	let id = evt.target.getAttribute("data-id");
 	el.setAttribute("data-id", id);
 }
@@ -3560,12 +3569,12 @@ async function reloadItemSection(el, type){
 		
 		inner += "<tr><td width='15%'>Artist</td><td>";
 		if(itemProps.canEdit){
-			inner += `<button class="editbutton" id='itemArtistBtn' data-id="`;
-			inner += itemProps.file.ArtistID + `" onclick="toggleShowSearchList(event)">`;
-			inner += quoteattr(itemProps.file.Artist) + `</button>
+			inner += `<span id='itemArtistName'>`;
+			inner += quoteattr(itemProps.file.Artist) +`</span> &nbsp;<button class="editbutton" id='itemArtistBtn' data-id="`;
+			inner += itemProps.file.ArtistID + `" onclick="toggleShowSearchList(event)">change</button>
 								<div class="search-list">
 									<button class="editbutton" onclick="refreshItemArtists(event)">Refresh List</button><br>
-									<input id="itemArtistText" type="text" onkeyup="filterSearchList(event)" data-div="itemArtistBtn" data-removecb="unlistAlreadyInnerText" placeholder="Enter Search..."></input>
+									<input id="itemArtistText" type="text" onkeyup="filterSearchList(event)" data-div="itemArtistName" data-removecb="unlistAlreadyInnerText" placeholder="Enter Search..."></input>
 									<div id="itemArtistList"></div>
 								</div>`;
 		}else{
@@ -3575,12 +3584,12 @@ async function reloadItemSection(el, type){
 
 		inner += "<tr><td>Album</td><td>";
 		if(itemProps.canEdit){
-			inner += `<button class="editbutton" id='itemAlbumBtn' data-id="`;
-			inner += itemProps.file.AlbumID + `" onclick="toggleShowSearchList(event)">`;
-			inner += quoteattr(itemProps.file.Album) + `</button>
+			inner += `<span id='itemAlbumName'>`;
+			inner += quoteattr(itemProps.file.Album) +`</span> &nbsp;<button class="editbutton" id='itemAlbumBtn' data-id="`;
+			inner += itemProps.file.AlbumID + `" onclick="toggleShowSearchList(event)">change</button>
 								<div class="search-list">
 									<button class="editbutton" onclick="refreshItemAlbums(event)">Refresh List</button><br>
-									<input id="itemAlbumText" type="text" onkeyup="filterSearchList(event)" data-div="itemAlbumBtn" data-removecb="unlistAlreadyInnerText" placeholder="Enter Search..."></input>
+									<input id="itemAlbumText" type="text" onkeyup="filterSearchList(event)" data-div="itemAlbumName" data-removecb="unlistAlreadyInnerText" placeholder="Enter Search..."></input>
 									<div id="itemAlbumList"></div>
 								</div>`;
 		}else{
@@ -4241,7 +4250,7 @@ async function showPropItem(panel, container){
 }
 
 async function showTocItem(panel, container){
-	let inner = "";
+	let inner = "<center id='itemName'>"+quoteattr(itemProps.Name)+"</center><br>";
 	if(itemProps.ID && (itemProps.Type === "file"))
 		inner += "<audio controls id='itemcueplayer' width='100%'><source id='itemcuesource' src='library/download/"+itemProps.ID+"''>Your browser does not support the audio tag.</audio>";
 
@@ -5634,14 +5643,13 @@ function downloadCSV(csv, filename) {
 function exportTableToCSV(evt, filename) {
 	evt.preventDefault();
 	evt.stopPropagation();
-	evt.target.parentNode;
-	let table = evt.target.parentNode.parentNode.parentNode;
+	let table = document.getElementById("queryResult");
 	let csv = [];
 	let rows = table.querySelectorAll("tr");
 	
 	for(let i = 0; i < rows.length; i++) {
 		let row = [], cols = rows[i].querySelectorAll("td, th");
-		for(let j = 0; j < cols.length-1; j++) // ignore last colum... actions
+		for(let j = 0; j < cols.length; j++)
 			row.push(cols[j].innerText);
 		csv.push(row.join("\t"));
 	}
@@ -5666,7 +5674,7 @@ function removeRefineElement(event){
 function browseTypeRowClick(event){
 	let i = event.originalTarget.parentElement.rowIndex-1; // -1 due to header row
 	let record = browseTypeList[i];
-	browseType.setValue(record.qtype);
+	browseType.setValue(record.qtype, true);
 }
 
 function browseRowClick(event){
