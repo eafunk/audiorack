@@ -6113,6 +6113,7 @@ function studioChangeCallback(value){
 }
 
 function studioHandleNotice(data){
+//!!!
 console.log(data);
 }
 
@@ -6147,6 +6148,7 @@ function studioVuUpdate(data){
 				vu.vuSetValue(data[0].avr[c], data[0].pk[c]);
 		}
 	}
+	// recorder and player levels are expressed in data[uid-numeric].  We need to itterate.
 }
 
 /***** Server Side Events/Messages functions *****/
@@ -6154,8 +6156,6 @@ function studioVuUpdate(data){
 var sseMsgObj = new watchableValue({});
 var es;
 const sseReconFreqMilliSec = 10000;	// 10 seconds
-
-
 
 function sseSetup(credVal){
 	// login status changed callback or reconnecting

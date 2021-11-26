@@ -866,9 +866,9 @@ async function resolveFileFromProperties(properties){
 		// escaping all *,?,[ chars found in pathStr to prevent paths
 		// with these chars from being interpereted by the glob function
 		// below as wild-card matches.*/
-		pathStr = pathStr.replace('*', '\\*');
-		pathStr = pathStr.replace('?', '\\?');
-		pathStr = pathStr.replace('[', '\\[');
+		pathStr = pathStr.replaceAll('*', '\\*');
+		pathStr = pathStr.replaceAll('?', '\\?');
+		pathStr = pathStr.replaceAll('[', '\\[');
 		
 		// Copy the string and change the case of the first letter, if it's a letter
 		// for an alternate comparison on systems that change the case of the mount
@@ -3096,7 +3096,6 @@ function getDownload(request, response, params, dirs){
 				response.end();
 				return;
 			}else{
-				// check for type = file or playlist and handle accordingly
 				connection.query("SELECT * FROM "+locConf['prefix']+"toc WHERE ID = "+ID+";", function(err, tresults){
 					if(err){
 						response.status(404);
@@ -3114,6 +3113,7 @@ function getDownload(request, response, params, dirs){
 								response.send(JSON.stringify(result, null, 3));
 								response.end();
 							});
+						// check for type = file or playlist and handle accordingly
 						}else if(tresults[0].Type == "file"){
 							pathForID(connection, ID).then(result => {
 								connection.release();
