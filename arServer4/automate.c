@@ -1132,7 +1132,7 @@ void PlayListFiller(uint32_t *lastFillID, int *listPos){
 		free(url);
 }
 
-void AutomatorTask(void){        
+void AutomatorTask(void){
 	static int listPos = 0;
 	static uint32_t lastFillID = 0;
 	static time_t lastSchedTime = 0;
@@ -1220,7 +1220,7 @@ void QueManagerTask(unsigned char *stop){
 			data.value.iVal = 0;
 			notifyMakeEntry(nType_status, &data, sizeof(data));	
 		}
-				
+		
 		/* when we are run in keep-alive mode, signal the watchdog 
 		 * process that launched us that we are still running. */
 		watchdogReset();
@@ -1233,7 +1233,7 @@ void QueManagerTask(unsigned char *stop){
 		sbtime = 0;
 
 		pthread_rwlock_wrlock(&queueLock);
-		// recursively iterate through each playlist item doing what need to be done with each	
+		// recursively iterate through each playlist item doing what need to be done with each
 		NextListItem(status_standby, (queueRecord *)&queueList, &firstp, &sbtime, 0.0, &isPlaying);
 		pthread_rwlock_unlock(&queueLock);
 

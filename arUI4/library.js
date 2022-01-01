@@ -158,12 +158,12 @@ function replaceQueryMacros(query, params, clearlf){
 		while(prtIdx < params.prompt.length){
 			let start = query.indexOf("[prompt(");
 			if(start > -1){
-				if((start > 0) && (query.charAt(start-1)))	// if previous char is ', include it in replacement
+				if((start > 0) && (query.charAt(start-1) === "'"))	// if previous char is ', include it in replacement
 					start--;
 				let subs = query.substring(start);
 				let end = subs.indexOf("]");
 				if(end > -1){
-					if((end < (subs.length-1)) && (subs.charAt(end+1)))	// if next char is ', include it in replacement
+					if((end < (subs.length-1)) && (subs.charAt(end+1) === "'"))	// if next char is ', include it in replacement
 						end++;
 					end = start + end;
 					query = replaceRangeWithString(query, start, end, libpool.escape(params.prompt[prtIdx]));
@@ -179,12 +179,12 @@ function replaceQueryMacros(query, params, clearlf){
 		while(selIdx < params.select.length){
 			let start = query.indexOf("[select(");
 			if(start > -1){
-				if((start > 0) && (query.charAt(start-1)))	// if previous char is ', include it in replacement
+				if((start > 0) && (query.charAt(start-1) === "'"))	// if previous char is ', include it in replacement
 					start--;
 				let subs = query.substring(start);
 				let end = subs.indexOf("]");
 				if(end > -1){
-					if((end < (subs.length-1)) && (subs.charAt(end+1)))	// if next char is ', include it in replacement
+					if((end < (subs.length-1)) && (subs.charAt(end+1) === "'"))	// if next char is ', include it in replacement
 						end++;
 					end = start + end;
 					query = replaceRangeWithString(query, start, end, libpool.escape(params.select[selIdx]));
