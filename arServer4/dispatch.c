@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <pthread.h>
+#include <signal.h>
 
 #define queueMax 100
 
@@ -557,6 +558,9 @@ void *playerChangeWatcher(void *refCon){
 								port++;
 							}
 							pthread_mutex_unlock(&mixEngine->jackMutex);
+char logstr[64];
+snprintf(logstr, sizeof logstr, "[debug] -:player done, jack discon; Player %d.", i);
+serverLogMakeEntry(logstr);
 						}
 					}
 					data.senderID = 0;
@@ -681,6 +685,9 @@ void *playerChangeWatcher(void *refCon){
 								pthread_mutex_unlock(&mixEngine->jackMutex);
 								// clear loaded flag
 								changed = changed & ~change_loaded;
+char logstr[64];
+snprintf(logstr, sizeof logstr, "[debug] -:no longer in queue; Player %d.", i);
+serverLogMakeEntry(logstr);
 							}
 						}
 						if(changed & change_loaded){
@@ -721,6 +728,9 @@ void *playerChangeWatcher(void *refCon){
 		
 						data.value.iVal = htonl(instance->status);
 						notifyMakeEntry(nType_pstat, &data, sizeof(data));
+char logstr[64];
+snprintf(logstr, sizeof logstr, "[debug] -:player loaded; Player %d.", i);
+serverLogMakeEntry(logstr);
 					}
 				}
 				if(changed & change_unloaded){
@@ -789,7 +799,10 @@ void *playerChangeWatcher(void *refCon){
 							port++;
 						}
 						free(mmList);
-					}	
+					}
+char logstr[64];
+snprintf(logstr, sizeof logstr, "[debug] -:player unloaded; Player %d.", i);
+serverLogMakeEntry(logstr);
 				}
 				if((changed & change_type) && (instance->UID)){
 					uint32_t cVal;
@@ -827,16 +840,25 @@ void *playerChangeWatcher(void *refCon){
 			
 			/* we need to check for failed player loads here */
 			if((instance->status & status_loading) && instance->attached){
-				if(getpgid(instance->attached) < 0){
+				if(kill(instance->attached, 0) < 0){
 					/* the PID no loger is running... change status
 					 * to remove, and the next render cycle will 
 					 * set handle it. */
 					instance->status = status_remove; 
 					instance->attached = 0;	// to prevent doing this again.
+					char *urlstr = NULL;
+					char *logstr = NULL;
 					if(instance->UID){
+						urlstr = GetMetaData(instance->UID, "URL", 0);
 						releaseQueueEntry(instance->UID);
-//!!! mark as missing if db item?
 					}
+					str_setstr(&logstr, "[media] -:player load failed; ");
+					if(urlstr){
+						str_appendstr(&logstr, urlstr);
+						free(urlstr);
+					}
+					serverLogMakeEntry(logstr);
+					free(logstr);
 				}
 			}
 			/* we need to check for left-over UIDs from unload player here
@@ -844,6 +866,9 @@ void *playerChangeWatcher(void *refCon){
 			if((instance->status == status_empty) && instance->UID){
 				releaseMetaRecord(instance->UID);
 				instance->UID = 0;
+char logstr[64];
+snprintf(logstr, sizeof logstr, "[debug] -:leftover UID cleared; Player %d.", i);
+serverLogMakeEntry(logstr);
 			}
 			/* Likewise, if a player staus is not remove or loading, but 
 			 * it's UID is zero, then an external connection was made, 
@@ -852,7 +877,9 @@ void *playerChangeWatcher(void *refCon){
 				const char** conList;
 				char *url, *name;
 				unsigned int c;
-				
+char logstr[64];
+snprintf(logstr, sizeof logstr, "[debug] -:new jack connection; Player %d.", i);
+serverLogMakeEntry(logstr);
 				url = NULL;
 				name = NULL;
 				str_setstr(&url, "");

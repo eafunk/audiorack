@@ -3001,7 +3001,7 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, unsigned char markMissing){
 	}else{
 		// found it... set URL if not set or if changed
 		tmp = GetMetaData(UID, "URL", 0);
-		if(changed || !strlen(tmp)){
+//		if(changed || !strlen(tmp)){
 			// re-encode URL
 			free(tmp);
 			newurl = NULL;
@@ -3011,8 +3011,8 @@ int GetdbFileMetaData(uint32_t UID, uint32_t recID, unsigned char markMissing){
 			free(tmp);
 			SetMetaData(UID, "URL", newurl);
 			free(newurl);
-		}else
-			free(tmp);
+//		}else
+//			free(tmp);
 		
 		tmp = path;
 		if(pre = getFilePrefixPoint(&tmp)){

@@ -1779,7 +1779,7 @@ uint32_t LoadDBItemPlayer(int *pNum, const char *url_str, uint32_t UID){
 		free(tmp);
 		return 0;
 	}
-	free (tmp);
+	free(tmp);
 	
 	if(!GetMetaInt(localUID, "Missing", NULL)){
 		// And make sure the URL has changed so we don't end up in a recursive loop!

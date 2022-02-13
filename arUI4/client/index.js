@@ -2925,6 +2925,7 @@ async function itemReplace(evt){
 	if(!evt.target.files.length)
 		return;
 	let form = document.getElementById("replaceform");
+	let repType = document.getElementById("filereplacetype");
 	let formData = new FormData(form);
 	evt.target.value = [];
 	evt.target.disabled = true;
@@ -2937,7 +2938,10 @@ async function itemReplace(evt){
 		if(resp.ok){
 			let files = await resp.json();
 			if(files.length){
-				resp = await fetchContent("library/import/"+files[0].filename+"?id="+itemProps.ID);
+				if(repType.value == 1)
+					resp = await fetchContent("library/import/"+files[0].filename+"?dup=inplace&id="+itemProps.ID);
+				else
+					resp = await fetchContent("library/import/"+files[0].filename+"?id="+itemProps.ID);
 				if(resp && resp.ok){
 					// refresh itemProps and reload section display
 					let reload = await itemFetchProps(itemProps.ID);
@@ -3674,7 +3678,7 @@ async function reloadItemSection(el, type){
 		}
 		inner += "</table></form>";
 
-		inner += `<table class="tableleftj" stype="overflow-wrap: break-word;"><form id='fileitemform'>`;
+		inner += `<table class="tableleftj" stype="overflow-wrap: break-word;">`;
 		inner += "<tr><td width='15%'>Prefix</td><td>";
 		inner += quoteattr(itemProps.file.Prefix);
 		inner += "</td>";
@@ -3693,11 +3697,14 @@ async function reloadItemSection(el, type){
 		inner += "</table>";
 
 		if(itemProps.canEdit){
-			inner += `<form id="replaceform" enctype="multipart/form-data">
-							Replace <input type="file" id="replaceinput" class="editbutton" name="filestoupload" onchange="itemReplace(event)">
-						</form>`;
-			inner += "<p><button id='savefilebut' onclick='saveItemFile(event)'>Save File Properties</button>";
-
+			inner += `Replace: <select id="filereplacetype">
+							<option value="0">Upload to Media directory</option>
+							<option value="1">Upload to existing item directory</option>
+						</select>
+						<form id="replaceform" enctype="multipart/form-data">
+							<input type="file" id="replaceinput" class="editbutton" name="filestoupload" onchange="itemReplace(event)">
+						</form>
+						<p><button id='savefilebut' onclick='saveItemFile(event)'>Save File Properties</button>`;
 		}
 		el.innerHTML = inner;
 		let div = document.getElementById("itemArtistList");
@@ -5672,13 +5679,13 @@ function removeRefineElement(event){
 }
 
 function browseTypeRowClick(event){
-	let i = event.originalTarget.parentElement.rowIndex-1; // -1 due to header row
+	let i = event.currentTarget.rowIndex-1; // -1 due to header row
 	let record = browseTypeList[i];
 	browseType.setValue(record.qtype, true);
 }
 
 function browseRowClick(event){
-	let i = event.originalTarget.parentElement.rowIndex-1; // -1 due to header row
+	let i = event.currentTarget.rowIndex-1; // -1 due to header row
 	let record = browseData[i];
 	if(record.tocID){
 		// get item info
@@ -6027,6 +6034,12 @@ async function refreshFileImportCats(evt){
 			filterSearchList({target: el});
 		}
 	}
+}
+
+function clearCatSelect(evt){
+	let el = document.getElementById("fileImportCatBtn");
+	el.setAttribute("data-id", "0");
+	el.innerText = "[None]";
 }
 
 async function importCatSelect(evt){

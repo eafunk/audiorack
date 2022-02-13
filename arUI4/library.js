@@ -801,6 +801,188 @@ function getFilePrefixPoint(file){
 	return result;
 }
 
+async function resolveDirectoryFromProperties(properties){
+	// returns a path to the folder containing the specified file item
+	// after makig use of prefix glob/wild card matching
+
+	if(properties.Missing && (typeof properties.Missing === 'string'))
+		properties.Missing = parseInt(properties.Missing);
+	let status = 0;
+	let changed = 0;
+	let missing = 1;
+	
+	let listSize = prefix_list.length;
+	let fpath = "";
+	let pathStr = "";
+	let adjPathStr = "";
+	let plen = 0;
+	if(properties.URL == undefined)
+		properties.URL = "";
+	if(properties.Path && properties.Path.length){
+		// try various prefixes to acomidate different disk mount locations
+		// using new path & prefix method
+		if(properties.Prefix){
+			plen = properties.Prefix.length;
+			if(plen)
+				fpath = properties.Prefix;
+		}
+		pathStr = properties.Path;
+		fpath += pathStr;
+	}else if(properties.URL && properties.Mount){
+		// use old mount & URL method of searching for files. if sucessful,
+		// set path & prefix properties to use new method next time.
+		if(properties.URL.length == 0){
+			// bad URL string and/or Mount string
+			changed = 1; // missing flag is already set
+			fpath = "";
+		}else{
+			fpath = url.fileURLToPath(properties.URL);
+			if(properties.Mount && (properties.Mount.length > 1)){
+				//  convert /a/path/with/mount -> mount
+				let mountParts = properties.Mount.split("/");
+				let mountName = "";
+				if(mountParts.length > 1)
+					mountName = mountParts[mountParts.length - 1];
+				if(mountName.length){
+					let i = fpath.search(mountName);
+					if(i > 0){ 
+						// given fpath = /longer/path/to/mount/some/file
+						// and Mount = mount
+						// pathStr -> mount/some/file */
+						pathStr = fpath.substring(i);
+						plen = 1;
+					}else
+						pathStr = "";
+				}else
+					pathStr = "";
+			}else
+				pathStr = "";
+		}
+	}
+
+	if(pathStr.length){
+		// escaping all *,?,[ chars found in pathStr to prevent paths
+		// with these chars from being interpereted by the glob function
+		// below as wild-card matches.*/
+		pathStr = pathStr.replaceAll('*', '\\*');
+		pathStr = pathStr.replaceAll('?', '\\?');
+		pathStr = pathStr.replaceAll('[', '\\[');
+		
+		// Copy the string and change the case of the first letter, if it's a letter
+		// for an alternate comparison on systems that change the case of the mount
+		if(pathStr.charAt(0) === pathStr.charAt(0).toUpperCase()){
+			adjPathStr = pathStr.charAt(0).toLowerCase();
+			if(pathStr.length > 1)
+				adjPathStr += pathStr.substring(1);
+		}else if(pathStr.charAt(0) === pathStr.charAt(0).toLowerCase()){
+			adjPathStr = pathStr.charAt(0).toUpperCase();
+			if(pathStr.length > 1)
+				adjPathStr += pathStr.substring(1);
+		}
+	}
+	// fpath is Full Path, pathStr is the relative path, if any
+	// i.e. path = /longer/path/to/mount/some/file
+	// and  pathStr = mount/some/file
+	let i = 0;
+	let p = 0;
+	let c = 0;
+	let results = [];
+	do{
+		newHash = await CheckFileHashMatch(fpath, properties.Hash);
+		if(newHash){
+			// Hash code agrees with or was empty with/in database, not missing
+			missing = 0;
+			break;
+		}else{
+			changed = 1;
+		}
+		// try to create another path with next prefix or next glob items
+		do{
+			if(i < results.length){
+				// next path in glob list
+				fpath = results[i];
+				i++;
+				break;
+			}else{
+				let tmp = prefix_list[p];
+				if(tmp && pathStr.length){
+					fpath = tmp;
+					if(adjPathStr.length && c){
+						// trying the pathStr version with case adjustment
+						fpath += adjPathStr;
+						c = 0; // go back to original case next time
+					}else{
+						fpath += pathStr;
+						if(adjPathStr.length)
+							c = 1; // try case change next time
+					}
+					i = 0;
+					results = await globSearch(fpath);
+					if(results.length){
+						// found a path in new glob list
+						fpath = results[0];
+						i++;
+						if(!c)
+							p++;
+						break;
+					}
+					if(!c)
+						p++;
+				}else{
+					// no more prefixes
+					p = listSize+1;
+				}
+			}
+		}while(p < listSize);
+	}while(missing && plen && (p <= listSize));
+	if(missing){
+		// can't find it
+		if(properties.Missing)
+			status = 0; // was missing, still is: no change
+		else{
+			// set missing metadata flag
+			properties.Missing = 1;
+			status = 2; // was not missing, is now: lost
+		}
+	}else{
+		// found it... set URL if not set or if changed
+		if(properties.URL.length == 0)
+			changed = 1;	// fix missing URL
+		if(changed){
+			// re-encode URL from path change or from being missing
+			properties.URL = url.pathToFileURL(fpath).href;
+			status = 1;
+		}else
+			status = 0;
+
+		let pre = getFilePrefixPoint(fpath);
+		properties.Prefix = pre.prefix;
+		properties.Path = pre.path;
+		// Old OSX: Mount -> Prefix + mountName (first dir in path) 
+		// if fpath=/some/path, mountName = /
+		// if fpath=some/path, mountName = Some, Mount = /Volumes/Some
+		properties.Mount = "/";
+		if(pre.prefix.length){
+			let idx = pre.path.indexOf("/");
+			if(idx > 0){
+				let mountName = pre.path.substring(0, idx);
+				mountName = mountName[0].toUpperCase() + mountName.substr(1);
+				properties.Mount = "/Volumes/" + mountName;
+			}
+		}
+		// setthe Hash... it may have been empty going in
+		properties.Hash = newHash;
+
+		if(properties.Missing){
+			// was missing, but has been found... 
+			status = 3; // missing now found
+		}
+		// unset missing metadata flag
+		properties.Missing = 0;
+	}
+	return status;
+}
+
 async function resolveFileFromProperties(properties){
 	// Check file related properties in db against the file itself... find file if needed.
 	// use file as final authority for properties. This function may modify the properties object.
@@ -2859,8 +3041,8 @@ function calcFPLDuration(plprops, offsetAdj){
 				duration = parseFloat(plprops[i].Offset); // override time to last item with start of this one
 				
 			last = duration;
-			// and add the next items offset or this item's duration for the end time
-			if(((i+1) < plprops.length) && (plprops[i+1].Offset)){
+			// and add the next item's offset or this item's duration for the end time
+			if(((i+1) < plprops.length) && plprops[i+1] && (plprops[i+1].Offset)){
 				next = parseFloat(plprops[i+1].Offset) // use offset of next item, if present
 				// add a duration if missing
 				if((plprops[i].Duration == undefined) || (plprops[i].Duration == null) || (parseFloat(plprops[i].Duration) == 0)){
@@ -3580,6 +3762,7 @@ async function importFileIntoLibrary(fpath, params, fullpath){
 		else if((params.dup === "catset") && params.catid && (params.catid > 0)) dupmode = 2;
 		else if(params.dup === "replace") dupmode = 3;
 		else if(params.dup === "update") dupmode = 4;
+		else if(params.dup === "inplace") dupmode = 5;
 		meta = await getFileMeta(fpath, fullpath);
 		if(meta && Object.keys(meta).length){
 			let conn = false;
@@ -3597,7 +3780,8 @@ async function importFileIntoLibrary(fpath, params, fullpath){
 				if(result && result.ID){
 					ID = result.ID;
 					dupInfo = result;
-					dupmode = 3;
+					if(dupmode != 5)
+						dupmode = 3;
 				}else{
 					conn.release();
 					pass.status = -2;
@@ -3810,7 +3994,7 @@ async function importFileIntoLibrary(fpath, params, fullpath){
 						return pass;
 					}					
 				}else if(dupmode > 2){	// update existing duration
-					// 3 replace/delete old or 4 update if missing, missing already checked.
+					// 3 replace/delete old or 4 update if missing, or 5 repace/delete in existing location directory, missing already checked.
 					let query = "UPDATE "+locConf['prefix']+"toc SET Duration = "+meta.Duration+" WHERE ID = "+ID+";";
 					try{
 						result = await asyncQuery(conn, query);
@@ -3823,6 +4007,7 @@ async function importFileIntoLibrary(fpath, params, fullpath){
 					}
 					// try to delete original file
 					await resolveFileFromProperties(dupInfo);
+console.log(dupInfo);
 					if(!dupInfo.Missing){
 						let ok = await deleteFile(dupInfo.Prefix + dupInfo.Path);
 						if(ok)
@@ -3831,22 +4016,44 @@ async function importFileIntoLibrary(fpath, params, fullpath){
 							console.log("replace file: failed to delete original file " + dupInfo.Prefix + dupInfo.Path);
 					}
 				}
-				if(dupmode != 2){	// add new file to media dir and refernce it in the file properties
+				if(dupmode != 2){
 					let newPath = fpath;
-					if(!fullpath){ // only copy file if not using full path and instead using temp dir relative path.
-						newPath = await mkMediaDirs();
-						if(newPath.length){
-							fpath = tmpDir+fpath;
-							newPath = await copyFileToDir(fpath, newPath);
-							// attempt to copy an associated fileplaylist as well, if it exists.
-							await copyFileToDir(fpath+".fpl", newPath);
+					if(dupmode == 5){
+						// replace inplace
+						if(!fullpath){ // only copy file if not using full path and instead using temp dir relative path.
+							// get directory path of original location
+							newPath = path.dirname(dupInfo.Prefix + dupInfo.Path);
+							if(newPath.length){
+								fpath = tmpDir+fpath;
+								newPath = await copyFileToDir(fpath, newPath);
+								// attempt to copy an associated fileplaylist as well, if it exists.
+								await copyFileToDir(fpath+".fpl", newPath);
+							}
+							if(newPath.length == 0){
+								// copy failed!
+								await asyncRollback(conn);
+								conn.release();
+								pass.status = -3;
+								return pass;
+							}
 						}
-						if(newPath.length == 0){
-							// copy failed!
-							await asyncRollback(conn);
-							conn.release();
-							pass.status = -3;
-							return pass;
+					}else{
+						// add new file to media dir and refernce it in the file properties
+						if(!fullpath){ // only copy file if not using full path and instead using temp dir relative path.
+							newPath = await mkMediaDirs();
+							if(newPath.length){
+								fpath = tmpDir+fpath;
+								newPath = await copyFileToDir(fpath, newPath);
+								// attempt to copy an associated fileplaylist as well, if it exists.
+								await copyFileToDir(fpath+".fpl", newPath);
+							}
+							if(newPath.length == 0){
+								// copy failed!
+								await asyncRollback(conn);
+								conn.release();
+								pass.status = -3;
+								return pass;
+							}
 						}
 					}
 					
@@ -3907,7 +4114,7 @@ async function importFileIntoLibrary(fpath, params, fullpath){
 							pass.status = -1;
 							return pass;
 						}
-					}else{	
+					}else{
 						// update existing file row, leave segs, fades, vol, etc alone.
 						let query = "UPDATE "+locConf['prefix']+"file ";
 						query += "SET Hash = "+libpool.escape(meta.Hash)+" ";
@@ -4662,12 +4869,12 @@ module.exports = {
 																			// NOTE: file name is within the temporary media directory.
 		}else if(dirs[2] == 'import'){
 			importFile(request, response, params, dirs);	// /import/filename{/possible/sub/directory/filename}{?catid=id-of-cat}
-																		//						{&dup=[skip,catset,replace(delete old),update(if missing)]}
+																		//						{&dup=[skip,catset,replace(delete old),update(if missing),inplace(replace in same directory)]}
 																		//						{&id=[itemID to replace}
 																		// note: skip assumed if dup is not specified
 																		// note: if id is set, type of new and origin must match.  For files, only 
 																		// 		file properties and duration are changed, with the new file replacing
-																		//			the old at the old file's location.
+																		//			the old at the old file's location (dup=inplace) or at a new default location
 		}else if(dirs[2] == 'getprefix'){
 			getPrefix(request, response, params);			// /getprefix?path=the/path/to/find/prefix/of/if/any
 		}else if(dirs[2] == 'dbinit'){

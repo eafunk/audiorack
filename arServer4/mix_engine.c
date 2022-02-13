@@ -456,13 +456,13 @@ int process(jack_nframes_t nframes, void *arg){
 			leftVol = rightVol = 0.0;
 		}
 
-		if((inchrec->status & status_loading) && (inchrec->attached)){
+/*		if((inchrec->status & status_loading) && (inchrec->attached)){
 			/* check for failed player process load */
-			if(waitpid(inchrec->attached, NULL, WNOHANG) == inchrec->attached){
+/*			if(waitpid(inchrec->attached, NULL, WNOHANG) == inchrec->attached){
 				inchrec->status = status_empty;
 				inchrec->changed = inchrec->changed | change_unloaded;
 			}
-		}
+		} */
 		
 		// feed bus assignment
 		inchrec->tmpFeedBus = inchrec->feedBus & 0xE1000000;
