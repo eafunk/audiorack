@@ -171,7 +171,7 @@ typedef struct _CustomData {
 	jack_ringbuffer_t *ctlrecvqueue;
 	jack_default_audio_sample_t **jbufs; // pointer to chCount array of jack ports data buffers
 	gboolean settingsChanged;
-	gboolean flushAudio;	/* truse to trigger flushing back audio from the ring buffer */
+	gboolean flushAudio;	/* use to trigger flushing back audio from the ring buffer */
 	gboolean closeReq;
 	gboolean closeWaiting;	/* flag set indicating that a shutdown request has been made and we are waiting for the pipeline to finish */
 	gboolean eos;			/* flag to send End-Of-Stream control message */
@@ -602,7 +602,7 @@ static int jack_process(jack_nframes_t nframes, void *arg){
 		}
 	}
 			
-	/* handle received packets */		
+	/* handle received packets */
 	midi_bufferIn = jack_port_get_buffer(data->midiIn_jPort, nframes);
 	event_count = jack_midi_get_event_count(midi_bufferIn);
 	char change_flag = FALSE;

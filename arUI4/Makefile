@@ -9,6 +9,7 @@ uiserver:
 install:
 	mkdir -m 775 -p /opt/audiorack/bin/arui
 	mkdir -m 775 -p /opt/audiorack/bin/arui/client
+	cp -ut /opt/audiorack/bin keepalive
 	cp -ut /opt/audiorack/bin/arui *.js
 	cp -ut /opt/audiorack/bin/arui *.json
 	cp -rt /opt/audiorack/bin/arui node_modules

@@ -1944,7 +1944,7 @@ uint32_t LoadPlayer(int *pNum, const char *url_str, uint32_t UID, unsigned char 
 				}
 			}	
 		}else
-			instance->status = status_empty;
+ 			instance->status = status_empty;
 		
 		free(type);
 	}

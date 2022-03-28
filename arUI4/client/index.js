@@ -60,6 +60,8 @@ var catListCache = new watchableValue(false);
 var locListCache = new watchableValue(false);
 var artListCache = new watchableValue(false);
 var albListCache = new watchableValue(false);
+var mediaListCache = new watchableValue(false);
+
 
 /***** Utility functions *****/
 
@@ -325,7 +327,7 @@ async function getCatList(){
 		}else{
 			alert("Got an error fetching categories from server.\n"+resp.statusText);
 		}
-	}else{
+	}else if(cred.getValue()){
 		alert("Failed to fetch categories from the server.");
 	}
 }
@@ -398,10 +400,30 @@ async function getLocList(){
 			if(name)
 				locName.setValue(name);
 		}else{
-			alert("Got an error fetching categories from server.\n"+resp.statusText);
+			alert("Got an error fetching location list from server.\n"+resp.statusText);
 		}
-	}else{
-		alert("Failed to fetch categories from the server.");
+	}else if(cred.getValue()){
+		alert("Failed to fetch location list from the server.");
+	}
+}
+
+async function getMediaLocs(){
+let resp;
+	resp = await fetchContent("getconf/files");
+	if(resp){
+		if(resp.ok){
+			let list = await resp.json();
+			let newList = [];
+			for(let i = 0; i<list.length; i++){
+				if(list[i].id.indexOf("mediaDir-") == 0)
+					newList.push(list[i].id.slice(9));
+			}
+			mediaListCache.setValue(newList, true);
+		}else{
+			alert("Got an error fetching media location list from server.\n"+resp.statusText);
+		}
+	}else if(cred.getValue()){
+		alert("Failed to fetch media location list from the server.");
 	}
 }
 
@@ -659,21 +681,35 @@ function locMenuRefresh(value){
 	// when the locListCache variable changes
 	let element = document.getElementById("selloc");
 	if(element && value){
-		let inner = "<option val='' onClick='getLocList()'>Reload List</option>";
+		let inner = "<option value='' onClick='getLocList()'>Reload List</option>";
 		for(let i=0; i < value.length; i++)
-			inner += "<option val='"+value[i].Name+"' data-id='"+value[i].id+"'>"+value[i].Name+"</option>";
+			inner += "<option value='"+value[i].Name+"' data-id='"+value[i].id+"'>"+value[i].Name+"</option>";
 		element.innerHTML = inner;
 	}
 }
 
-function fileCatMenuRefresh(value){
-	// this function updates the location selection menu list
+function mediaMenuRefresh(value){
+	// this function updates the media location selection menu list
 	// when the locListCache variable changes
-	let element = document.getElementById("selloc");
+	let element = document.getElementById("impMediaDestList");
 	if(element && value){
-		let inner = "<option val='' onClick='getLocList()'>Reload List</option>";
+		let inner = "<option value='' onClick='getMediaLocs()'>Reload List</option>";
+		inner += "<option value='' selected>Default</option>";
 		for(let i=0; i < value.length; i++)
-			inner += "<option val="+value[i].Name+">"+value[i].Name+"</option>";
+			inner += "<option value='"+value[i]+"'>"+value[i]+"</option>";
+		element.innerHTML = inner;
+	}
+}
+
+function fileReplaceDestRefresh(value){
+	// this function updates the media location selection menu list
+	// when the locListCache variable changes
+	let element = document.getElementById("filereplacedest");
+	if(element && value){
+		let inner = "<option value='' onClick='getMediaLocs()'>Reload List</option>";
+		inner += "<option value='' selected>Default</option>";
+		for(let i=0; i < value.length; i++)
+			inner += "<option value='"+value[i]+"'>"+value[i]+"</option>";
 		element.innerHTML = inner;
 	}
 }
@@ -699,14 +735,6 @@ function browseTypeRowSelUpdate(value){
 }
 
 /***** HTML manipulation functions *****/
-
-//function includeScript(file) {
-//	let script  = document.createElement('script');
-//	script.src  = file;
-//	script.type = 'text/javascript';
-//	script.defer = true;
-//	document.getElementsByTagName('head').item(0).appendChild(script);
-//}
 
 function showTab(event, id, pass){
 	// pass is the studio name, if set.
@@ -2925,7 +2953,7 @@ async function itemReplace(evt){
 	if(!evt.target.files.length)
 		return;
 	let form = document.getElementById("replaceform");
-	let repType = document.getElementById("filereplacetype");
+	let repDest = document.getElementById("filereplacedest");
 	let formData = new FormData(form);
 	evt.target.value = [];
 	evt.target.disabled = true;
@@ -2938,8 +2966,8 @@ async function itemReplace(evt){
 		if(resp.ok){
 			let files = await resp.json();
 			if(files.length){
-				if(repType.value == 1)
-					resp = await fetchContent("library/import/"+files[0].filename+"?dup=inplace&id="+itemProps.ID);
+				if(repDest.value && repDest.value.length)
+					resp = await fetchContent("library/import/"+files[0].filename+"?mdir="+repDest.value+"&id="+itemProps.ID);
 				else
 					resp = await fetchContent("library/import/"+files[0].filename+"?id="+itemProps.ID);
 				if(resp && resp.ok){
@@ -3697,13 +3725,14 @@ async function reloadItemSection(el, type){
 		inner += "</table>";
 
 		if(itemProps.canEdit){
-			inner += `Replace: <select id="filereplacetype">
-							<option value="0">Upload to Media directory</option>
-							<option value="1">Upload to existing item directory</option>
-						</select>
-						<form id="replaceform" enctype="multipart/form-data">
+			inner += `Replace File With: <form id="replaceform" enctype="multipart/form-data">
 							<input type="file" id="replaceinput" class="editbutton" name="filestoupload" onchange="itemReplace(event)">
 						</form>
+						<label for="filereplacedest">To new Media Location:</label>
+						<select id="filereplacedest">
+							<option value="" onClick="getMediaLocs()">Reload List</option>
+							<option value="" selected>Default</option>
+						</select>
 						<p><button id='savefilebut' onclick='saveItemFile(event)'>Save File Properties</button>`;
 		}
 		el.innerHTML = inner;
@@ -3713,7 +3742,9 @@ async function reloadItemSection(el, type){
 		div = document.getElementById("itemAlbumList");
 		if(div && albListCache.getValue())
 			buildSearchList(div, albListCache.getValue(), itemChangeAlbum);
-			
+		if(div && mediaListCache.getValue())
+			fileReplaceDestRefresh(mediaListCache.getValue());
+		
 	}else if(type == "task"){
 		if(!itemProps.task)
 			// create empty array for new task
@@ -6344,10 +6375,11 @@ function startupContent(){
 					cred.setValue(false);
 					showTabElement(document.getElementById('navlogin'), 'login');
 				}
-				// change file import visibility based on ligin status
+				// change file import visibility based on login status
 				let el = document.getElementById('fileimportbox');
 				getLocList();
 				getCatList();
+				getMediaLocs();
 			});
 		}
 	});
@@ -6358,6 +6390,8 @@ window.onload = function(){
 	locName.registerCallback(refreshLogsLocationDep);
 	locName.registerCallback(refreshSchedLocationDep);
 	locName.registerCallback(refreshItemLocationDep);
+	mediaListCache.registerCallback(mediaMenuRefresh);
+	mediaListCache.registerCallback(fileReplaceDestRefresh);
 	locListCache.registerCallback(locMenuRefresh);
 	locListCache.registerCallback(refreshAddItemRest);
 	catListCache.registerCallback(refreshAddItemCats);

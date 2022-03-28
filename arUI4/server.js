@@ -165,7 +165,8 @@ function checkPwdHash(salt, clearpw, hashedpw){
 		"prefixes": ["prefixpattern1", "prefixpattern2", "prefixpattern3"],	// optional to override the default prefix patterns for the OS
 		"tmpMediaDir": "/some/tmp/dir/",
 		"tmpMediaAgeLimitHrs": 12.0,
-		"mediaDir": "/default/media/dir/,
+		"mediaDir": "/default/media/dir/",
+		"mediaDir-other": "/some/other/place/",   // alternate media directories with the name given after the dash, in this case, "other"
 		"supportDir": "/path/to/audiorack/support/dir"  // optional to override the default /opt/audiorack/support location.
 	},
 	"users": {

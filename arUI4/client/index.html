@@ -73,6 +73,11 @@
 									<div id="fileImportCatList"></div>
 								</div>
 							</div>
+							<label for="impMediaDestList">Media Location:</label>
+							<select id="impMediaDestList" name="mdir">
+								<option value="" onClick="getMediaLocs()">Reload List</option>
+								<option value="" selected>Default</option>
+							</select>
 							<div class="boxed">
 								Handle duplicate items that are found to already be in the library (via file hash):
 								<ul style="list-style-type:none; text-align: left">
@@ -265,7 +270,7 @@
 		</div>
 		<footer>
 			<div id="ssemsg" style="display: inline; float: left;"></div>
-			<div style="display: inline; float: right;">Copyright &copy2021; Ethan Funk</div>
+			<div style="display: inline; float: right;">Copyright &copy2021-2022; Ethan Funk</div>
 		</footer>
 	</div>
 </body>

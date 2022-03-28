@@ -23,7 +23,7 @@ User startup config file: 		~/.audiorack/ars_startup.conf
 	if file above is not found, a default startup is loaded at: 
 								/opt/audiorack/support/user_startup.conf
 								
-	The following are set in the startup config file:							 
+	The following are set in the startup config file: 
 	Other config files in:		~/.audiorack/
 	Unified server log file:	/var/opt/audiorack/logs/arserver.log
 	
@@ -33,7 +33,7 @@ Daemon startup config file: 	Specified with the -c command line parameter.
 								A Template file can be found at:
 									/opt/audiorack/support/root_startup.conf
 
-	The following are set in the startup config file:							 								
+	The following are set in the startup config file:
 	Other config files in:		/etc/opt/audiorack/
 	Server log file:			/var/log/arserver.log
 								 
@@ -86,7 +86,7 @@ enum{
 // rec status bits: b0-14 status, b16-31 are error code, if any 
 enum{
  	rec_uninit			=0L,
-	rec_ready			=(1L << 0),		
+	rec_ready			=(1L << 0),
 	rec_start			=(1L << 1),
 	rec_running			=(1L << 2),		// note: same as status_playing 
 	rec_stop			=(1L << 3),

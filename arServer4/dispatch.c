@@ -517,7 +517,7 @@ void *playerChangeWatcher(void *refCon){
 	inChannel *instance;
 	outChannel *outstance;
 	uint32_t changed;
-	uint32_t lastBusses, curBusses;
+	uint32_t lastBusses, curBusses, curStatus;
 	uint32_t state;
 	notifyData	data;
 	char *portName, *chanList, *mmList;
@@ -541,13 +541,15 @@ void *playerChangeWatcher(void *refCon){
 		/* check input players */
 		instance = mixEngine->ins;
 		for(i=0; i<mixEngine->inCount; i++){
+			changed = instance->changed;	// the order of these two lines are important for thread safety
+			curStatus = instance->status;
 			/* check change flags */
-			if(changed = instance->changed){
+			if(changed){
 				if(changed & change_stat){
-					if(instance->status & status_deleteWhenDone){
-						if((instance->status & status_finished) || 
-								((instance->status & status_hasPlayed) && 
-								!(instance->status & status_playing))){
+					if(curStatus & status_deleteWhenDone){
+						if((curStatus & status_finished) || 
+								((curStatus & status_hasPlayed) && 
+								!(curStatus & status_playing))){
 							instance->persist = 0;
 							jack_port_t **port;
 							port = instance->in_jPorts;
@@ -558,14 +560,14 @@ void *playerChangeWatcher(void *refCon){
 								port++;
 							}
 							pthread_mutex_unlock(&mixEngine->jackMutex);
-char logstr[64];
-snprintf(logstr, sizeof logstr, "[debug] -:player done, jack discon; Player %d.", i);
-serverLogMakeEntry(logstr);
+//char logstr[64];
+//snprintf(logstr, sizeof logstr, "[debug] -:player done, jack discon; Player %d.", i);
+//serverLogMakeEntry(logstr);
 						}
 					}
 					data.senderID = 0;
 					data.reference = htonl(i);
-					data.value.iVal = htonl(instance->status);
+					data.value.iVal = htonl(curStatus);
 					notifyMakeEntry(nType_pstat, &data, sizeof(data));
 				}
 				if(changed & change_pos){
@@ -645,7 +647,7 @@ serverLogMakeEntry(logstr);
 							pthread_mutex_unlock( &lastsegMutex);
 							
 							// create program log entry
-							if((instance->status & status_logged) == 0){
+							if((curStatus & status_logged) == 0){
 								instance->status = instance->status | status_logged;
 								programLogUIDEntry(instance->UID, 0, (instance->busses & 0xFF));
 							}
@@ -685,9 +687,9 @@ serverLogMakeEntry(logstr);
 								pthread_mutex_unlock(&mixEngine->jackMutex);
 								// clear loaded flag
 								changed = changed & ~change_loaded;
-char logstr[64];
-snprintf(logstr, sizeof logstr, "[debug] -:no longer in queue; Player %d.", i);
-serverLogMakeEntry(logstr);
+//char logstr[64];
+//snprintf(logstr, sizeof logstr, "[debug] -:no longer in queue; Player %d.", i);
+//serverLogMakeEntry(logstr);
 							}
 						}
 						if(changed & change_loaded){
@@ -726,11 +728,11 @@ serverLogMakeEntry(logstr);
 						data.value.iVal = htonl(instance->busses);
 						notifyMakeEntry(nType_bus, &data, sizeof(data));
 		
-						data.value.iVal = htonl(instance->status);
+						data.value.iVal = htonl(curStatus);
 						notifyMakeEntry(nType_pstat, &data, sizeof(data));
-char logstr[64];
-snprintf(logstr, sizeof logstr, "[debug] -:player loaded; Player %d.", i);
-serverLogMakeEntry(logstr);
+//char logstr[64];
+//snprintf(logstr, sizeof logstr, "[debug] -:player loaded; Player %d.", i);
+//serverLogMakeEntry(logstr);
 					}
 				}
 				if(changed & change_unloaded){
@@ -800,9 +802,9 @@ serverLogMakeEntry(logstr);
 						}
 						free(mmList);
 					}
-char logstr[64];
-snprintf(logstr, sizeof logstr, "[debug] -:player unloaded; Player %d.", i);
-serverLogMakeEntry(logstr);
+//char logstr[64];
+//snprintf(logstr, sizeof logstr, "[debug] -:player unloaded; Player %d.", i);
+//serverLogMakeEntry(logstr);
 				}
 				if((changed & change_type) && (instance->UID)){
 					uint32_t cVal;
@@ -839,7 +841,7 @@ serverLogMakeEntry(logstr);
 			}
 			
 			/* we need to check for failed player loads here */
-			if((instance->status & status_loading) && instance->attached){
+			if((curStatus & status_loading) && instance->attached){
 				if(kill(instance->attached, 0) < 0){
 					/* the PID no loger is running... change status
 					 * to remove, and the next render cycle will 
@@ -863,23 +865,23 @@ serverLogMakeEntry(logstr);
 			}
 			/* we need to check for left-over UIDs from unload player here
 			 * since releasing the UID may block */
-			if((instance->status == status_empty) && instance->UID){
+			if((curStatus == status_empty) && instance->UID){
 				releaseMetaRecord(instance->UID);
 				instance->UID = 0;
-char logstr[64];
-snprintf(logstr, sizeof logstr, "[debug] -:leftover UID cleared; Player %d.", i);
-serverLogMakeEntry(logstr);
+//char logstr[64];
+//snprintf(logstr, sizeof logstr, "[debug] -:leftover UID cleared; Player %d.", i);
+//serverLogMakeEntry(logstr);
 			}
 			/* Likewise, if a player staus is not remove or loading, but 
 			 * it's UID is zero, then an external connection was made, 
 			 * and we should creat a UID for it here. */
-			if((instance->status & ~(status_remove | status_loading)) && !instance->UID){
+			if((curStatus & ~(status_remove | status_loading)) && !instance->UID){
 				const char** conList;
 				char *url, *name;
 				unsigned int c;
-char logstr[64];
-snprintf(logstr, sizeof logstr, "[debug] -:new jack connection; Player %d.", i);
-serverLogMakeEntry(logstr);
+//char logstr[64];
+//snprintf(logstr, sizeof logstr, "[debug] -:new jack connection; Player %d.", i);
+//serverLogMakeEntry(logstr);
 				url = NULL;
 				name = NULL;
 				str_setstr(&url, "");
@@ -1067,8 +1069,7 @@ serverLogMakeEntry(logstr);
 	return NULL;
 }
 
-void serverLogCloseFile(void)
-{
+void serverLogCloseFile(void){
 	pthread_mutex_lock(&srvLogQueueLock);
 	if(svrLogFile){
 		fclose(svrLogFile);
@@ -1139,8 +1140,7 @@ void *serverLogWatcher(void *refCon){
 	return NULL;
 }
 
-void serverLogMakeEntry(char *message)
-{
+void serverLogMakeEntry(char *message){
 	time_t now;
 	ServerLogRecord *instance;
 
@@ -1161,8 +1161,7 @@ void serverLogMakeEntry(char *message)
 	}
 }
 
-unsigned char serverLogRotateLogFile(void)
-{
+unsigned char serverLogRotateLogFile(void){
 	unsigned char result;
 	char *mvName;
 	
@@ -1183,8 +1182,7 @@ unsigned char serverLogRotateLogFile(void)
 	return result;
 }
 
-void notifyMakeEntry(char type, void *data, unsigned short size)
-{
+void notifyMakeEntry(char type, void *data, unsigned short size){
 	unsigned int length;
 	notifyEntry *record;
 
