@@ -1,0 +1,10 @@
+#! /bin/bash
+
+result=1
+while [ $result -ne 0 ]; do
+	eval $@
+	result=$?
+	if [ $result -ne 0 ]; then
+  		sleep 1
+	fi
+done
