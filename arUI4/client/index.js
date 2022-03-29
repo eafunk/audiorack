@@ -419,7 +419,7 @@ let resp;
 					newList.push(list[i].id.slice(9));
 			}
 			mediaListCache.setValue(newList, true);
-		}else{
+		}else if(cred.getValue()){
 			alert("Got an error fetching media location list from server.\n"+resp.statusText);
 		}
 	}else if(cred.getValue()){
@@ -4847,6 +4847,10 @@ function loadConfigTypeTable(el, type){
 		colWidth.port = "65px";
 		colWidth.startup = "55px";
 		colWidth.action = "80px";
+	}else if(type === "conffiles"){
+		actions = `<button class="editbutton" onclick="updateConf(event, '`+type+`')">Update</button> $mediaDirActions$`;
+		fields = {id: "<input type='hidden' name='id' value='$val'/>$val", value: "<input type='text' name='value' value='$val'></input>"};
+		colWidth.action = "60px";
 	}else{
 		actions = `<button class="editbutton" onclick="updateConf(event, '`+type+`')">Update</button>`;
 		fields = {id: "<input type='hidden' name='id' value='$val'/>$val", value: "<input type='text' name='value' value='$val'></input>"};
@@ -4969,6 +4973,13 @@ function newConf(evt, type){
 	}else if(type === "confusers"){
 		props.password = "";
 		props.permission = "";
+	}else if(type === "conffiles"){
+		let retVal = prompt("Custom media directory lable (i.e. ads): ", "");
+		if(retVal && retVal.length){
+			props.id = "mediaDir-"+retVal;
+			props.value = "";
+		}else
+			return;
 	}else{
 		props.value = "";
 	}
@@ -5002,6 +5013,15 @@ async function delConf(evt, type){
 		}
 	}
 	loadConfigTypeTable(evt.target.parentNode.parentNode.parentNode.parentNode, type)
+}
+
+function mediaDirActions(entry){
+	if(entry.id.indexOf("mediaDir-") == 0)
+		return `<button class="editbutton" onclick="delConf(event, 'conffiles')">-</button>`
+	else if(entry.id.indexOf("mediaDir") == 0)
+		return `<button class="editbutton" onclick="newConf(event, 'conffiles')">+</button>`;
+	else
+		return "";
 }
 
 /***** Logs specific functions *****/
