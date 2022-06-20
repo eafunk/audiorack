@@ -3458,18 +3458,19 @@ async function getFileMeta(tmpDirFileName, fullpath){
 async function mkMediaDirs(mdir){
 	const zeroPad = (num, places) => String(num).padStart(places, '0')
 	let dir = mediaDir;
-	if(mdir && mdir.length){
+	let fpath = dir;
+	if(mdir && mdir.length)
 		dir = fileSettings['mediaDir-'+mdir];
-		// add trailing slash if not present
-		if(dir && dir.length && (dir.substr(-1) != '/'))
-			dir += '/';
-	}
 	if(dir && dir.length){
-		let present = new Date();
-		var year = present.getFullYear();
-		var month = present.getMonth()+1;
-		var date = present.getDate();
-		let fpath = dir+zeroPad(year, 2)+"/"+zeroPad(month, 2)+"/"+zeroPad(date, 2)+"/";		// Format: YYYY/MM/DD/
+		if(dir && dir.length && (dir.substr(-1) != '/')){
+			// if trailing slash if not present, add it, and add year/month/day to the path as well
+			dir += '/';
+			let present = new Date();
+			var year = present.getFullYear();
+			var month = present.getMonth()+1;
+			var date = present.getDate();
+			fpath = dir+zeroPad(year, 2)+"/"+zeroPad(month, 2)+"/"+zeroPad(date, 2)+"/";		// Format: YYYY/MM/DD/
+		}
 		// recursively create multiple directories
 		return await mkRecursiveDir(fpath); // this returns the full path to the deepest directory, with trailing slash, or empty if we failed
 	}
@@ -4564,6 +4565,9 @@ function startDbFileSearch(request, response, params){
 					response.status(400);
 					response.end("no default mediaDir path setting, or specific path set");
 				}
+				// add trailing slash if not present
+				if(fpath.substr(-1) != '/')
+					fpath += '/';
 				dbSearchRunning = crawlDirectory(connection, fpath, pace, add, false).then(() => {
 					// done running: clear the dbSearchRunning variable
 					dbSearchRunning = false;
@@ -4620,9 +4624,6 @@ module.exports = {
 			}
 			if(fileSettings['mediaDir'] && fileSettings['mediaDir'].length){
 				mediaDir = fileSettings['mediaDir'];
-				// add trailing slash if not present
-				if(mediaDir.substr(-1) != '/')
-					mediaDir += '/';
 			}
 			if(fileSettings['supportDir'] && fileSettings['supportDir'].length){
 				supportDir = fileSettings['supportDir'];

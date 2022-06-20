@@ -31,7 +31,7 @@ const net = require('net');
 var studiolist = false;
 var poollist = {};
 
-/****** gneric tcp connection pool functions  ******/
+/****** generic tcp connection pool functions  ******/
 class conFactory {
 	constructor(host, port){
 		this.host = host;

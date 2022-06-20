@@ -222,8 +222,29 @@
 				<h2>Studio</h2>
 				<div id="studiodiv" class="scroll">
 					<div id="studiogrid" class="studioGrid">
+						<div id="studioStat" class="stStatus">
+							<div id="studioAuto" class="stStatus" style="width: 250px; float: left;">
+								<fieldset >
+									<legend>Automation Mode</legend>
+									<ul style="list-style-type:none; text-align: left">
+									<li><input type="radio" id="stAuto" name="stQAutoMode" value="Auto" onclick="studioAutoMode(event, 'on')"><label for="stAuto">Auto</label>
+									<li><input type="radio" id="stLive" name="stQAutoMode" value="Live" onclick="studioAutoMode(event, 'live')"><label for="stLive">Live</label>
+									<li><input type="radio" id="stOff" name="stQAutoMode" value="Off" onclick="studioAutoMode(event, 'off')" checked><label for="stOff">Off</label>
+									</ul>
+								</fieldset>
+								<div id="stFillDesc"></div>
+							</div>
+							<div id="studioTime" class="stStatus" style="float: right;">
+								<div id="stQNext">0:00</div>
+								<div id="stQDur" style="padding: 10px;">0:00</div>
+								<input type="checkbox" id="stRun" onclick="studioRunStop(event);"; ></label for="stRun">Queue Run</label>
+								<button onclick="studioSegNow(event)">SegNow</button>
+							</div>
+						</div>
 						<div id="studioQueue" class="stQueue"></div>
 						<div id="studioOuts" class="stOuts"></div>
+						<div id="studioIns" class="stIns"></div>
+						<div id="studioSide" class="stSide"></div>
 					</div>
 				</div>
 			</div>

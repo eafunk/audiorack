@@ -62,7 +62,6 @@ var artListCache = new watchableValue(false);
 var albListCache = new watchableValue(false);
 var mediaListCache = new watchableValue(false);
 
-
 /***** Utility functions *****/
 
 function setStash(list){
@@ -6159,6 +6158,28 @@ async function importSelectFiles(evt){
 /***** Studio functions *****/
 
 var busmeters = [];
+var studioStateCache = {meta: [], queue: [], queueRev: 0, queueSec: 0.0, queueDur: 0.0, logTime: 0, ins: [], outs: [], encoders: [], autoStat: 0};
+
+/***** periodic all-studio-timers update tick *****/
+setInterval('updateStudioTimers()', 1000);
+
+function updateStudioTimers(){
+	let sec = studioStateCache.queueSec;
+	sec = sec - 1.0;
+	if(sec < 0.0)
+		sec = 0.0;
+	studioStateCache.queueSec = sec;
+	let el = document.getElementById("stQNext");
+	el.innerText = timeFormat(sec, 1);
+	
+	 sec = studioStateCache.queueDur;
+	sec = sec - 1.0;
+	if(sec < 0.0)
+		sec = 0.0;
+	studioStateCache.queueDur = sec;
+	el = document.getElementById("stQDur");
+	el.innerText = timeFormat(sec, 1) + " total";
+}
 
 function studioChangeCallback(value){
 	// clear existing VU meters
@@ -6174,11 +6195,231 @@ function studioChangeCallback(value){
 	// new VU meter canvases will be built once we receive the first VU data event
 	eventTypeReg("vu_"+value, studioVuUpdate);
 	busmeters = [];
+	studioStateCache = {meta: [], queue: [], queueRev: -1, queueSec: 0.0, queueDur: 0.0, logTime: 0, ins: [], outs: [], encoders: [], autoStat: 0};
+	syncStudioStat(value);
+}
+
+function calcQueueTimeToNext(data){
+	for(let n = (data.length - 1); n >= 0; n--){
+		if(data[n].status & 0x08)	// has played status flag is set
+			return data[n].segout;
+	}
+	return 0.0;
+}
+
+function calcQueueTimeToEnd(data){
+	let last = data.length - 1;
+	if(last >= 0)
+		return data[last].total;
+	return 0.0;
+}
+
+function studioSegNow(evt){
+	if(evt){
+		evt.preventDefault();
+		evt.stopPropagation();
+	}
+	let studio = studioName.getValue();
+	if(studio.length)
+		fetchContent("studio/"+studio+"?cmd=segnow");
+}
+
+function studioAutoMode(evt, type){
+	if(evt){
+		evt.preventDefault();
+		evt.stopPropagation();
+	}
+	let studio = studioName.getValue();
+	if(studio.length)
+		fetchContent("studio/"+studio+"?cmd=auto"+type);
+}
+
+function studioRunStop(evt){
+	if(evt){
+		evt.preventDefault();
+		evt.stopPropagation();
+	}
+	// undo browser state change... we don't want the check box 
+	// to actually change is propigated back from the server
+	if(evt.target.checked)
+		evt.target.checked = false;
+	else
+		evt.target.checked = true;
+	let studio = studioName.getValue();
+	if(studio.length){
+		if(evt.target.checked)
+			fetchContent("studio/"+studio+"?cmd=halt");
+		else
+			fetchContent("studio/"+studio+"?cmd=run");
+	}
+}
+
+async function syncStudioStat(studio){
+	let resp = await fetchContent("studio/"+studio+"?cmd=stat&raw=1");
+	if(resp instanceof Response){
+		if(resp.ok){
+			let data = await resp.text();
+			let lines = data.split("\n");
+			for(let n = 0; n < lines.length; n++){
+				let fields = lines[n].split("=");
+				let key = fields[0];
+				let value = fields[1];
+				if((key == "ListRev")){
+					value =  parseInt(value);
+					if(studioStateCache.queueRev != value){
+						// queue (list) has changed... issue list command to handle changes
+						syncQueue(studioName.getValue());
+						studioStateCache.queueRev = value;
+					}
+					let el = document.getElementById("stRun");
+					// update Queue Run/Halt button
+					fields = fields[1].split(" ");
+					if(fields[1] == "Running")
+						el.checked = true;
+					else
+						el.checked = false;
+				}else if((key == "auto")){
+					let idx = value.indexOf(' ');
+					
+					let fill = "Nothing to fill";
+					if(idx > -1){
+						fill = value.slice(idx + 1);
+						value = value.slice(0, idx);
+						if(fill.length == 0)
+							fill = "Nothing to fill yet.";
+					}
+					// update automation buttons and fill text
+					let el = document.getElementById("stFillDesc");
+					el.innerText = fill;
+					if(value == "on"){
+						studioStateCache.autoStat = 2;	// auto
+						el = document.getElementById("stAuto");
+						el.checked = true;
+					}else if(value == "live"){
+						studioStateCache.autoStat = 1;	// live
+						el = document.getElementById("stLive");
+						el.checked = true;
+					}else{
+						studioStateCache.autoStat = 0;	// off
+						el = document.getElementById("stOff");
+						el.checked = true;
+					}
+				}
+			}
+		}
+	}
+}
+
+async function syncQueue(studio){
+	let resp;
+	resp = await fetchContent("studio/"+studio+"?cmd=list&raw=1");
+	if(resp){
+		if(resp.ok){
+			let raw = await resp.text();
+			let lines = raw.split("\n");
+			let res = [];
+			let keys = lines[0].split("\t");
+			if(lines.length > 1){
+				for(let n = 1; n < lines.length; n++){
+					if(lines[n].length){
+						let obj = {};
+						let fields = lines[n].split("\t");
+						let cnt = fields.length;
+						if(cnt > keys.length) 
+							cnt = keys.length;
+						for(let i = 0; i < cnt; i++)
+							obj[keys[i]] = fields[i];
+						res.push(obj);
+					}
+				}
+			}
+			// sync cached times
+			studioStateCache.queueSec = calcQueueTimeToNext(res);
+			studioStateCache.queueDur = calcQueueTimeToEnd(res);
+			// update queue list display
+//!
+		}else{
+			alert("Got an error fetching list (queue) from studio.\n"+resp.statusText);
+		}
+	}else if(cred.getValue()){
+		alert("Failed to fetch list (queue) from the studio.");
+	}
 }
 
 function studioHandleNotice(data){
 //!!!
-console.log(data);
+	let val = 0;
+	let ref = 0;
+	switch(data.type){
+		case "outvol":			// output volume change, ref=output index, val=scalar volume
+			val = data.val;	// number
+			ref = data.num;
+			
+			break;
+		case "invol":			// player volume change, ref=input index, val=scalar volume
+			val = data.val;	// number
+			ref = data.num;
+			
+			break;
+		case "inbal":			// player balance change, ref=input index, val=scalar balance, zero for center
+			val = data.val;	// number
+			ref = data.num;
+			
+			break;
+		case "outbus":			// output bus assignment change, ref=output index, val=hex string bus assignment bits
+			val = data.val;	// hex string
+			ref = data.num;
+			
+			break;
+		case "inbus":			// input bus assignment change, ref=input index, val=hex string bus assignment bits
+			val = data.val;	// hex string
+			ref = data.num;
+			
+			break;
+		case "instat":			// input status change, ref=input index, val=status number
+			val = data.val;	// number
+			ref = data.num;
+			
+			break;
+		case "status":			// over-all status change, no ref, no val.  Use "stat" command to get status
+			// no ref or value: Change in ListRev, LogTime, automation status trigger this notice. Does not include sip registoration.
+			syncStudioStat(studioName.getValue());
+			break;
+		case "metachg":		// metadata content change, ref=UID number, no val. Use "dumpmeta" command to get new content
+			ref = data.uid;
+			
+			break;
+		case "rstat":			// recorder/encoder status change, no ref, no val. Use "rstat" command to get status of all recorders
+			
+			break;
+		case "recgain":		// recorder/encoder gain change, ref=recorder UID number, val=scalar gain
+			val = data.val;	// number
+			ref = data.uid;
+			
+			break;
+		case "inpos":		// input position change, ref=nput index, val=position in seconds
+			val = data.val;	// number
+			ref = data.num;
+			
+			break;
+		case "metadel":		// metadata record deleted, ref=UID number, no val.
+			ref = data.uid;
+			
+			break;
+		case "outdly":			// output delay change, ref=output index, val=delay in seconds, 16 max.
+			val = data.val;	// number
+			ref = data.num;
+			
+			break;
+
+		case "cpu":	// System Processor load, val=realtime JACK load in 0.8 format
+			val = data.val;	// number: 255 * (percentage / 100)
+			break;
+			
+		default:
+			// ignore unknown type;
+			return;
+	}
 }
 
 function studioVuUpdate(data){
@@ -6327,7 +6568,8 @@ function sseListener(event) { // event data callback
 	}else{
 		etype = sseData[event.type];
 		if(etype){
-			etype.setValue(event.data);
+			let obj = JSON.parse(event.data);
+			etype.setValue(obj, true);
 		}
 	}
 };

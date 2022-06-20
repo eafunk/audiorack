@@ -3880,6 +3880,7 @@ unsigned char handle_list(ctl_session *session){
 		if(segOutT == 0.0){
 			segOutT = atof(dur);
 		}
+
 		fadeT = GetMetaFloat(rec->UID, "FadeOut", NULL);
 		if((fadeT > 0.0) && (fadeT < segOutT))
 			segOutT = fadeT;
@@ -3890,6 +3891,8 @@ unsigned char handle_list(ctl_session *session){
 			if(checkPnumber(rec->player-1)){
 				instance = &mixEngine->ins[rec->player-1];
 				curPos = instance->pos;
+				// if loaded into a player, use the more accurite actual position segue-out
+				segOutT = instance->posSeg;
 			}
 		}
 		if(segOutT > curPos)
@@ -4069,7 +4072,7 @@ unsigned char handle_move(ctl_session *session){
 			data.reference = 0;
 			data.senderID = getSenderID();
 			data.value.iVal = 0;
-			notifyMakeEntry(nType_status, &data, sizeof(data));	
+			notifyMakeEntry(nType_status, &data, sizeof(data));
 			return rOK;
 		}
 	}
