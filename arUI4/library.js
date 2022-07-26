@@ -4271,6 +4271,25 @@ function getPrefix(request, response, params){
 	}
 }
 
+function getTmpMediaURL(request, response, params){
+	if(params.path && params.path.length){
+		let fpath = tmpDir+params.path;
+		let result = getFilePrefixPoint(fpath);
+		if(result){
+			fpath = encodeURI("file://"+result.prefix+"//"+result.path);
+			response.status(200); 
+			response.send(fpath);
+			response.end();
+		}else{
+			response.status(400);
+			response.end();
+		}
+	}else{
+		response.status(400);
+		response.end();
+	}
+}
+
 function getLibraryFingerprint(){
 	libpool.getConnection((err, connection) => {
 		if(err){
@@ -4757,6 +4776,8 @@ module.exports = {
 																		//						{mdir=[dirName]} where files setting mediDir-dirName is used.
 		}else if(dirs[2] == 'getprefix'){
 			getPrefix(request, response, params);			// /getprefix?path=the/path/to/find/prefix/of/if/any
+		}else if(dirs[2] == 'tmpmediaurl'){
+			getTmpMediaURL(request, response, params);	// /tmpmediaurl?path=/file/path/in/tmpMediaDir
 		}else if(dirs[2] == 'dbinit'){
 			handleDbInit(request, response, params);		// initdb?type=mysql&host=thehostadr&user=dbuser&password=thepassword&database=dbname&prefix=tableprefix (ar_ is typical)
 																		// port=port-number is optional

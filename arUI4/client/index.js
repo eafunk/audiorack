@@ -1665,6 +1665,49 @@ function stashDeleteSelected(evt){
 	}
 }
 
+async function stashToQueue(evt){
+	if(evt)
+		evt.preventDefault();
+	let list = document.getElementById("stashlist");
+	let els = list.querySelectorAll('input[type=checkbox]:checked');
+	if(els){
+		let items = [];
+		for(let i=0; i<els.length; i++){
+			let item = els[i].parentElement.parentElement;
+			let idx = item.getAttribute("data-idx");
+			item = stashList[idx];
+			if(item.tmpfile && item.tmpfile.length){
+				// create a URL for temp files
+				let data = false;
+				let resp = await fetchContent("library/tmpmediaurl", {
+					method: 'POST',
+					body: JSON.stringify({path: item.tmpfile.substring(1)}), // path leading '/' trimmed off
+					headers: {
+						"Content-Type": "application/json",
+						"Accept": "application/json"
+					}
+				});
+				if(resp){
+					if(!resp.ok){
+						alert("Got an error retreaving file info from server.\n"+resp.status);
+						return;
+					}
+					data = await resp.text();
+				}else{
+					alert("Failed to retreaving file info from server.");
+					return;
+				}
+				if(data)
+					item.URL = data;
+				else
+					continue;
+			}
+			items.push(item);
+		}
+		appendItemsToQueue(items);
+	}
+}
+
 /***** Item show/edit/delete functions *****/
 
 async function getMetaPropsForParent(str, parent){
@@ -3177,6 +3220,41 @@ function itemSendToStash(evt){
 	appendItemToStash(itemProps);
 }
 
+async function itemSendToQueue(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let items = [];
+	let item = Object.assign({}, itemProps);
+	if(item.tmpfile && item.tmpfile.length){
+		// create a URL for temp files
+		let data = false;
+		let resp = await fetchContent("library/tmpmediaurl", {
+				method: 'POST',
+				body: JSON.stringify({path: item.tmpfile.substring(1)}), // path leading '/' trimmed off
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp){
+			if(!resp.ok){
+				alert("Got an error retreaving file info from server.\n"+resp.status);
+				return;
+			}
+			data = await resp.text();
+		}else{
+			alert("Failed to retreaving file info from server.");
+			return;
+		}
+		if(data)
+			item.URL = data;
+		else
+			return;
+	}
+	items.push(item);
+	appendItemsToQueue(items);
+}
+
 function plSendToStash(evt){
 	evt.preventDefault();
 	evt.stopPropagation();
@@ -4351,7 +4429,7 @@ async function showTocItem(panel, container){
 			inner += `<p><button id='expitembut' onclick='itemExport(event)'>Download</button> jSON File`;
 		inner += `<a id="filedltarget" style="display: none"></a>`;
 	}
-	inner += `<p><button onclick='itemSendToStash(event)'>Item to Stash</button>`;
+	inner += `<p><button onclick='itemSendToStash(event)'>Item to Stash</button><button onclick='itemSendToQueue(event)'>Item to Queue</button>`;
 
 	container.innerHTML = inner;
 	panel.style.width = infoWidth;
@@ -6035,6 +6113,46 @@ async function filesToStash(evt){
 	}
 }
 
+async function filesToQueue(evt){
+	if(evt)
+		evt.preventDefault();
+	let rows = document.getElementById("filelist").firstChild.firstChild.childNodes;
+	let items = [];
+	for(let i=0; i<rows.length; i++){
+		let sel = rows[i].childNodes[0].firstChild;	// select column
+		if((sel.localName === "input") && sel.checked){
+			let path = rows[i].childNodes[1].innerText;
+			if(filesPath.length)
+				path = filesPath+"/"+path;
+			// query API for tmpfileurl properties
+			let data = false;
+			let resp = await fetchContent("library/tmpmediaurl", {
+					method: 'POST',
+					body: JSON.stringify({path: path}),
+					headers: {
+						"Content-Type": "application/json",
+						"Accept": "application/json"
+					}
+				});
+			if(resp){
+				if(!resp.ok){
+					alert("Got an error retreaving file info from server.\n"+resp.status);
+					return;
+				}
+				data = await resp.text();
+			}else{
+				alert("Failed to retreaving file info from server.");
+				return;
+			}
+			if(data){
+				let item = {URL: data, Type: "file"};
+				items.push(item);
+			}
+		}
+	}
+	appendItemsToQueue(items);
+}
+
 async function getFileInfo(evt){
 	evt.preventDefault();
 	evt.stopPropagation();
@@ -6488,7 +6606,7 @@ function queueUnselectAll(evt){
 			let ref = item.getAttribute("data-idx");
 			item = studioStateCache.meta[ref];
 			if(item){
-				// make persisten accross queue list updates
+				// make persistent accross queue list updates
 				item.chkd = "";
 			}
 		}
@@ -6516,6 +6634,52 @@ async function queueDeleteSel(evt){
 	}
 }
 
+async function appendItemsToQueue(data){
+console.log(data);
+	if(!data || (data.length == 0))
+		return;
+	let rows = document.getElementById("stQlist").childNodes;
+	let studio = studioName.getValue();
+	if(studio.length){
+		for(let i=0; i<rows.length; i++){
+			let sel = rows[i].childNodes[0].childNodes[0];	// checkbox
+			if(sel.checked){
+				let ref = rows[i].getAttribute("data-idx");
+				let item = studioStateCache.meta[ref];
+				if(item && (!item.stat || (item.stat != "Playing"))){
+					ref = parseInt(ref, 10);
+					let hexStr =  ("00000000" + ref.toString(16)).substr(-8);
+					for(let n=0; n<data.length; n++){
+						let url = "";
+						if(data[n].ID){
+							url = "item:///"+data[n].ID;
+						}else if(data[n].Type === "file"){
+							if(data[n].URL && data[n].URL.length)
+								url = data[n].URL;
+						}
+						if(url.length){
+							await fetchContent("studio/"+studio+"?cmd=add%20"+hexStr+"%20"+url);
+						}
+					}
+				}
+				return;
+			}
+		}
+		// no queue item selected.  Add to end of the list, forward order
+		for(let n=0; n<data.length; n++){
+			let url = "";
+			if(data[n].ID){
+				url = "item:///"+data[n].ID;
+			}else if((data[n].Type === "file") && data[n].URL && data[n].URL.length){
+				url = data[n].URL;
+			}
+			if(url.length){
+				await fetchContent("studio/"+studio+"?cmd=add%20-1%20"+url);
+			}
+		}
+	}
+}
+
 function queueSelToStash(evt){
 	if(evt)
 		evt.preventDefault();
@@ -6536,6 +6700,11 @@ function moveItemInQueue(obj, fromIdx, toIdx){
 	let meta = queueMetaFromIdx(fromIdx);
 	if(meta){
 		if(meta.stat == "Playing")
+			return true; // prevent local drop
+	}
+	let metato = queueMetaFromIdx(toIdx);
+	if(metato){
+		if(metato.stat == "Playing")
 			return true; // prevent local drop
 	}
 	let studio = studioName.getValue();
