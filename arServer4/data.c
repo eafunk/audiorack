@@ -103,8 +103,8 @@ uint32_t createMetaRecord(const char *url, uint32_t *reqID, unsigned char silent
 		data.value.iVal = 0;
 		notifyMakeEntry(nType_mstat, &data, sizeof(data));
 	}
-						
-   return theID;   
+	
+	return theID;
 }
 
 void releaseMetaRecord(uint32_t uid){
@@ -174,7 +174,7 @@ char *GetMetaData(uint32_t uid, const char *key, unsigned char allowNull){
 	pthread_rwlock_unlock(&dataLock);
 
 	if(!result && !allowNull)
-		result = strdup("");			
+		result = strdup("");
 	return result;
 }
 
@@ -374,14 +374,14 @@ unsigned int GetMetaKeysAndValues(uint32_t uid, char ***keys, char ***values){
 			*values = calloc(count, sizeof(char*));
 			// itterate through KV list (should already be in key alphebetical order)
 			pair = (keyValueRecord *)&rec->child;
-			while(pair = (keyValueRecord *)getNextNode((LinkedListEntry *)pair)){	
+			while(pair = (keyValueRecord *)getNextNode((LinkedListEntry *)pair)){
 				(*keys)[i] = strdup(pair->key);
-				(*values)[i] = strdup(pair->value);			
+				(*values)[i] = strdup(pair->value);
 				i++;
 			}
 		}
 	}
-	pthread_rwlock_unlock(&dataLock);		
+	pthread_rwlock_unlock(&dataLock);
 	return count;
 }
 

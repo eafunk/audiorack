@@ -1674,9 +1674,6 @@ void *controlQueueInWatcher(void *refCon){
 									if((!strlen(tmp) || !strcmp(tmp, item->valuestring))
 																	&& !strcmp(sval, "encoder")){
 										/* name is empty or matches, and type match... update this uid item */
-										free(tmp);
-										tmp = istr(now);
-										SetMetaData(packet->peer, "TimeStamp", tmp);
 										/* itterate through the jSON list, updating metadata */
 										unsigned char notify = 0;
 										item = parent->child;
@@ -1702,6 +1699,9 @@ void *controlQueueInWatcher(void *refCon){
 												}
 											}
 										}while(item = item->next);
+										free(tmp);
+										tmp = istr(now);
+										SetMetaData(packet->peer, "TimeStamp", tmp);
 										// a change was made... send out notice.
 										if(notify){
 											notifyData data;

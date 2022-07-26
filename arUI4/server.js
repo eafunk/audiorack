@@ -270,33 +270,35 @@ function clearTmpDirAgedFilesFunc(){
 					files.forEach(function(file){
 						let thisFile = path.join(tmpDir, file);
 						fs.stat(thisFile, function(err, stats){
-							let diffHrs = (Date.now() - stats.ctime.getTime()) / (1000 * 60 * 60); // gives hour difference 
-							if(diffHrs > tmpAge){
-								if(stats.isFile()){
-									// delete this file, it's too old
-									try{
-										fs.unlink(thisFile, function (err){
-											if(err)
-												console.log("aged tempMediaDir file remove failed: " + file + "err="+ err);
-											else
-												console.log("aged tempMediaDir file removed: " + file);
-										});
-									}catch(e){
-										console.log('Temp. file deletion error:');
-										console.log(e);
-									}
-								}else if(stats.isDirectory()){
-									// recursivly remove directory and contents regardless of contents age
-									try{
-										fs.rmdir(thisFile, {recursive: true}, function (err){
-											if(err)
-												console.log("aged tempMediaDir directory remove failed: " + file + "err="+ err);
-											else
-												console.log("aged tempMediaDir directory removed: " + file);
-										});
-									}catch(e){
-										console.log('Temp. directory deletion error:');
-										console.log(e);
+							if(stats){
+								let diffHrs = (Date.now() - stats.ctime.getTime()) / (1000 * 60 * 60); // gives hour difference 
+								if(diffHrs > tmpAge){
+									if(stats.isFile()){
+										// delete this file, it's too old
+										try{
+											fs.unlink(thisFile, function (err){
+												if(err)
+													console.log("aged tempMediaDir file remove failed: " + file + "err="+ err);
+												else
+													console.log("aged tempMediaDir file removed: " + file);
+											});
+										}catch(e){
+											console.log('Temp. file deletion error:');
+											console.log(e);
+										}
+									}else if(stats.isDirectory()){
+										// recursivly remove directory and contents regardless of contents age
+										try{
+											fs.rmdir(thisFile, {recursive: true}, function (err){
+												if(err)
+													console.log("aged tempMediaDir directory remove failed: " + file + "err="+ err);
+												else
+													console.log("aged tempMediaDir directory removed: " + file);
+											});
+										}catch(e){
+											console.log('Temp. directory deletion error:');
+											console.log(e);
+										}
 									}
 								}
 							}
@@ -937,6 +939,7 @@ app.post('/tmpupload', function(req, res){
 			if(err){
 				res.status(400);
 				res.end("Failed");
+				return;
 			}
 			// check for .zip file expantion
 			for(let i = 0; i< req.files.length; i++){
@@ -958,7 +961,7 @@ app.post('/tmpupload', function(req, res){
 				}
 			}
 			res.status(200);
-			res.json(req.files); // [].filename cntains the name of the file placed in the temp directory
+			res.json(req.files); // [].filename contains the name of the file placed in the temp directory
 			res.end();
 		});
 	}else{

@@ -507,9 +507,9 @@ function restQueryRequest(connection, table, request, response, select, from, wh
 	let cnt = DefLimit;
 	if(noLimit==0){	// only set a limit/offset if noLimit is 0
 		if(params.range){
-			let parts = params.range;
-			offset = parts[0];
-			cnt = parts[1]-offset;
+			let parts = params.range.split('/');
+			cnt = parts[1];
+			offset = parts[0] * cnt;
 		}
 		if(cnt)
 			tail += "LIMIT "+cnt+" OFFSET "+offset;
@@ -2121,7 +2121,7 @@ function deleteID(request, response, params, dirs){
 		response.end();
 	}
 }
-// getLogs -> location=(name), key1=, key2=, key3=, etc.
+// getLogs -> location=(name) or locID=(number), key1=, key2=, key3=, etc.
 // datetime=yyyy-mm-dd-hh:mm:ss
 // property=value (% for like)
 // added=true (any value for added is taken as true.  False assumed if added is missing)
@@ -2132,9 +2132,11 @@ function getLogs(request, response, params){
 			response.send(err.code);
 			response.end();
 		}else{
-			if(params.location){	// location specified
+			if(params.location || params.locID){	// location specified
 				let loc = params.location;
 				delete params.location;
+				let locID = params.locID;
+				delete params.locID;
 				let sort = "-Time";
 				if(params.sortBy)
 					delete params.sortBy;
@@ -2142,6 +2144,11 @@ function getLogs(request, response, params){
 				let select = "SELECT TIME(FROM_UNIXTIME("+locConf['prefix']+"logs.Time)) As TimeStr, "+locConf['prefix']+"logs.Name As Label, "+locConf['prefix']+"logs.* ";
 				let from = "FROM ("+locConf['prefix']+"logs, "+locConf['prefix']+"locations) ";
 				let where = "WHERE "+locConf['prefix']+"locations.Name = "+libpool.escape(loc)+" AND "+locConf['prefix']+"logs.Location = "+locConf['prefix']+"locations.ID ";
+				if(locID){
+					locID = parseInt(locID);
+					from = "FROM ("+locConf['prefix']+"logs) ";
+					where = "WHERE "+locConf['prefix']+"logs.Location = "+locID+" ";
+				}
 				if(params.added){
 					// include added items that have not played
 					where += "AND ("+locConf['prefix']+"logs.Added & 0x2) = 0 ";

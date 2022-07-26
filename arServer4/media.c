@@ -300,7 +300,7 @@ char *findPrefixedFile(uint32_t UID, char *inprefix, char *inpath){
 	
 	// path is Full Path, pathStr is the relative path, if any
 	// i.e. path = /longer/path/to/mount/some/file
-	// and  pathStr = mount/some/file
+	// then  pathStr = mount/some/file
 	globbuf.gl_offs = 0;
 	globbuf.gl_pathc = 0;
 	i = 0;
@@ -308,7 +308,7 @@ char *findPrefixedFile(uint32_t UID, char *inprefix, char *inpath){
 	c = 0;
 	do{
 		if(CheckFileHashMatch(path, "")){
-			// Hash code agrees with URL
+			// File has a hash: exists and is readable
 			missing = 0;
 			break;
 		}
@@ -380,8 +380,6 @@ char *findPrefixedFile(uint32_t UID, char *inprefix, char *inpath){
 		// found it... set URL
 		tmp = NULL;
 		str_setstr(&tmp, path);
-		// insert a extra slash between the new prefix (ends with slath) and path - prefixed file indicator and token
-		str_insertstr(&tmp, "/", strlen(tmp) - strlen(pathStr));
 		newurl = uriEncodeKeepSlash(tmp);
 		free(tmp);
 		str_insertstr(&newurl, "file://", 0);
@@ -544,7 +542,7 @@ void plsPLGetProperties(FILE *fp, uint32_t UID)
 	
 	// set name to file name extracted from URL
 	url_str = GetMetaData(UID, "URL", 0);
-    if(tmp = str_NthField(url_str, "://", 1)){
+	if(tmp = str_NthField(url_str, "://", 1)){
 		// ignore host, if any
 		if(path = strchr(tmp, '/')){
 			path = uriDecode(path);
@@ -677,7 +675,7 @@ void m3uPLGetProperties(FILE *fp, uint32_t UID)
 	SetMetaData(UID, "Type", "filepl");
 	// set name to file name extracted from URL
 	url_str = GetMetaData(UID, "URL", 0);
-    if(tmp = str_NthField(url_str, "://", 1)){
+	if(tmp = str_NthField(url_str, "://", 1)){
 		// ignore host, if any
 		if(path = strchr(tmp, '/'))
 			path = uriDecode(path);
@@ -816,7 +814,7 @@ void handle_discovered(GstDiscoverer *discoverer, GstDiscovererInfo *info, uint3
 			serverLogMakeEntry(buf);
 			break;
 		case GST_DISCOVERER_BUSY:
-			snprintf(buf, sizeof buf, "[media] handle_discovered-%s: Invalid URI", uri);
+			snprintf(buf, sizeof buf, "[media] handle_discovered-%s: Busy", uri);
 			serverLogMakeEntry(buf);
 			break;
 		case GST_DISCOVERER_MISSING_PLUGINS:{
@@ -865,12 +863,12 @@ void handle_discovered(GstDiscoverer *discoverer, GstDiscovererInfo *info, uint3
 void GetGstDiscoverMetaData(uint32_t UID, const char *url_str){
 	GstDiscovererInfo *info;
 // GstDiscoverer *discoverer;
-		
+	
 	pthread_mutex_lock(&discoverMutex);
 
 // discoverer = gst_discoverer_new(5 * GST_SECOND, NULL);
 // g_object_ref(discoverer);
-		
+	
 	if(info = gst_discoverer_discover_uri(discoverer, url_str, NULL)){
 		handle_discovered(discoverer, info, UID);
 
@@ -907,37 +905,7 @@ void GetInputMetaData(uint32_t UID, const const char *url){
 	else
 		SetMetaData(UID, "Missing", "1");
 }
-/*
-void GetIAXMetaData(uint32_t UID, CFURLRef url)
-{
-	unsigned char isAbsolutePath;
-	CFStringRef input_str;
-	char buf[256];
-	char *callerid;
-	int line;
 
-	input_str = CFURLCopyStrictPath(url, &isAbsolutePath);
-	if(input_str == NULL){
-		SetMetaData(UID, "Missing", "1");
-		return;
-	}
-	CFStringGetCString(input_str, buf, sizeof(buf), kCFStringEncodingUTF8);
-	CFRelease(input_str);
-
-    // get iax telephone line info
-	line = atoi(buf);
-	if(iaxp_get_callerid(line, buf, sizeof(buf)))
-		callerid = buf;
-	else
-		callerid = "unknown";
-	line++;
-	if(iaxp_is_ARS_codec(line))
-		SetMetaData(UID, "Name", "Remote "+istr(line));
-	else
-		SetMetaData(UID, "Name", "TelLine "+istr(line));
-	SetMetaData(UID, "Comment", string(callerid));
-}
-*/
 void GetFileMetaData(uint32_t UID, const char *url){
 	char *copy;
 	char *path = NULL;
@@ -1013,9 +981,10 @@ void GetFileMetaData(uint32_t UID, const char *url){
 			if(dbID){
 				snprintf(buf, sizeof(buf), "item:///%u", (unsigned int)dbID);
 				GetItemMetaData(UID, buf);
-			}
-			else
-				GetGstDiscoverMetaData(UID, url);
+			}else
+				tmp = GetMetaData(UID, "URL", 0);
+				GetGstDiscoverMetaData(UID, tmp);
+				free(tmp);
 		}else{
 			SetMetaData(UID, "Missing", "1");
 			goto finish;
@@ -1063,8 +1032,6 @@ void GetURLMetaData(uint32_t UID, const char *url){
 			GetItemMetaData(UID, url);
 		else if(!strcmp(type, "input"))
 			GetInputMetaData(UID, url);
-//		else if(!strcmp(type, "iax"))
-//			GetIAXMetaData(UID, url);
 		else if(!strcmp(type, "stop")){
 			SetMetaData(UID, "Name", "--- Play List Stop ---");	
 			SetMetaData(UID, "Missing", "0");
@@ -1473,7 +1440,7 @@ uint32_t LoadURLPlayer(int pNum, const char *url_str, uint32_t UID){
 	}
 	
 	recPtr->argv[1] = strdup("-u");
-	recPtr->argv[2] = strdup(url_str);
+	recPtr->argv[2] = GetMetaData(locUID, "URL", 0);
 	recPtr->argv[3] = strdup(mixEngine->ourJackName);
 	recPtr->argv[4] = ustr(pNum);
 	recPtr->argv[5] = NULL;
@@ -1545,7 +1512,7 @@ uint32_t LoadURLPlayer(int pNum, const char *url_str, uint32_t UID){
 		// obtain a new process group 
 		setsid();
 
-		// and run...	
+		// and run...
 		execvp(recPtr->argv[0], recPtr->argv);
 		// if execution fails...
 		i = 0;

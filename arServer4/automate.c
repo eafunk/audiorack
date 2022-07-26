@@ -229,7 +229,7 @@ void AddPlayer(int pos, int pNum){
 		data.reference = 0;
 		data.senderID = getSenderID();
 		data.value.iVal = 0;
-		notifyMakeEntry(nType_status, &data, sizeof(data));	
+		notifyMakeEntry(nType_status, &data, sizeof(data));
 		data.reference = htonl(instance->UID);
 		notifyMakeEntry(nType_mstat, &data, sizeof(data));
     }
@@ -1041,7 +1041,7 @@ void PlayListFiller(uint32_t *lastFillID, int *listPos){
 		str_appendstr(&url, tmp);
 		free(tmp);
 		
-		localUID = createMetaRecord(url, NULL, 0);
+		localUID = createMetaRecord(url, NULL, 1);
 		// fill the metadata record
 		GetURLMetaData(localUID, url);
 

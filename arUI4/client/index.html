@@ -29,6 +29,7 @@
 			<button id="showinfobtn" onclick="showInfo(event)">&lt;</button>
 			<div id="about" class="tabcontent">
 				<h2>Welcome to AudioRack v4.0.1</h2>
+				<p>Copyright &copy2021-2022; Ethan Funk</p>
 				<p>Radio is fun...</p>
 			</div>
 			<div id="stash" class="tabcontent">
@@ -220,11 +221,12 @@
 			</div>
 			<div id="studio" class="tabcontent">
 				<h2>Studio</h2>
+				<button onclick="debugNow(event)">Debug</button>
 				<div id="studiodiv" class="scroll">
-					<div id="studiogrid" class="studioGrid">
+					<div id="studiogrid" class="stGrid">
 						<div id="studioStat" class="stStatus">
 							<div id="studioAuto" class="stStatus" style="width: 250px; float: left;">
-								<fieldset >
+								<fieldset>
 									<legend>Automation Mode</legend>
 									<ul style="list-style-type:none; text-align: left">
 									<li><input type="radio" id="stAuto" name="stQAutoMode" value="Auto" onclick="studioAutoMode(event, 'on')"><label for="stAuto">Auto</label>
@@ -241,10 +243,41 @@
 								<button onclick="studioSegNow(event)">SegNow</button>
 							</div>
 						</div>
-						<div id="studioQueue" class="stQueue"></div>
+						<div id="studioQueue">
+							<div>
+								<fieldset>
+									<button onclick="queueSelectAll(event)">Select All</button>
+									<button onclick="queueUnselectAll(event)">Unselect all</button>
+									<div style="float: right;">
+										<label for="qHistCount">History Count</label>
+										<input type="number" min="2" max="12" name="hCnt" value="8" id="qHistCount" onchange="syncRecentPlays(event);"></input>
+									</div>
+								</fieldset>
+							</div>
+								<div style="float: left;">
+									<fieldset>
+										Selected Items<br>
+										<button onclick="queueDeleteSel(event)">Delete</button>
+										<button onclick="queueSelToStash(event)">Copy to Statsh</button>
+									</fieldset>
+								</div>
+								<div style="float: right;">
+									<fieldset>
+										Insert after first selected, or end<br>
+										<button onclick="queueUnselectAll(event)">from Stash</button>
+										<button onclick="queueUnselectAll(event)">from Temp. Files</button>
+									</fieldset>
+								</div>
+							<div class="stQueue">
+								<ul class="ddlist" id="stHlist">
+								</ul>
+								<ul class="ddlist" id="stQlist">
+								</ul>
+							</div>
+						</div>
 						<div id="studioOuts" class="stOuts"></div>
-						<div id="studioIns" class="stIns"></div>
-						<div id="studioSide" class="stSide"></div>
+						<div id="studioIns" class="stIns">Inputs/Mixer</div>
+						<div id="studioSide" class="stSide">Accordian</div>
 					</div>
 				</div>
 			</div>
@@ -289,10 +322,6 @@
 				<p>Radio is fun...</p>
 			</div>
 		</div>
-		<footer>
-			<div id="ssemsg" style="display: inline; float: left;"></div>
-			<div style="display: inline; float: right;">Copyright &copy2021-2022; Ethan Funk</div>
-		</footer>
 	</div>
 </body>
 </html>

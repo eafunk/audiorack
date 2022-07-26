@@ -1359,9 +1359,8 @@ function insertTableRow(kvcols, el, idx, colMap, rowClick, actions, fieldTypes){
 	}
 }
 
-function appendDragableItem(dragable, dropcb, item, idx, ul, format){
-	let li = document.createElement("li");
-	li.setAttribute("data-idx", idx);
+
+function setDragableInnerHTML(item, li, format){
 	// format: li contents set to format with all $key$ replaced with corrisponding key's value
 	// or $key->funcName$ replaced with the value returned from the named function with the key's value passed in.
 	let inner = format;
@@ -1369,37 +1368,47 @@ function appendDragableItem(dragable, dropcb, item, idx, ul, format){
 		let parts = inner.split("$");
 		let key;
 		for(let n = 0; n < parts.length; n++){
-			if(n % 2 == 1){
-				let key = parts[n];
-				let obj = item;
-				if(key.indexOf("/") > -1){	// handle sub-keys "parent-key/child-key/.."
-					let sub = inner.split("/");
-					for(let i = 0; i < sub.length; i++)
-						obj = obj[sub[i]];
+			if(item){
+				if(n % 2 == 1){
+					let key = parts[n];
+					let obj = item;
+					if(key.indexOf("/") > -1){	// handle sub-keys "parent-key/child-key/.."
+						let sub = inner.split("/");
+						for(let i = 0; i < sub.length; i++)
+							obj = obj[sub[i]];
+					}
+					if(key.indexOf("->") > -1){	// handle value conversion function "key->functionName"
+						let sub = key.split("->");
+						let fnName = sub[1];
+						key = sub[0];
+						parts[n] = window[fnName](obj[key]);
+					}else
+						parts[n] = quoteattr(obj[key]);
+					if(!parts[n])
+						parts[n] = "";
 				}
-				if(key.indexOf("->") > -1){	// handle value conversion function "key->functionName"
-					let sub = key.split("->");
-					let fnName = sub[1];
-					key = sub[0];
-					parts[n] = window[fnName](obj[key]);
-				}else
-					parts[n] = quoteattr(obj[key]);
-				if(!parts[n])
-					parts[n] = "";
 			}
 		}
 		inner = parts.join("");
 	}
 	li.innerHTML = inner;
+}
+
+function appendDragableItem(dragable, dropcb, item, idx, ul, format){
+	let li = document.createElement("li");
+	li.setAttribute("data-idx", idx);
+	setDragableInnerHTML(item, li, format);
 	ul.appendChild(li);
 	if(dragable)
 		setDragItemEvents(li, false, dropcb)
+	return li;
 }
 
 function genDragableListFromObjectArray(dragable, dropcb, list, ul, format){
 	ul.innerHTML = "";
 	let idx = 0;
-	for(let item of list){
+	for(let n = 0; n < list.length; n++){
+		let item = list[n];
 		appendDragableItem(dragable, dropcb, item, idx, ul, format);
 		idx++;
 	}
@@ -1455,12 +1464,15 @@ function setDragItemEvents(i, dragcb, dropcb){
 				if(this == items[it])
 					droppedpos = it;
 			}
+			let prevent = false;
 			if(dropcb)
-				dropcb(this, currentpos, droppedpos);
-			if(currentpos < droppedpos)
-				this.parentNode.insertBefore(curDrag, this.nextSibling);
-			else
-				this.parentNode.insertBefore(curDrag, this);
+				prevent = dropcb(this, currentpos, droppedpos);
+			if(!prevent){
+				if(currentpos < droppedpos)
+					this.parentNode.insertBefore(curDrag, this.nextSibling);
+				else
+					this.parentNode.insertBefore(curDrag, this);
+			}
 			curDrag = null;
 		}
 	});
@@ -5247,7 +5259,6 @@ async function loadSchedule(evt){
 			today = yyyy + '-' + mm + '-' + dd;
 			datesel.value = today;
 		}
-		let logs;
 		let api = "library/sched";
 		let resp = await fetchContent(api, {
 				method: 'POST',
@@ -5264,11 +5275,11 @@ async function loadSchedule(evt){
 					schedFill = result;
 			}else{
 				genPopulateTableFromArray(false, div);
-				alert("Got an error fetching logs from server.\n"+resp.statusText);
+				alert("Got an error fetching schedule from server.\n"+resp.statusText);
 				return;
 			}
 		}else{
-			alert("Failed to fetch logs from the server.");
+			alert("Failed to fetch schedule from the server.");
 			return;
 		}
 		resp = await fetchContent(api, {
@@ -5288,11 +5299,11 @@ async function loadSchedule(evt){
 				}
 			}else{
 				genPopulateTableFromArray(false, div);
-				alert("Got an error fetching logs from server.\n"+resp.statusText);
+				alert("Got an error fetching schedule from server.\n"+resp.statusText);
 			}
 		}else{
 			genPopulateTableFromArray(false, div);
-			alert("Failed to fetch logs from the server.");
+			alert("Failed to fetch schedule from the server.");
 		}
 
 	}
@@ -6158,10 +6169,22 @@ async function importSelectFiles(evt){
 /***** Studio functions *****/
 
 var busmeters = [];
-var studioStateCache = {meta: [], queue: [], queueRev: 0, queueSec: 0.0, queueDur: 0.0, logTime: 0, ins: [], outs: [], encoders: [], autoStat: 0};
+var studioStateCache = {meta: {}, queue: [], queueRev: 0, queueSec: 0.0, queueDur: 0.0, logTime: 0, logs: [], ins: [], outs: [], encoders: {}, autoStat: 0};
 
-/***** periodic all-studio-timers update tick *****/
+function debugNow(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+console.log("queue:");
+console.log(studioStateCache.queue);
+console.log("ins:");
+console.log(studioStateCache.ins);
+console.log("meta:");
+console.log(studioStateCache.meta);
+}
+
+/***** periodic all-studio-timers update tick nd sync *****/
 setInterval('updateStudioTimers()', 1000);
+setInterval('syncStudioMetalist(studioName.getValue())', 60000);
 
 function updateStudioTimers(){
 	let sec = studioStateCache.queueSec;
@@ -6195,13 +6218,21 @@ function studioChangeCallback(value){
 	// new VU meter canvases will be built once we receive the first VU data event
 	eventTypeReg("vu_"+value, studioVuUpdate);
 	busmeters = [];
-	studioStateCache = {meta: [], queue: [], queueRev: -1, queueSec: 0.0, queueDur: 0.0, logTime: 0, ins: [], outs: [], encoders: [], autoStat: 0};
+	studioStateCache = {meta: {}, queueRev: -1, queueSec: 0.0, queueDur: 0.0, logTime: 0, logs: [], ins: [], outs: [], encoders: [], autoStat: 0};
+	syncStudioMetalist(value);
 	syncStudioStat(value);
+}
+
+function queueHistoryHasID(itemID){
+	if(parseInt(itemID)){
+		return `<button class="editbutton" onclick="queueHistoryInfo(event)">Info</button>`;
+	}
+	return "";
 }
 
 function calcQueueTimeToNext(data){
 	for(let n = (data.length - 1); n >= 0; n--){
-		if(data[n].status & 0x08)	// has played status flag is set
+		if(data[n].status & 0x0C)	// has played or playing status flag is set
 			return data[n].segout;
 	}
 	return 0.0;
@@ -6278,6 +6309,13 @@ async function syncStudioStat(studio){
 						el.checked = true;
 					else
 						el.checked = false;
+				}else if((key == "LogTime")){
+					value =  parseInt(value);
+					if(studioStateCache.logTime != value){
+						// log time has changed... issue list command to handle changes
+						syncRecentPlays();
+						studioStateCache.logTime = value;
+					}
 				}else if((key == "auto")){
 					let idx = value.indexOf(' ');
 					
@@ -6310,6 +6348,277 @@ async function syncStudioStat(studio){
 	}
 }
 
+async function syncStudioMetalist(studio){
+	if(studio && studio.length){
+		let resp;
+		resp = await fetchContent("studio/"+studio+"?cmd=metalist&raw=1");
+		if(resp){
+			if(resp.ok){
+				let raw = await resp.text();
+				let lines = raw.split("\n");
+				if(lines.length > 1){
+					let refList = [];
+					for(let n = 1; n < lines.length; n++){
+						if(lines[n].length){
+							let fields = lines[n].split("\t");
+							if(fields.length > 1){
+								let ref = parseInt(fields[0], 16);
+								let item = studioStateCache.meta[ref];
+								if(!item || (studioStateCache.meta[ref].rev != fields[1]))
+									updateMetaItem(studio, ref);
+								refList.push(ref);
+								
+							}
+						}
+					}
+					// Remove from studioStateCache.meta if not in refList
+					let keys = Object.keys(studioStateCache.meta);
+					for(let n = 1; n < keys.length; n++){
+						let ref = keys[n];
+						if(refList.some(elem => elem == ref) == false){
+							studioDelMeta(ref);
+						}
+					}
+				}
+			}else{
+				alert("Got an error fetching metalist from studio.\n"+resp.statusText);
+			}
+		}else if(cred.getValue()){
+			alert("Failed to fetch metalist from the studio.");
+		}
+	}
+}
+
+function queueStatusText(stat){
+	if(stat & 0x04)
+		return"Playing";
+	if(stat & 0x10)
+		return "Done";
+	else if(stat & 0x100)
+		return "Running";
+	else if(stat & 0x02)
+		return "Ready";
+	else if(stat & 0x02)
+		return "Loading";
+	else
+		return "";
+}
+
+function queueItemInfo(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let target = evt.target;
+	let item = target.parentElement.parentElement;
+	let ref = item.getAttribute("data-idx");
+	item = studioStateCache.meta[ref];
+	if(item && item.Type){
+		item.qtype= item.Type;
+		let credentials = cred.getValue();
+		if(credentials && ['admin', 'manager', 'library'].includes(credentials.permission))
+			showItem(item, true);
+		else
+			showItem(item, false);
+	}
+}
+
+function queueHistoryInfo(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let target = evt.target;
+	let logs = studioStateCache.logs;
+	let el = target.parentElement.parentElement;
+	let logID = el.getAttribute("data-idx");
+	for(let i = 0; i<logs.length; i++){
+		let entry = logs[i];
+		if(entry.logID == logID){
+			let credentials = cred.getValue();
+			if(credentials && ['admin', 'manager', 'library'].includes(credentials.permission))
+				showItem(entry, true);
+			else
+				showItem(entry, false);
+			return;
+		}
+	}
+}
+
+function queueItemCheckAction(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let target = evt.target;
+	let item = target.parentElement.parentElement;
+	let ref = item.getAttribute("data-idx");
+	item = studioStateCache.meta[ref];
+	if(item){
+		// make persisten accross queue list updates
+		if(target.checked)
+			item.chkd = "checked";
+		else
+			item.chkd = "";
+	}
+}
+
+function queueSelectAll(evt){
+	if(evt)
+		evt.preventDefault();
+	let rows = document.getElementById("stQlist").childNodes;
+	for(let i=0; i<rows.length; i++){
+		let sel = rows[i].childNodes[0].childNodes[0];	// checkbox
+		if(!sel.checked){
+			sel.checked = true;
+			let item = rows[i];
+			let ref = item.getAttribute("data-idx");
+			item = studioStateCache.meta[ref];
+			if(item){
+				// make persisten accross queue list updates
+				item.chkd = "checked";
+			}
+		}
+	}
+}
+
+function queueUnselectAll(evt){
+	if(evt)
+		evt.preventDefault();
+	let rows = document.getElementById("stQlist").childNodes;
+	for(let i=0; i<rows.length; i++){
+		let sel = rows[i].childNodes[0].childNodes[0];	// checkbox
+		if(sel.checked){
+			sel.checked = false;
+			let item = rows[i];
+			let ref = item.getAttribute("data-idx");
+			item = studioStateCache.meta[ref];
+			if(item){
+				// make persisten accross queue list updates
+				item.chkd = "";
+			}
+		}
+	}
+}
+
+async function queueDeleteSel(evt){
+	if(evt)
+		evt.preventDefault();
+	let rows = document.getElementById("stQlist").childNodes;
+	let studio = studioName.getValue();
+	if(studio.length){
+		for(let i=0; i<rows.length; i++){
+			let sel = rows[i].childNodes[0].childNodes[0];	// checkbox
+			if(sel.checked){
+				let ref = rows[i].getAttribute("data-idx");
+				let item = studioStateCache.meta[ref];
+				if(item){
+					ref = parseInt(ref, 10);
+					let hexStr =  ("00000000" + ref.toString(16)).substr(-8);
+					let resp = await fetchContent("studio/"+studio+"?cmd=delete%20"+hexStr);
+				}
+			}
+		}
+	}
+}
+
+function queueSelToStash(evt){
+	if(evt)
+		evt.preventDefault();
+	let rows = document.getElementById("stQlist").childNodes;
+	for(let i=0; i<rows.length; i++){
+		let sel = rows[i].childNodes[0].childNodes[0];	// checkbox
+		if(sel.checked){
+			let ref = rows[i].getAttribute("data-idx");
+			let item = studioStateCache.meta[ref];
+			if(item)
+				appendItemToStash(item);
+		}
+	}
+}
+
+function moveItemInQueue(obj, fromIdx, toIdx){
+	// check to prevent moving of playing items
+	let meta = queueMetaFromIdx(fromIdx);
+	if(meta){
+		if(meta.stat == "Playing")
+			return true; // prevent local drop
+	}
+	let studio = studioName.getValue();
+	if(studio.length){
+		fetchContent("studio/"+studio+"?cmd=move "+fromIdx+" "+toIdx);
+	}
+	return true; // prevent local drop... wait from server to update queue
+}
+
+function queueMetaFromIdx(index){
+	let el = document.getElementById("stQlist");
+	let items = el.getElementsByTagName("li");
+	let item = items[index];
+	if(item){
+		let ref = item.getAttribute("data-idx");
+		return studioStateCache.meta[ref];
+	}
+	return undefined;
+}
+
+function queueElementFromRef(ref){
+	let el = document.getElementById("stQlist");
+	let items = el.getElementsByTagName("li");
+	for(let n = 0; n < items.length; n++){
+		let uid = items[n].getAttribute("data-idx");
+		if(uid && (ref == uid))
+			return {el: items[n], idx: n};
+	}
+	return undefined;
+}
+
+function queueSetItemcolor(el, meta){
+	let color = "DarkGrey";
+	if(meta && (typeof meta.stat !== "undefined")){
+		if(meta.stat == "Playing")
+			color = "green";
+		else if(meta.stat == "Ready")
+			color = "yellow";
+		else
+			color = "red";
+	}
+	el.style.backgroundColor = color;
+}
+
+async function syncRecentPlays(evt){
+	if(evt)
+		evt.preventDefault();
+	let studio = studioName.getValue();
+	let cnt = document.getElementById("qHistCount");
+	let settings = studioStateCache.meta[0];
+	if(settings && studio && studio.length){
+		let locID = settings["db_loc"];
+		if(locID && locID.length){
+			locID = parseInt(locID, 10);
+			let logs;
+			let limit = parseInt(cnt.value);
+			let api = "library/logs";
+			let resp = await fetchContent(api, {
+					method: 'POST',
+					body: JSON.stringify({locID: locID, range: "0/"+limit}),
+					headers: {
+						"Content-Type": "application/json",
+						"Accept": "application/json"
+					}
+				});
+			if(resp){
+				if(resp.ok){
+					let result = await resp.json();
+					if(result && result.length){
+						result.forEach((obj) => {obj.ID = obj.Item; delete obj.Item; obj.logID = obj.id; delete obj.id});
+						studioStateCache.logs = result;
+						updateQueueLogDisplay(true);
+					}
+				}else{
+					alert("Got an error fetching logs from server.\n"+resp.statusText);
+				}
+			}else{
+				alert("Failed to fetch logs from the server.");
+			}
+		}
+	}
+}
+
 async function syncQueue(studio){
 	let resp;
 	resp = await fetchContent("studio/"+studio+"?cmd=list&raw=1");
@@ -6333,11 +6642,11 @@ async function syncQueue(studio){
 					}
 				}
 			}
+			studioStateCache.queue = res;
 			// sync cached times
 			studioStateCache.queueSec = calcQueueTimeToNext(res);
 			studioStateCache.queueDur = calcQueueTimeToEnd(res);
-			// update queue list display
-//!
+			updateQueueLogDisplay(false);
 		}else{
 			alert("Got an error fetching list (queue) from studio.\n"+resp.statusText);
 		}
@@ -6346,8 +6655,198 @@ async function syncQueue(studio){
 	}
 }
 
+function updateQueueLogDisplay(logOnly){
+	let res = studioStateCache.queue;
+	if(!logOnly){
+		let format = `<span style='float: left;'><input type='checkbox' $chkd$ onchange='queueItemCheckAction(event)'></input>$Name$</span>
+					<span style='float: right;'>$Duration->timeFormat$ <button class="editbutton" onclick="queueItemInfo(event)">Info</button></span>
+					<div style='clear:both;'></div>
+					<span style='float: left;'>$Artist$</span><span style='float: right;'>$stat$ $pNum$</span><div style='clear:both;'></div>
+					<span style='float: left;'>$Album$</span><span style='float: right;'>$Owner$/$Type$</span><div style='clear:both;'></div>`;
+		let el = document.getElementById("stQlist");
+		el.innerHTML = "";
+		for(let n = 0; n < res.length; n++){
+			let item = res[n];
+			let ref = parseInt(item["meta-UID"], 16);
+			let stat = parseInt(item["status"], 10);
+			let pNum = parseInt(item["pNum"], 10);
+			let meta = studioStateCache.meta[ref];
+			if(!meta){
+				// create empty meta record... should be filled in later
+				meta = {stat: ""};
+				studioStateCache.meta[ref] = meta;
+			}
+			if(pNum > -1)
+				meta.pNum = pNum;
+			else
+				meta.pNum = "";
+			meta.stat = queueStatusText(stat);
+
+			let li = appendDragableItem(true, moveItemInQueue, meta, ref, el, format);
+			queueSetItemcolor(li, meta);
+		}
+	}
+	// handle log display too
+	let logs = studioStateCache.logs;
+	// remove queue items with logIDs set in meta from the log list
+	let qel = document.getElementById("stQlist");
+	let hel = document.getElementById("stHlist");
+	hel.innerHTML = "";
+	let format = `<span style='float: left;'>$Name$</span>
+					<span style='float: right;'>($TimeStr$) $ID->queueHistoryHasID$</span>
+					<div style='clear:both;'></div>
+					<span style='float: left;'>$Artist$</span><span style='float: right;'>$stat$ $pNum$</span><div style='clear:both;'></div>
+					<span style='float: left;'>$Album$</span><span style='float: right;'>$Owner$</span><div style='clear:both;'></div>`;
+	let items = qel.getElementsByTagName("li");
+	for(let i = logs.length-1; i>=0; i--){
+		let entry = logs[i];
+		let logID = entry.logID;
+		for(let n = 0; n < items.length; n++){
+			let li = items[n];
+			if(li){
+				let ref = li.getAttribute("data-idx");
+				let meta = studioStateCache.meta[ref];
+				if(meta.logID == entry.logID)
+					logID = 0;
+			}
+		}
+		if(logID){
+			// display this entry
+			let li = appendDragableItem(false, moveItemInQueue, entry, logID, hel, format);
+			queueSetItemcolor(li, entry);
+		}
+	}
+}
+
+function studioDelMeta(ref){
+	if(studioStateCache.meta[ref]){
+		delete studioStateCache.meta[ref];
+		let el = queueElementFromRef(ref);
+		if(el){
+			// this meta record has an element in the queue... trigger an queue update
+			syncQueue(studioName.getValue());
+		}
+	}
+}
+
+function updateQueueElement(el, meta){
+	let format = `<span style='float: left;'><input type='checkbox' $chkd$ onchange='queueItemCheckAction(event)'></input>$Name$</span>
+		<span style='float: right;'>$Duration->timeFormat$ <button class="editbutton" onclick="queueItemInfo(event)">Info</button></span>
+		<div style='clear:both;'></div>
+		<span style='float: left;'>$Artist$</span><span style='float: right;'>$stat$ $pNum$</span><div style='clear:both;'></div>
+		<span style='float: left;'>$Album$</span><span style='float: right;'>$Owner$/$Type$</span><div style='clear:both;'></div>`;
+	setDragableInnerHTML(meta, el, format);
+	queueSetItemcolor(el, meta);
+}
+
+async function updateMetaItem(studio, ref){
+	let resp;
+	let hexStr =  ("00000000" + ref.toString(16)).substr(-8);
+	resp = await fetchContent("studio/"+studio+"?cmd=dumpmeta%20"+hexStr+"&raw=1");
+	if(resp){
+		if(resp.ok){
+			let raw = await resp.text();
+			let lines = raw.split("\n");
+			let res = {};
+			if(lines.length > 1){
+				for(let n = 0; n < lines.length; n++){
+					if(lines[n].length){
+						let fields = lines[n].split("=");
+						if(fields[0].length && (fields[1] != undefined))
+							res[fields[0]] = fields[1];
+					}
+				}
+			}
+			if(Object.keys(res).length){
+				let old = studioStateCache.meta[ref];
+				let update = false;
+				if(!old){
+					// new ref
+					studioStateCache.meta[ref] = res;
+					update = true;
+				}
+				else if(res["rev"] != old.rev){
+					// merge new properties into existing
+					studioStateCache.meta[ref] = {...old, ...res};
+					update = true;
+				}
+				if(update){
+					// do stuff with updated record
+					let qli = queueElementFromRef(ref);
+					if(qli){
+						// meta item is in queue... update queue list item
+						updateQueueElement(qli.el, studioStateCache.meta[ref]);
+					}
+					if(ref == 0)
+						// got setting... update recent plays
+						syncRecentPlays();
+				}
+			}
+		}else{
+			alert("Got an error fetching metadata from studio.\n"+resp.statusText);
+		}
+	}else if(cred.getValue()){
+		alert("Failed to fetch metadata from the studio.");
+	}
+}
+
+async function syncPlayers(studio, status, index){
+	// get players list
+	let resp;
+	resp = await fetchContent("studio/"+studio+"?cmd=pstat&raw=1");
+	if(resp){
+		if(resp.ok){
+			let raw = await resp.text();
+			let lines = raw.split("\n");
+			let keys = lines[0].split("\t");
+			if(lines.length > 1){
+				for(let n = 1; n < lines.length; n++){
+					let obj = {};
+					if(lines[n].length){
+						let fields = lines[n].split("\t");
+						let cnt = fields.length;
+						if(cnt > keys.length) 
+							cnt = keys.length;
+						for(let i = 0; i < cnt; i++)
+							obj[keys[i]] = fields[i];
+					}
+					studioStateCache.ins[n-1] = obj;
+					let ref = obj["meta-UID"];
+					if(ref)
+						ref = parseInt(ref, 16);
+					// update queue status if in queue
+					let meta = studioStateCache.meta[ref];
+					if(meta){
+						meta.pNum = n-1;
+						meta.stat = queueStatusText(obj.status);
+						let el = queueElementFromRef(ref);
+						if(el){
+							updateQueueElement(el.el, meta);
+							// recalc queue time
+							let qitem = studioStateCache.queue[el.idx]
+							if(qitem){
+								obj.seg = parseFloat(obj.seg);
+								if(obj.seg)
+									qitem.segout = obj.seg;
+								else
+									qitem.segout = parseFloat(obj.dur);
+								qitem.segout = qitem.segout - parseFloat(obj.pos);
+								qitem.status = obj.status;
+							}
+						}
+					}
+				}
+				studioStateCache.queueSec = calcQueueTimeToNext(studioStateCache.queue);
+			}
+		}else{
+			alert("Got an error fetching players from studio.\n"+resp.statusText);
+		}
+	}else if(cred.getValue()){
+		alert("Failed to fetch players from the studio.");
+	}
+}
+
 function studioHandleNotice(data){
-//!!!
 	let val = 0;
 	let ref = 0;
 	switch(data.type){
@@ -6379,7 +6878,7 @@ function studioHandleNotice(data){
 		case "instat":			// input status change, ref=input index, val=status number
 			val = data.val;	// number
 			ref = data.num;
-			
+			syncPlayers(studioName.getValue(), val, ref)
 			break;
 		case "status":			// over-all status change, no ref, no val.  Use "stat" command to get status
 			// no ref or value: Change in ListRev, LogTime, automation status trigger this notice. Does not include sip registoration.
@@ -6387,7 +6886,7 @@ function studioHandleNotice(data){
 			break;
 		case "metachg":		// metadata content change, ref=UID number, no val. Use "dumpmeta" command to get new content
 			ref = data.uid;
-			
+			updateMetaItem(studioName.getValue(), ref);
 			break;
 		case "rstat":			// recorder/encoder status change, no ref, no val. Use "rstat" command to get status of all recorders
 			
@@ -6404,7 +6903,7 @@ function studioHandleNotice(data){
 			break;
 		case "metadel":		// metadata record deleted, ref=UID number, no val.
 			ref = data.uid;
-			
+			studioDelMeta(ref);
 			break;
 		case "outdly":			// output delay change, ref=output index, val=delay in seconds, 16 max.
 			val = data.val;	// number
@@ -6494,10 +6993,6 @@ setInterval(function() {
 }, sseReconFreqMilliSec);
 
 function sseMsgObjShow(val){
-//	let data = JSON.stringify(val);
-//	let el = document.getElementById("ssemsg"); 
-//	el.innerHTML ="Server Msg: "+data;
-	
 	let obj = val.dbsync;
 	if(obj){
 		el = document.getElementById("syncmsg");
