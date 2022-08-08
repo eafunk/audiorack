@@ -3880,19 +3880,21 @@ unsigned char handle_list(ctl_session *session){
 		if(segOutT == 0.0){
 			segOutT = atof(dur);
 		}
-
+		
 		fadeT = GetMetaFloat(rec->UID, "FadeOut", NULL);
 		if((fadeT > 0.0) && (fadeT < segOutT))
 			segOutT = fadeT;
-	
+		
 		curPos = 0.0;
 		if(rec->player){
 			inChannel *instance;
 			if(checkPnumber(rec->player-1)){
 				instance = &mixEngine->ins[rec->player-1];
 				curPos = instance->pos;
-				// if loaded into a player, use the more accurite actual position segue-out
+				// if loaded into a player, use the more accurite actual position segue-out/fade
 				segOutT = instance->posSeg;
+				if(instance->fadePos)
+					segOutT = instance->fadePos;
 			}
 		}
 		if(segOutT > curPos)

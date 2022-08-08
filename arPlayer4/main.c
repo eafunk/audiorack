@@ -171,7 +171,7 @@ int jack_process(jack_nframes_t nframes, void *arg){
 	controlPacket header;
 	void* midi_buffer;
 	
-	/* handle received control packets */		
+	/* handle received control packets */
 	midi_buffer = jack_port_get_buffer(data->midiIn_jPort, nframes);
 	event_count = jack_midi_get_event_count(midi_buffer);
 	char change_flag = FALSE;
@@ -223,7 +223,7 @@ int jack_process(jack_nframes_t nframes, void *arg){
 		midi_buffer = jack_port_get_buffer(data->midiOut_jPort, nframes);
 		jack_midi_clear_buffer(midi_buffer);
 		if(data->endFlag){
-			/* send end of media message */	
+			/* send end of media message */
 			if(packet = (controlPacket *)jack_midi_event_reserve(midi_buffer, 0, 7)){
 				packet->type = cType_end | cPeer_player;	
 				packet->peer = htonl(data->ctlID);
@@ -232,17 +232,20 @@ int jack_process(jack_nframes_t nframes, void *arg){
 				 * pause/stop back from arServer, then we clear the endFlag */
 			}
 		}
-		if(data->posUpdate && data->seek_enabled){
-			/* send pos control for current position (at start of this process cycle) time */
-			valuetype *val;
-			if(packet = (controlPacket *)jack_midi_event_reserve(midi_buffer, 0, 11)){
-				packet->type = cType_pos | cPeer_player;
-				packet->peer = htonl(data->ctlID);
-				packet->dataSize = htons(4);
-				val = (valuetype *)&packet->data;
-				val->fVal = data->curPos;
-				val->iVal = htonl(val->iVal);
-			}
+		if(data->posUpdate)
+			if(data->seek_enabled){
+				/* send pos control for current position (at start of this process cycle) time */
+				valuetype *val;
+				if(packet = (controlPacket *)jack_midi_event_reserve(midi_buffer, 0, 11)){
+					packet->type = cType_pos | cPeer_player;
+					packet->peer = htonl(data->ctlID);
+					packet->dataSize = htons(4);
+					val = (valuetype *)&packet->data;
+					val->fVal = data->curPos;
+					val->iVal = htonl(val->iVal);
+				}
+			}else
+				data->posUpdate = FALSE;
 		}
 		
 		// Check tags (control queue) for non-realtime queued packets

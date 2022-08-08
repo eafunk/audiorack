@@ -276,11 +276,15 @@ async function fetchContent(url, options){
 	return false;
 }
 
-async function loadElement(url, element){
+async function loadElement(url, element, refdes){
+	// NOTE: optional refdes STRING value is used to replace all occurances of $refdes in loaded content.
 	let resp = await fetchContent(url);
 	if(resp instanceof Response){
 		if(resp.ok){
-			element.innerHTML = await resp.text();
+			let html = await resp.text();
+			if((refdes != undefined) && (refdes.length))
+				html = html.replaceAll("$refdes", refdes);
+			element.innerHTML = html;
 			return false;
 		}
 	}
@@ -5001,7 +5005,6 @@ async function updateConf(evt, type){
 	if(evt)
 		evt.preventDefault();
 	let props = getRowInputProps(evt.target.parentNode.parentNode);
-console.log(props);
 	let id = props.id;
 	delete props.id;
 	type = type.replace("conf", "");
@@ -6287,17 +6290,14 @@ async function importSelectFiles(evt){
 /***** Studio functions *****/
 
 var busmeters = [];
-var studioStateCache = {meta: {}, queue: [], queueRev: 0, queueSec: 0.0, queueDur: 0.0, logTime: 0, logs: [], ins: [], outs: [], encoders: {}, autoStat: 0};
+var studioStateCache = {control: false, meta: {}, queue: [], queueRev: 0, queueSec: 0.0, queueDur: 0.0, logTime: 0, logs: [], ins: [], outs: [], encoders: {}, autoStat: 0};
+var pTemplate;
 
 function debugNow(evt){
 	evt.preventDefault();
 	evt.stopPropagation();
-console.log("queue:");
-console.log(studioStateCache.queue);
-console.log("ins:");
-console.log(studioStateCache.ins);
-console.log("meta:");
-console.log(studioStateCache.meta);
+console.log("studio debug dump:");
+console.log(studioStateCache);
 }
 
 /***** periodic all-studio-timers update tick nd sync *****/
@@ -6313,18 +6313,52 @@ function updateStudioTimers(){
 	let el = document.getElementById("stQNext");
 	el.innerText = timeFormat(sec, 1);
 	
-	 sec = studioStateCache.queueDur;
+	sec = studioStateCache.queueDur;
 	sec = sec - 1.0;
 	if(sec < 0.0)
 		sec = 0.0;
 	studioStateCache.queueDur = sec;
 	el = document.getElementById("stQDur");
 	el.innerText = timeFormat(sec, 1) + " total";
+	let ins = studioStateCache.ins;
+	if(ins && ins.length){
+		for(n=0; n<ins.length; n++){
+			let p = studioStateCache.ins[n];
+			if(p && (parseInt(p.status) & 0x4)){
+				let pos = Math.round(parseFloat(p.pos));
+				pos = pos + 1.0;
+				p.pos = pos.toString();
+			}
+			playerTimeUpdate(n);
+		}
+	}
+}
+
+function playerTimeUpdate(n){
+	let p = studioStateCache.ins[n];
+	if(p && (p.pos != undefined) && p.pos.length){
+		// is playing
+		let pte = document.getElementById("pTime"+n);
+		let pde = document.getElementById("pRem"+n);
+		if(pte && pde){
+			let pos = Math.round(parseFloat(p.pos));
+			pte.innerText = timeFormat(pos, 1);
+			if(p.dur){
+				let dur = Math.round(parseFloat(p.dur));
+				if(dur){
+					dur = dur - pos;
+					if(dur < 0.00)
+						dur = 0.0;
+					pde.innerText = timeFormat(dur, 1);
+				}
+			}
+		}
+	}
 }
 
 function studioChangeCallback(value){
 	// clear existing VU meters
-	let busvu = document.getElementById('studioOuts');
+	let busvu = document.getElementById('studioOutsVU');
 	while(busvu.firstChild)
 		busvu.removeChild(busvu.firstChild);
 	let old = studioName.getPrior();
@@ -6339,6 +6373,7 @@ function studioChangeCallback(value){
 	studioStateCache = {meta: {}, queueRev: -1, queueSec: 0.0, queueDur: 0.0, logTime: 0, logs: [], ins: [], outs: [], encoders: [], autoStat: 0};
 	syncStudioMetalist(value);
 	syncStudioStat(value);
+	syncPlayers(studioName.getValue());
 }
 
 function queueHistoryHasID(itemID){
@@ -6349,9 +6384,11 @@ function queueHistoryHasID(itemID){
 }
 
 function calcQueueTimeToNext(data){
-	for(let n = (data.length - 1); n >= 0; n--){
-		if(data[n].status & 0x0C)	// has played or playing status flag is set
-			return data[n].segout;
+	if(data){
+		for(let n = (data.length - 1); n >= 0; n--){
+			if(data[n].status & 0x0C)	// has played or playing status flag is set
+				return data[n].segout;
+		}
 	}
 	return 0.0;
 }
@@ -6635,7 +6672,6 @@ async function queueDeleteSel(evt){
 }
 
 async function appendItemsToQueue(data){
-console.log(data);
 	if(!data || (data.length == 0))
 		return;
 	let rows = document.getElementById("stQlist").childNodes;
@@ -6695,6 +6731,30 @@ function queueSelToStash(evt){
 	}
 }
 
+async function breakToQueue(evt){
+	if(evt)
+		evt.preventDefault();
+	let rows = document.getElementById("stQlist").childNodes;
+	let studio = studioName.getValue();
+	if(studio.length){
+		for(let i=0; i<rows.length; i++){
+			let sel = rows[i].childNodes[0].childNodes[0];	// checkbox
+			if(sel.checked){
+				let ref = rows[i].getAttribute("data-idx");
+				let item = studioStateCache.meta[ref];
+				if(item && (!item.stat || (item.stat != "Playing"))){
+					ref = parseInt(ref, 10);
+					let hexStr =  ("00000000" + ref.toString(16)).substr(-8);
+					await fetchContent("studio/"+studio+"?cmd=add%20"+hexStr+"%20stop:///");
+				}
+				return;
+			}
+		}
+		// no queue item selected.  Add to end of the list, forward order
+		await fetchContent("studio/"+studio+"?cmd=add%20-1%20stop:///");
+	}
+}
+
 function moveItemInQueue(obj, fromIdx, toIdx){
 	// check to prevent moving of playing items
 	let meta = queueMetaFromIdx(fromIdx);
@@ -6734,6 +6794,15 @@ function queueElementFromRef(ref){
 			return {el: items[n], idx: n};
 	}
 	return undefined;
+}
+
+function playerNumberFromRef(ref){
+	for(let n = 0; n < studioStateCache.ins.length; n++){
+		let item = studioStateCache.ins[n];
+		if(item["meta-UID"] == ref)
+			return item.pNum;
+	}
+	return -1;	// not in a player
 }
 
 function queueSetItemcolor(el, meta){
@@ -6824,13 +6893,19 @@ async function syncQueue(studio){
 	}
 }
 
+function pNumPlusOne(pnum){
+	if((pnum != undefined) && (pnum !== ""))
+		return pnum + 1;
+	return "";
+}
+
 function updateQueueLogDisplay(logOnly){
 	let res = studioStateCache.queue;
 	if(!logOnly){
 		let format = `<span style='float: left;'><input type='checkbox' $chkd$ onchange='queueItemCheckAction(event)'></input>$Name$</span>
 					<span style='float: right;'>$Duration->timeFormat$ <button class="editbutton" onclick="queueItemInfo(event)">Info</button></span>
 					<div style='clear:both;'></div>
-					<span style='float: left;'>$Artist$</span><span style='float: right;'>$stat$ $pNum$</span><div style='clear:both;'></div>
+					<span style='float: left;'>$Artist$</span><span style='float: right;'>$stat$ $pNum->pNumPlusOne$</span><div style='clear:both;'></div>
 					<span style='float: left;'>$Album$</span><span style='float: right;'>$Owner$/$Type$</span><div style='clear:both;'></div>`;
 		let el = document.getElementById("stQlist");
 		el.innerHTML = "";
@@ -6862,9 +6937,9 @@ function updateQueueLogDisplay(logOnly){
 	let hel = document.getElementById("stHlist");
 	hel.innerHTML = "";
 	let format = `<span style='float: left;'>$Name$</span>
-					<span style='float: right;'>($TimeStr$) $ID->queueHistoryHasID$</span>
+					<span style='float: right;'>@$TimeStr$ $ID->queueHistoryHasID$</span>
 					<div style='clear:both;'></div>
-					<span style='float: left;'>$Artist$</span><span style='float: right;'>$stat$ $pNum$</span><div style='clear:both;'></div>
+					<span style='float: left;'>$Artist$</span><span style='float: right;'>$stat$ $pNum->pNumPlusOne$</span><div style='clear:both;'></div>
 					<span style='float: left;'>$Album$</span><span style='float: right;'>$Owner$</span><div style='clear:both;'></div>`;
 	let items = qel.getElementsByTagName("li");
 	for(let i = logs.length-1; i>=0; i--){
@@ -6875,7 +6950,7 @@ function updateQueueLogDisplay(logOnly){
 			if(li){
 				let ref = li.getAttribute("data-idx");
 				let meta = studioStateCache.meta[ref];
-				if(meta.logID == entry.logID)
+				if(meta && (meta.logID == entry.logID))
 					logID = 0;
 			}
 		}
@@ -6902,7 +6977,7 @@ function updateQueueElement(el, meta){
 	let format = `<span style='float: left;'><input type='checkbox' $chkd$ onchange='queueItemCheckAction(event)'></input>$Name$</span>
 		<span style='float: right;'>$Duration->timeFormat$ <button class="editbutton" onclick="queueItemInfo(event)">Info</button></span>
 		<div style='clear:both;'></div>
-		<span style='float: left;'>$Artist$</span><span style='float: right;'>$stat$ $pNum$</span><div style='clear:both;'></div>
+		<span style='float: left;'>$Artist$</span><span style='float: right;'>$stat$ $pNum->pNumPlusOne$</span><div style='clear:both;'></div>
 		<span style='float: left;'>$Album$</span><span style='float: right;'>$Owner$/$Type$</span><div style='clear:both;'></div>`;
 	setDragableInnerHTML(meta, el, format);
 	queueSetItemcolor(el, meta);
@@ -6941,14 +7016,30 @@ async function updateMetaItem(studio, ref){
 				}
 				if(update){
 					// do stuff with updated record
-					let qli = queueElementFromRef(ref);
-					if(qli){
-						// meta item is in queue... update queue list item
-						updateQueueElement(qli.el, studioStateCache.meta[ref]);
-					}
-					if(ref == 0)
+					if(ref == 0){
 						// got setting... update recent plays
 						syncRecentPlays();
+					}else{
+						let qli = queueElementFromRef(ref);
+						if(qli){
+							// meta item is in queue... update queue list item
+							updateQueueElement(qli.el, studioStateCache.meta[ref]);
+						}
+						let pNum = playerNumberFromRef(ref);
+						if(pNum != -1){
+							updatePlayerTitle(pNum, res);
+							let el = document.getElementById("pType"+pNum); 
+							if(res.Type)
+								el.innerText = res.Type;
+							else
+								el.innerText = "";
+							el = document.getElementById("pName"+pNum); 
+							if(res.Name)
+								el.innerText = res.Name;
+							else
+								el.innerText = "";
+						}
+					}
 				}
 			}
 		}else{
@@ -6959,6 +7050,100 @@ async function updateMetaItem(studio, ref){
 	}
 }
 
+function updatePlayerTitle(pNum, res){
+	let el = document.getElementById("player" + pNum);
+	if(el){
+		let str = "Title: ";
+		if(res.Name)
+			str += res.Name;
+		str += "\nArtist: ";
+		if(res.Artist)
+			str += res.Artist;
+		str += "\nAlbum: ";
+		if(res.Album)
+			str += res.Album;
+		el.title = str;
+	}
+}
+
+async function playerFaderAction(obj, pNum){
+	// obj is either a float value from 0 to 1.5, fader value
+	// with pNum set the the player number, or it is a fader object
+	// and pNum is empty
+	let player;
+	let val;
+	if(pNum){
+		player = pNum;
+		value = obj;
+	}else{
+		player = obj.id;
+		player = parseInt(player.slice(6)); // trim off "pFader" prefix
+		val = parseFloat(obj.value);
+	}
+	let studio = studioName.getValue();
+	if(studio.length){
+		// make val scalar
+		val = Math.pow(val, 4);
+		if(val <= 0.00001)
+			val = 0.0;
+		if(val > 5.1)
+			val = 5.1;
+		fetchContent("studio/"+studio+"?cmd=vol "+player+" "+val);
+	}
+}
+
+function updatePlayerFaderUI(val, pNum){
+	let vol = parseFloat(val);
+	let el = document.getElementById("pGain"+pNum);
+	if(el){
+		if(vol <= 0.00001)
+			el.innerText = "Mute";
+		else{
+			let db = Math.round(20.0 * Math.log10(vol));
+			el.innerText = db + "dB";
+		}
+	}
+	el = document.getElementById("pFader"+pNum);
+	if(el){
+		if(el.touching)
+			return;	// dont update fader while it is being touched		val = Math.pow(vol, 0.25);
+		if(val < 0.1)
+			val = 0.0;
+		if(val > 1.5)
+			val = 1.5;
+		el.value = val;
+	}
+}
+
+function updatePlayerUI(p){
+	let pte = document.getElementById("pTime"+p.pNum);
+	let pde = document.getElementById("pRem"+p.pNum);
+	if(pte && pde){
+		if(p && (p.pos != undefined) && p.pos.length){
+			let pos = Math.round(parseFloat(p.pos));
+			pte.innerText = timeFormat(pos, 1);
+			if(p.dur){
+				let dur = Math.round(parseFloat(p.dur));
+				if(dur){
+					dur = dur - pos;
+					if(dur < 0.00)
+						dur = 0.0;
+					pde.innerText = timeFormat(dur, 1);
+				}else
+					pde.innerText = "";
+			}else
+				pde.innerText = "";
+		}else{
+			pte.innerText = "0:00";
+			pde.innerText = "";
+		}
+	}
+	if(parseInt(p.status) & 0x4){
+		// is playing
+	}
+	updatePlayerFaderUI(p.pNum, p.vol);
+}
+
 async function syncPlayers(studio, status, index){
 	// get players list
 	let resp;
@@ -6967,8 +7152,23 @@ async function syncPlayers(studio, status, index){
 		if(resp.ok){
 			let raw = await resp.text();
 			let lines = raw.split("\n");
+			lines.pop(); // remove last, blank line
 			let keys = lines[0].split("\t");
 			if(lines.length > 1){
+				let mixer = document.getElementById("mixergrid");
+				// check grid size against list size
+				while(lines.length-1 < mixer.childElementCount){
+					// remove columns
+					mixer.removeChild(mixer.lastChild);
+				}
+				while(lines.length-1 > mixer.childElementCount){
+					// add columns
+					let p = document.createElement("div");
+					p.setAttribute("data-idx", mixer.childElementCount);
+					p.className = "player";
+					p.id = "player" + mixer.childElementCount;
+					mixer.appendChild(p);
+				}
 				for(let n = 1; n < lines.length; n++){
 					let obj = {};
 					if(lines[n].length){
@@ -6979,10 +7179,11 @@ async function syncPlayers(studio, status, index){
 						for(let i = 0; i < cnt; i++)
 							obj[keys[i]] = fields[i];
 					}
-					studioStateCache.ins[n-1] = obj;
 					let ref = obj["meta-UID"];
-					if(ref)
+					if(ref){
 						ref = parseInt(ref, 16);
+						obj["meta-UID"] = ref;
+					}
 					// update queue status if in queue
 					let meta = studioStateCache.meta[ref];
 					if(meta){
@@ -7004,6 +7205,51 @@ async function syncPlayers(studio, status, index){
 							}
 						}
 					}
+					// check for UI change update
+					let prev = studioStateCache.ins[n-1];
+					if((!prev && obj.status) || (prev.status != obj.status)){
+						let player = document.getElementById("player" + (n-1));
+						if(obj.status == 0){
+							while(player.hasChildNodes())
+								player.removeChild(player.lastChild);
+							player.title = "";
+						}else{
+							if(!player.hasChildNodes()){
+								// copy player template
+								let clone = pTemplate.content.cloneNode(true);
+								let el = clone.querySelector("#pLabel"); 
+								el.setAttribute("id", "pLabel"+(n-1));
+								el.innerText = n.toString();
+								el = clone.querySelector("#pType"); 
+								el.setAttribute("id", "pType"+(n-1));
+								if(meta)
+									el.innerText = meta.Type;
+								else
+									el.innerText = "";
+								el = clone.querySelector("#pName"); 
+								el.setAttribute("id", "pName"+(n-1));
+								if(meta)
+									el.innerText = meta.Name;
+								else
+									el.innerText = "";
+								el = clone.querySelector("#pTime"); 
+								el.setAttribute("id", "pTime"+(n-1));
+								el = clone.querySelector("#pRem"); 
+								el.setAttribute("id", "pRem"+(n-1));
+								el = clone.querySelector("#pVU"); 
+								el.setAttribute("id", "pVU"+(n-1));
+								el = clone.querySelector("#pFader"); 
+								el.setAttribute("id", "pFader"+(n-1));
+								el = clone.querySelector("#pGain"); 
+								el.setAttribute("id", "pGain"+(n-1));
+								player.appendChild(clone);
+								if(meta)
+									updatePlayerTitle(n-1, meta);
+							}
+							updatePlayerUI(obj);
+						}
+					}
+					studioStateCache.ins[n-1] = obj;
 				}
 				studioStateCache.queueSec = calcQueueTimeToNext(studioStateCache.queue);
 			}
@@ -7022,12 +7268,14 @@ function studioHandleNotice(data){
 		case "outvol":			// output volume change, ref=output index, val=scalar volume
 			val = data.val;	// number
 			ref = data.num;
-			
+
 			break;
 		case "invol":			// player volume change, ref=input index, val=scalar volume
 			val = data.val;	// number
 			ref = data.num;
-			
+			if(studioStateCache.control)
+				studioStateCache.control.setVol(val, ref);
+			updatePlayerFaderUI(val, ref);
 			break;
 		case "inbal":			// player balance change, ref=input index, val=scalar balance, zero for center
 			val = data.val;	// number
@@ -7065,10 +7313,14 @@ function studioHandleNotice(data){
 			ref = data.uid;
 			
 			break;
-		case "inpos":		// input position change, ref=nput index, val=position in seconds
+		case "inpos":		// input position change, ref=input index, val=position in seconds
 			val = data.val;	// number
 			ref = data.num;
-			
+			let p = studioStateCache.ins[ref];
+			if(p && p.status){
+				p.pos = val.toString();
+				playerTimeUpdate(ref);
+			}
 			break;
 		case "metadel":		// metadata record deleted, ref=UID number, no val.
 			ref = data.uid;
@@ -7095,7 +7347,7 @@ function studioVuUpdate(data){
 		return;
 	// update mix bus meters
 	let canv;
-	let busvu = document.getElementById('studioOuts');
+	let busvu = document.getElementById('studioOutsVU');
 	if(data[0]){
 		if(!busvu.firstChild){
 			// first data for new vu session... create view
@@ -7120,8 +7372,40 @@ function studioVuUpdate(data){
 			if(vu)
 				vu.vuSetValue(data[0].avr[c], data[0].pk[c]);
 		}
+		delete data[0];
 	}
 	// recorder and player levels are expressed in data[uid-numeric].  We need to itterate.
+	for(ref in data){
+		let pNum = playerNumberFromRef(ref);
+		if(pNum != -1){
+			let vu = document.getElementById('pVU' + pNum);
+			if(vu){
+				let els = vu.getElementsByTagName("canvas");
+				if(!els.length){
+					// first data for new vu session... create view
+					vu.vumeters = [];
+					for(let c = 0; c < data[ref].pk.length; c++){
+						canv = document.createElement("canvas");
+						canv.setAttribute('width',7);
+						canv.setAttribute('height',128);
+						vu.appendChild(canv);
+						vu.vumeters.push(new vumeter(canv, {
+							"boxCount": 32,
+							"boxCountRed": 9,
+							"boxCountYellow": 7,
+							"boxGapFraction": 0.25,
+							"max": 255,
+						}));
+					}
+				}
+				for(let c = 0; c < data[ref].pk.length; c++){
+					let meter = vu.vumeters[c];
+					if(meter)
+						meter.vuSetValue(data[ref].avr[c], data[ref].pk[c]);
+				}
+			}
+		}
+	}
 }
 
 /***** Server Side Events/Messages functions *****/
@@ -7296,7 +7580,6 @@ function startupContent(){
 				if(res){
 					cred.setValue(res);
 					showTabElement(document.getElementById('navabout'), 'about');
-					
 				}else{
 					cred.setValue(false);
 					showTabElement(document.getElementById('navlogin'), 'login');
@@ -7335,4 +7618,5 @@ window.onload = function(){
 	sseMsgObj.registerCallback(sseMsgObjShow);
 	startupContent();
 	loadStashRecallOnLoad();
+	pTemplate = document.querySelector("#playerTemplate");
 }

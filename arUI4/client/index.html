@@ -225,7 +225,7 @@
 				<div id="studiodiv" class="scroll">
 					<div id="studiogrid" class="stGrid">
 						<div id="studioStat" class="stStatus">
-							<div id="studioAuto" class="stStatus" style="width: 250px; float: left;">
+							<div id="studioAuto" style="width: 250px; float: left;">
 								<fieldset>
 									<legend>Automation Mode</legend>
 									<ul style="list-style-type:none; text-align: left">
@@ -236,14 +236,14 @@
 								</fieldset>
 								<div id="stFillDesc"></div>
 							</div>
-							<div id="studioTime" class="stStatus" style="float: right;">
+							<div id="studioTime" style="float: right;">
 								<div id="stQNext">0:00</div>
 								<div id="stQDur" style="padding: 10px;">0:00</div>
 								<input type="checkbox" id="stRun" onclick="studioRunStop(event);"; ></label for="stRun">Queue Run</label>
 								<button onclick="studioSegNow(event)">SegNow</button>
 							</div>
 						</div>
-						<div id="studioQueue">
+						<div id="studioQueue" class="stQueue">
 							<div>
 								<fieldset>
 									<button onclick="queueSelectAll(event)">Select All</button>
@@ -254,7 +254,8 @@
 									</div>
 								</fieldset>
 							</div>
-								<div style="float: left;">
+							<div>
+								<div style="float: left; width: 50;">
 									<fieldset>
 										Selected Items<br>
 										<button onclick="queueDeleteSel(event)">Delete</button>
@@ -264,20 +265,29 @@
 								<div style="float: right;">
 									<fieldset>
 										Insert before first selected, or end<br>
+										<button onclick="breakToQueue(event)">Break</button>
 										<button onclick="stashToQueue(event)">from Stash</button>
 										<button onclick="filesToQueue(event)">from Temp. Files</button>
 									</fieldset>
 								</div>
-							<div class="stQueue">
+							</div>
+							<div style="overflow-y: scroll;">
 								<ul class="ddlist" id="stHlist">
 								</ul>
 								<ul class="ddlist" id="stQlist">
 								</ul>
 							</div>
 						</div>
-						<div id="studioOuts" class="stOuts"></div>
-						<div id="studioIns" class="stIns">Inputs/Mixer</div>
-						<div id="studioSide" class="stSide">Accordian</div>
+						<div id="studioOuts" class="stOuts">
+							<div id="studioOutsVU"></div>
+							<div id="studioOutList"></div>
+						</div>
+						<div id="studioIns" class="stIns">
+							<div id="mixergrid" class="mixer"></div>
+						</div>
+						<div id="studioSide" class="stSide">
+							Accordian
+						</div>
 					</div>
 				</div>
 			</div>
@@ -323,5 +333,57 @@
 			</div>
 		</div>
 	</div>
+	
+	<datalist id="baltick">
+		<option value="-1"></option>
+		<option value="0"></option>
+		<option value="1"></option>
+	</datalist>
+			
+	<template class="player" id="playerTemplate" style="display: none;">
+		<div style="display: flex; justify-content: space-between; padding: 2px;">
+			<div id ="pLabel" style="width: 16px;"></div>
+			<div id ="pType">Type</div>
+			<button id="pUnload" style="height: 13px; width: 13px; font-size: 8px;">x</button>
+		</div>
+		<div id ="pName" style="padding: 2px;"></div>
+		<div>
+			<div id="pTime" style="font-size: 12px;">0:00</div>
+			<div id="pRem" style="font-size: 12px;"></div>
+		</div>
+		<div>
+			<input type="range" min="-1" max="1" value="0" step="0.05" style=" width: 50px; height: 12px;">
+		</div>
+		<div>
+			<select id="pBusSel" style="height: 15px; width: 64px; font-size: 8px;">
+				<option value="0">Banana</option>
+				<option value="1">Cherry</option>
+			</select>
+		</div>
+		<div>
+			<button id="pCue" style="height: 15px; width: 32px; font-size: 8px;">Cue</button>
+		</div>
+		<div>
+			L<input id="pBal" type="range" min="-1" max="1" value="0" step="0.1" style=" width: 42px; height: 12px;" list="baltick">R
+		</div>
+		<div style="display: flex; justify-content: space-around;">
+			<div>
+				<br>
+				<div id="pGain">0 dB</div>
+				<div id="pVU">
+				</div>
+			</div>
+			<div class="player-fader">
+				<input id="pFader" type="range" min="0.0" max="1.5" value="1.0" step="0.01" 
+					oninput="playerFaderAction(this);" ontouchstart="this.touching = true;" onmousedown="this.touching = true;" 
+					onmouseup="this.touching = false;" ontouchend="this.touching = false;">
+			</div>
+		</div>
+		<div>
+			<button id="pPlay" style="height: 32px; width: 32px; font-size: 8px; float: left;">P</button>
+			<button id="pStop" style="height: 32px; width: 32px; font-size: 8px; float: right;">S</button>
+		</div>
+	</template>
+
 </body>
 </html>

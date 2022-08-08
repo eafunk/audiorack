@@ -270,10 +270,11 @@ int process(jack_nframes_t nframes, void *arg){
 		if(inchrec->posack){
 			/* send pos ack control packet */
 			if(packet = (controlPacket *)jack_midi_event_reserve(midi_buffer, 0, 7)){
-				packet->type = cType_posack | cPeer_player;	
+				packet->type = cType_posack | cPeer_player;
 				packet->peer = htonl(i);
 				packet->dataSize = 0;
-			}	
+			}
+			inchrec->posack = 0;
 		}
 
 		/* handle change requests */
@@ -314,13 +315,13 @@ int process(jack_nframes_t nframes, void *arg){
 				inchrec->status = inchrec->status & ~status_finished;
 				if(inchrec->sourceType == sourceTypeCanRepos){
 					if(packet = (controlPacket *)jack_midi_event_reserve(midi_buffer, 0, 11)){
-						packet->type = cType_pos | cPeer_player;	
+						packet->type = cType_pos | cPeer_player;
 						packet->peer = htonl(i);
 						packet->dataSize = htons(4);
 						val = (valuetype*)&packet->data;
 						val->fVal = inchrec->reqPos;
 						val->iVal = htonl(val->iVal); 
-					}		
+					}
 				}
 			}
 			inchrec->requested = inchrec->requested & ~change_pos;
@@ -455,14 +456,6 @@ int process(jack_nframes_t nframes, void *arg){
 		}else{
 			leftVol = rightVol = 0.0;
 		}
-
-/*		if((inchrec->status & status_loading) && (inchrec->attached)){
-			/* check for failed player process load */
-/*			if(waitpid(inchrec->attached, NULL, WNOHANG) == inchrec->attached){
-				inchrec->status = status_empty;
-				inchrec->changed = inchrec->changed | change_unloaded;
-			}
-		} */
 		
 		// feed bus assignment
 		inchrec->tmpFeedBus = inchrec->feedBus & 0xE1000000;
