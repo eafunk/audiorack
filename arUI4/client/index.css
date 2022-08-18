@@ -601,6 +601,14 @@ button.active {
 	transform: rotate(-90deg);
 }
 
+.playerStopBtn {
+	display: none;
+	justify-content: center;
+	align-items: center;
+	height: 30px; 
+	width: 30px; 
+	background-color: LightGray;
+}
 //
 
 input[type=range] {

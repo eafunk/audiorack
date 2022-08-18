@@ -1513,7 +1513,7 @@ function loadStashRecallOnLoad(){
 		stashList = [];
 	let el = document.getElementById("stashlist");
 	let format = `<span style='float: left;'><input type='checkbox' onchange='updateStashDuration()'></input></span>
-						<span style='float: right;'>$Duration->timeFormat$ <button class="editbutton" onclick="stashItemInfo(event)">Info</button></span>
+						<span style='float: right;'>$Duration->timeFormat$ <button class="editbutton" onclick="stashItemInfo(event)">i</button></span>
 						<div style='clear:both;'></div>
 						<span style='float: left;'>$Name$</span><span style='float: right;'>$StashType$</span><div style='clear:both;'></div>
 						<span style='float: left;'>$Artist$</span>
@@ -1599,7 +1599,7 @@ function appendItemToStash(item){
 	setStash(stashList);
 	let el = document.getElementById("stashlist");
 	let format = `<span style='float: left;'><input type='checkbox'></input></span>
-						<span style='float: right;'>$Duration->timeFormat$ <button class="editbutton" onclick="stashItemInfo(event)">Info</button></span>
+						<span style='float: right;'>$Duration->timeFormat$ <button class="editbutton" onclick="stashItemInfo(event)">i</button></span>
 						<div style='clear:both;'></div>
 						<span style='float: left;'>$Name$</span><span style='float: right;'>$StashType$</span><div style='clear:both;'></div>
 						<span style='float: left;'>$Artist$</span>
@@ -2817,6 +2817,64 @@ async function saveItemProperties(evt){
 	}
 }
 
+async function saveItemInstance(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let els = document.getElementById("institemform");
+	let ref = els.getAttribute("data-id");
+	let meta = false;
+	let studio = studioName.getValue();
+	ref = parseInt(ref);
+	if(ref)
+		meta = studioStateCache.meta[ref];
+	if(meta && studio.length){
+		let changed = false;
+		let hexStr =  ("00000000" + ref.toString(16)).substr(-8);
+		els = els.elements;
+		for(let i = 0 ; i < els.length ; i++){
+			let item = els.item(i);
+			let was = meta[item.name];
+			if(was === undefined) was = "";
+			if(was === null) was = "";
+			let is = item.value;
+			let itemName = item.name;
+
+			if(["Duration", "SegIn"].includes(item.name)){
+				// handle time format to seconds
+				is = timeParse(is);
+				if(Math.floor(is * 10) == Math.floor(was * 10)) // changed within 0.1 seconds?
+					is = was;
+			}else if(item.name === "SegOut"){
+				// handle segout and fade checkbox
+				el = document.getElementById("instItemFade");
+				is = timeParse(is);
+				if(el.checked){
+					// change property of interest from SegOut to Fade
+					itemName = "FadeOut";
+					was = meta[itemName];
+				}
+				if(Math.floor(is * 10) == Math.floor(was * 10)) // changed within 0.1 seconds?
+					is = was;
+			}else if(item.name == "fade"){
+				// ignore this item... it 's handled by SegOut
+				continue;
+			}else if(item.name == "NoLog"){
+				if(item.checked)
+					is = 1;
+				else
+					is = 0;
+			}
+			if(was != is){
+				is = encodeURIComponent(is);
+				await fetchContent("studio/"+studio+"?cmd=setmeta%20"+hexStr+"%20"+item.name+"%20"+is);
+				changed = true;
+			}
+		}
+		if(changed)
+			await fetchContent("studio/"+studio+"?cmd=logmeta%20"+hexStr);
+	}
+}
+
 async function itemDelete(evt){
 	evt.preventDefault();
 	evt.stopPropagation();
@@ -3257,6 +3315,48 @@ async function itemSendToQueue(evt){
 	}
 	items.push(item);
 	appendItemsToQueue(items);
+}
+
+async function itemSendToPlayer(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let item = Object.assign({}, itemProps);
+	if(item.Type != "file")
+		// lot a type loadable into a player
+		return;
+	if(item.tmpfile && item.tmpfile.length){
+		// create a URL for temp files
+		let data = false;
+		let resp = await fetchContent("library/tmpmediaurl", {
+				method: 'POST',
+				body: JSON.stringify({path: item.tmpfile.substring(1)}), // path leading '/' trimmed off
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp){
+			if(!resp.ok){
+				alert("Got an error retreaving file info from server.\n"+resp.status);
+				return;
+			}
+			data = await resp.text();
+		}else{
+			alert("Failed to retreaving file info from server.");
+			return;
+		}
+		if(data)
+			item.URL = data;
+		else
+			return;
+	}
+	let URL = item.URL;
+	if(item.ID)
+		URL = "item:///"+item.ID;
+	let studio = studioName.getValue();
+	if(studio.length){
+		fetchContent("studio/"+studio+"?cmd=load -1 "+URL);
+	}
 }
 
 function plSendToStash(evt){
@@ -3919,6 +4019,75 @@ async function reloadItemSection(el, type){
 			genDragableListFromObjectArray(true, plMoveItem, flatPlist, el, format);
 		else
 			genDragableListFromObjectArray(false, false, flatPlist, el, format);
+	}else if(type == "instance"){
+		let meta = false;
+		let ref = parseInt(itemProps.UID);
+		if(ref)
+			meta = studioStateCache.meta[ref];
+		if(meta){
+			let inner = "<form id='institemform' data-id='"+ref+"'><table class='tableleftj' stype='overflow-wrap: break-word;'>";
+			inner += "<tr><td width='15%'>Name</td><td>";
+			inner += "<input type='text' size='45' name='Name'";
+			inner += " value='"+quoteattr(meta.Name)+"'";
+			inner += "></input><br>";
+			inner += "</td>";
+
+			inner += "<tr><td width='15%'>Artist</td><td>";
+			inner += "<input type='text' size='45' name='Artist'";
+			inner += " value='"+quoteattr(meta.Artist)+"'";
+			inner += "></input><br>";
+			inner += "</td>";
+			
+			inner += "<tr><td width='15%'>Album</td><td>";
+			inner += "<input type='text' size='45' name='Album'";
+			inner += " value='"+quoteattr(meta.Album)+"'";
+			inner += "></input><br>";
+			inner += "</td>";
+			
+			inner += "<tr><td width='15%'>Duration</td><td>";
+			inner += "<input type='text' size='10' name='Duration'";
+			inner += " value='"+timeFormat(meta.Duration)+"'";
+			inner += "></input>";
+			inner += "</td>";
+			
+			inner += "<tr><td>SegIn</td><td>";
+			inner += "<input type='text' size='10' name='SegIn'";
+			inner += " value='"+timeFormat(meta.SegIn)+"'";
+			inner += "></input>";
+			inner += "</td>";
+			
+			inner += "<tr><td>SegOut</td><td>";
+			let fade = 0.0;
+			let seg = parseFloat(meta.SegOut);
+			if(isNaN(seg))
+				seg = 0.0;
+			if(meta.FadeOut)
+				fade = parseFloat(meta.FadeOut);
+			if(fade)
+				seg = fade;
+			inner += "<input type='text' size='10' name='SegOut'";
+			inner += " value='"+timeFormat(seg)+"'";
+			inner += "></input>";
+			
+			if(fade)
+				inner += " Fade <input type='checkbox' id='instItemFade' name='fade' checked";
+			else
+				inner += " Fade <input type='checkbox' id='instItemFade' name='fade'";
+			inner += ">";
+			inner += "</td>";
+			
+			inner += "<tr><td>Don't Log</td><td>";
+			if(meta.NoLog)
+				inner += "<input type='checkbox' name='NoLog' checked";
+			else
+				inner += "<input type='checkbox' name='NoLog'";
+			inner += ">";
+			
+			inner += "</table></form>";
+			inner += "</td>";
+			inner += "<p><button id='saveinstbut' name='submit' onclick='saveItemInstance(event)'>Apply Instance Properties</button></p>";
+			el.innerHTML = inner + "</form>";
+		}
 	}
 }
 
@@ -4411,6 +4580,11 @@ async function showTocItem(panel, container){
 		<div class="accpanel">
 		</div>`;
 	}
+	if(itemProps.UID){
+		inner += `<button class="accordion" id="instbut" onclick="selectAccordType(event, reloadItemSection, 'instance')">Instance Logging</button>
+		<div class="accpanel">
+		</div>`;
+	}
 	if(itemProps.canEdit){
 		inner += "<p><button id='delitembut' onclick='itemDelete(event)'>Delete Item</button>";
 		if(itemProps.ID && (itemProps.Type === "file")){
@@ -4434,6 +4608,8 @@ async function showTocItem(panel, container){
 		inner += `<a id="filedltarget" style="display: none"></a>`;
 	}
 	inner += `<p><button onclick='itemSendToStash(event)'>Item to Stash</button><button onclick='itemSendToQueue(event)'>Item to Queue</button>`;
+	if(itemProps.Type == "file")
+		inner += `<button onclick='itemSendToPlayer(event)'>Item to Player</button>`;
 
 	container.innerHTML = inner;
 	panel.style.width = infoWidth;
@@ -4548,6 +4724,8 @@ async function showItem(props, canEdit, noShow){
 		let data = await getItemData(props);
 		if(data){
 			itemProps = data;
+			if(props.UID)
+				itemProps.UID = props.UID;
 			itemProps.canEdit = canEdit;
 			if(noShow)
 				return;
@@ -4559,6 +4737,8 @@ async function showItem(props, canEdit, noShow){
 		let data = await getItemData(props);
 		if(data){
 			itemProps = data;
+			if(props.UID)
+				itemProps.UID = props.UID;
 			itemProps.canEdit = canEdit;
 			if(noShow)
 				return;
@@ -6166,7 +6346,7 @@ async function getFileInfo(evt){
 
 function setRowAction(obj){
 	if(!obj.isDir){
-		return `<button class="editbutton" onclick="getFileInfo(event)">Info</button>`;
+		return `<button class="editbutton" onclick="getFileInfo(event)">i</button>`;
 	}else
 		return "";
 }
@@ -6378,7 +6558,7 @@ function studioChangeCallback(value){
 
 function queueHistoryHasID(itemID){
 	if(parseInt(itemID)){
-		return `<button class="editbutton" onclick="queueHistoryInfo(event)">Info</button>`;
+		return `<button class="editbutton" onclick="queueHistoryInfo(event)">i</button>`;
 	}
 	return "";
 }
@@ -6567,7 +6747,27 @@ function queueItemInfo(evt){
 	let ref = item.getAttribute("data-idx");
 	item = studioStateCache.meta[ref];
 	if(item && item.Type){
-		item.qtype= item.Type;
+		item.UID = ref;
+		item.qtype = item.Type;
+		let credentials = cred.getValue();
+		if(credentials && ['admin', 'manager', 'library'].includes(credentials.permission))
+			showItem(item, true);
+		else
+			showItem(item, false);
+	}
+}
+
+function playerItemInfo(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let player = evt.target.parentNode.parentElement.getAttribute("data-idx");
+	let ref = refFromPlayerNumber(player);
+	if(ref < 0)
+		return;
+	item = studioStateCache.meta[ref];
+	if(item && item.Type){
+		item.UID = ref;
+		item.qtype = item.Type;
 		let credentials = cred.getValue();
 		if(credentials && ['admin', 'manager', 'library'].includes(credentials.permission))
 			showItem(item, true);
@@ -6805,6 +7005,15 @@ function playerNumberFromRef(ref){
 	return -1;	// not in a player
 }
 
+function refFromPlayerNumber(pNum){
+	pNum = parseInt(pNum);
+	let item = studioStateCache.ins[pNum];
+	let ref = item["meta-UID"];
+	if(ref)
+		return parseInt(ref);
+	return -1;	// player not loaded
+}
+
 function queueSetItemcolor(el, meta){
 	let color = "DarkGrey";
 	if(meta && (typeof meta.stat !== "undefined")){
@@ -6903,7 +7112,7 @@ function updateQueueLogDisplay(logOnly){
 	let res = studioStateCache.queue;
 	if(!logOnly){
 		let format = `<span style='float: left;'><input type='checkbox' $chkd$ onchange='queueItemCheckAction(event)'></input>$Name$</span>
-					<span style='float: right;'>$Duration->timeFormat$ <button class="editbutton" onclick="queueItemInfo(event)">Info</button></span>
+					<span style='float: right;'>$Duration->timeFormat$ <button class="editbutton" onclick="queueItemInfo(event)">i</button></span>
 					<div style='clear:both;'></div>
 					<span style='float: left;'>$Artist$</span><span style='float: right;'>$stat$ $pNum->pNumPlusOne$</span><div style='clear:both;'></div>
 					<span style='float: left;'>$Album$</span><span style='float: right;'>$Owner$/$Type$</span><div style='clear:both;'></div>`;
@@ -6975,7 +7184,7 @@ function studioDelMeta(ref){
 
 function updateQueueElement(el, meta){
 	let format = `<span style='float: left;'><input type='checkbox' $chkd$ onchange='queueItemCheckAction(event)'></input>$Name$</span>
-		<span style='float: right;'>$Duration->timeFormat$ <button class="editbutton" onclick="queueItemInfo(event)">Info</button></span>
+		<span style='float: right;'>$Duration->timeFormat$ <button class="editbutton" onclick="queueItemInfo(event)">i</button></span>
 		<div style='clear:both;'></div>
 		<span style='float: left;'>$Artist$</span><span style='float: right;'>$stat$ $pNum->pNumPlusOne$</span><div style='clear:both;'></div>
 		<span style='float: left;'>$Album$</span><span style='float: right;'>$Owner$/$Type$</span><div style='clear:both;'></div>`;
@@ -7092,6 +7301,46 @@ async function playerFaderAction(obj, pNum){
 	}
 }
 
+async function playerBalanceAction(obj, pNum){
+	// obj is either a float value from 0 to 1.5, fader value
+	// with pNum set the the player number, or it is a fader object
+	// and pNum is empty
+	let player;
+	let val;
+	if(pNum){
+		player = pNum;
+		value = obj;
+	}else{
+		player = obj.id;
+		player = parseInt(player.slice(4)); // trim off "pBal" prefix
+		val = parseFloat(obj.value);
+	}
+	let studio = studioName.getValue();
+	if(studio.length){
+		if(val > 1.0)
+			val = 1.0;
+		if(val < -1.0)
+			val = -1.0;
+		fetchContent("studio/"+studio+"?cmd=bal "+player+" "+val);
+	} 
+}
+
+async function playerAction(cmd, evt, pNum){
+	// evt is the event from the button press, or if
+	// evt is false, pNum is the player number to stop
+	let player;
+	if(evt){
+		evt.preventDefault();
+		evt.stopPropagation();
+		player = evt.target.parentNode.parentElement.parentElement.getAttribute("data-idx");
+	}else
+		player = pNum;
+	let studio = studioName.getValue();
+	if(studio.length){
+		fetchContent("studio/"+studio+"?cmd="+cmd+" "+player);
+	}
+}
+
 function updatePlayerFaderUI(val, pNum){
 	let vol = parseFloat(val);
 	let el = document.getElementById("pGain"+pNum);
@@ -7111,6 +7360,20 @@ function updatePlayerFaderUI(val, pNum){
 			val = 0.0;
 		if(val > 1.5)
 			val = 1.5;
+		el.value = val;
+	}
+}
+
+function updatePlayerBalanceUI(val, pNum){
+	val = parseFloat(val);
+	let el = document.getElementById("pBal"+pNum);
+	if(el){
+		if(el.touching)
+			return;	// dont update balance while it is being touched
+		if(val < -1.0)
+			val = -1.0;
+		if(val > 1.0)
+			val = 1.0;
 		el.value = val;
 	}
 }
@@ -7138,10 +7401,31 @@ function updatePlayerUI(p){
 			pde.innerText = "";
 		}
 	}
-	if(parseInt(p.status) & 0x4){
-		// is playing
+	let play = document.getElementById("pPlay"+p.pNum);
+	let stop = document.getElementById("pStop"+p.pNum);
+	let unload = document.getElementById("pUnload"+p.pNum);
+	if(play && stop){
+		if(parseInt(p.status) & 0x2){
+			play.style.display = "flex";
+			stop.style.display = "flex";
+			if(parseInt(p.status) & 0x4){
+				// is playing
+				play.style.background = "Green";
+				stop.style.background = "LightGray";
+				unload.style.display = "none";
+			}else{
+				play.style.background = "LightGray";
+				stop.style.background = "Yellow";
+				unload.style.display = "default";
+			}
+		}else{
+			play.style.display = "none";
+			stop.style.display = "none";
+			unload.style.display = "default";
+		}
 	}
-	updatePlayerFaderUI(p.pNum, p.vol);
+	updatePlayerFaderUI(p.vol, p.pNum);
+	updatePlayerBalanceUI(p.bal, p.pNum);
 }
 
 async function syncPlayers(studio, status, index){
@@ -7238,10 +7522,19 @@ async function syncPlayers(studio, status, index){
 								el.setAttribute("id", "pRem"+(n-1));
 								el = clone.querySelector("#pVU"); 
 								el.setAttribute("id", "pVU"+(n-1));
+								el = clone.querySelector("#pBal"); 
+								el.setAttribute("id", "pBal"+(n-1));
 								el = clone.querySelector("#pFader"); 
 								el.setAttribute("id", "pFader"+(n-1));
 								el = clone.querySelector("#pGain"); 
 								el.setAttribute("id", "pGain"+(n-1));
+								el = clone.querySelector("#pPlay"); 
+								el.setAttribute("id", "pPlay"+(n-1));
+								el = clone.querySelector("#pStop"); 
+								el.setAttribute("id", "pStop"+(n-1));
+								el = clone.querySelector("#pUnload"); 
+								el.setAttribute("id", "pUnload"+(n-1));
+
 								player.appendChild(clone);
 								if(meta)
 									updatePlayerTitle(n-1, meta);
@@ -7280,7 +7573,9 @@ function studioHandleNotice(data){
 		case "inbal":			// player balance change, ref=input index, val=scalar balance, zero for center
 			val = data.val;	// number
 			ref = data.num;
-			
+			if(studioStateCache.control)
+				studioStateCache.control.setBal(val, ref);
+			updatePlayerBalanceUI(val, ref);
 			break;
 		case "outbus":			// output bus assignment change, ref=output index, val=hex string bus assignment bits
 			val = data.val;	// hex string
