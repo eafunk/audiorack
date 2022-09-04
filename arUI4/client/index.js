@@ -432,13 +432,17 @@ let resp;
 
 /***** Navigation  Functions *****/
 
-function dropClick(evt){
+async function dropClick(evt){
 	let id = evt.currentTarget.getAttribute("data-childdiv");
+	let cb = evt.currentTarget.getAttribute("data-showcb");
 	let content = document.getElementById(id);
 	if(content.style.display === "block")
 		content.style.display = "none";
-	else
+	else{
+		if(cb)
+			await window[cb](evt);	// call the update callback function prior to showing
 		content.style.display = "block";
+	}
 }
 
 async function loginSubmit(event){
@@ -774,8 +778,10 @@ function showTabElement(el, id, pass){
 				tablinks[i].className += " active";
 		}
 	}
-	if(pass !== undefined)
+	if(pass !== undefined){
 		studioName.setValue(pass);
+		setLibUsingStudio();
+	}
 	if((id === "browse") && !browseData)
 		browseQuery();
 	if(id === "libmanage")
@@ -6470,7 +6476,7 @@ async function importSelectFiles(evt){
 /***** Studio functions *****/
 
 var busmeters = [];
-var studioStateCache = {control: false, meta: {}, queue: [], queueRev: 0, queueSec: 0.0, queueDur: 0.0, logTime: 0, logs: [], ins: [], outs: [], encoders: {}, autoStat: 0};
+var studioStateCache = {control: false, meta: {}, queue: [], queueRev: 0, queueSec: 0.0, queueDur: 0.0, logTime: 0, logs: [], ins: [], outs: [], encoders: {}, autoStat: 0, buscnt: 0};
 var pTemplate;
 
 function debugNow(evt){
@@ -6480,7 +6486,7 @@ console.log("studio debug dump:");
 console.log(studioStateCache);
 }
 
-/***** periodic all-studio-timers update tick nd sync *****/
+/***** periodic all-studio-timers update tick and sync *****/
 setInterval('updateStudioTimers()', 1000);
 setInterval('syncStudioMetalist(studioName.getValue())', 60000);
 
@@ -6517,7 +6523,6 @@ function updateStudioTimers(){
 function playerTimeUpdate(n){
 	let p = studioStateCache.ins[n];
 	if(p && (p.pos != undefined) && p.pos.length){
-		// is playing
 		let pte = document.getElementById("pTime"+n);
 		let pde = document.getElementById("pRem"+n);
 		if(pte && pde){
@@ -6531,6 +6536,29 @@ function playerTimeUpdate(n){
 						dur = 0.0;
 					pde.innerText = timeFormat(dur, 1);
 				}
+			}
+		}
+	}
+}
+
+
+async function setLibUsingStudio(){
+	let settings = studioStateCache.meta[0];
+	if(settings){
+		let locid = settings.db_loc;
+		if(locid){
+			let resp;
+			resp = await fetchContent("library/get/locations?id="+locid);
+			if(resp){
+				if(resp.ok){
+					let res = await resp.json();
+					if(res && res.length)
+						locName.setValue(res[0].Name);
+				}else{
+					alert("Got an error fetching library location name from server.\n"+resp.statusText);
+				}
+			}else if(cred.getValue()){
+				alert("Failed to fetch library location name from the server.");
 			}
 		}
 	}
@@ -6550,10 +6578,30 @@ function studioChangeCallback(value){
 	// new VU meter canvases will be built once we receive the first VU data event
 	eventTypeReg("vu_"+value, studioVuUpdate);
 	busmeters = [];
-	studioStateCache = {meta: {}, queueRev: -1, queueSec: 0.0, queueDur: 0.0, logTime: 0, logs: [], ins: [], outs: [], encoders: [], autoStat: 0};
+	studioStateCache = {meta: {}, queueRev: -1, queueSec: 0.0, queueDur: 0.0, logTime: 0, logs: [], ins: [], outs: [], encoders: [], autoStat: 0, buscnt: 0};
+	getServerInfo(value);
 	syncStudioMetalist(value);
 	syncStudioStat(value);
-	syncPlayers(studioName.getValue());
+	syncPlayers(value);
+}
+
+async function getServerInfo(studio){
+	let resp = await fetchContent("studio/"+studio+"?cmd=info&raw=1");
+	if(resp instanceof Response){
+		if(resp.ok){
+			let data = await resp.text();
+			let lines = data.split("\n");
+			for(let n = 0; n < lines.length; n++){
+				let fields = lines[n].split(" = ");
+				let key = fields[0];
+				let value = fields[1];
+				if((key == "\tmatrix output bus count")){
+					let part = value.split(" x ");
+					studioStateCache.buscnt = parseInt(part[0]);
+				}
+			}
+		}
+	}
 }
 
 function queueHistoryHasID(itemID){
@@ -6889,7 +6937,7 @@ async function appendItemsToQueue(data){
 						let url = "";
 						if(data[n].ID){
 							url = "item:///"+data[n].ID;
-						}else if(data[n].Type === "file"){
+						}else if((data[n].Type === "file") || (data[n].Type === "stop")){
 							if(data[n].URL && data[n].URL.length)
 								url = data[n].URL;
 						}
@@ -6906,7 +6954,7 @@ async function appendItemsToQueue(data){
 			let url = "";
 			if(data[n].ID){
 				url = "item:///"+data[n].ID;
-			}else if((data[n].Type === "file") && data[n].URL && data[n].URL.length){
+			}else if(((data[n].Type === "file") || (data[n].Type === "stop")) && data[n].URL && data[n].URL.length){
 				url = data[n].URL;
 			}
 			if(url.length){
@@ -7228,6 +7276,10 @@ async function updateMetaItem(studio, ref){
 					if(ref == 0){
 						// got setting... update recent plays
 						syncRecentPlays();
+						if(!old || (old.db_loc != studioStateCache.meta[ref].db_loc))
+							setLibUsingStudio();
+						if(!old || (old.client_players_visible != studioStateCache.meta[ref].client_players_visible))
+							syncPlayers(studio);
 					}else{
 						let qli = queueElementFromRef(ref);
 						if(qli){
@@ -7302,8 +7354,8 @@ async function playerFaderAction(obj, pNum){
 }
 
 async function playerBalanceAction(obj, pNum){
-	// obj is either a float value from 0 to 1.5, fader value
-	// with pNum set the the player number, or it is a fader object
+	// obj is either a float value from 0 to 1.5, balance value
+	// with pNum set the the player number, or it is a balance control object
 	// and pNum is empty
 	let player;
 	let val;
@@ -7323,6 +7375,51 @@ async function playerBalanceAction(obj, pNum){
 			val = -1.0;
 		fetchContent("studio/"+studio+"?cmd=bal "+player+" "+val);
 	} 
+}
+
+async function playerPosAction(obj, pNum){
+	// obj is either a float value from -1.0 to 1.0, position jog value
+	// with pNum set the the player number, or it is a position control object
+	// and pNum is empty
+	let player;
+	let val;
+	if(pNum){
+		player = pNum;
+		value = obj;
+	}else{
+		player = obj.id;
+		player = parseInt(player.slice(4)); // trim off "pPos" prefix
+		val = parseFloat(obj.value);
+	}
+	let p = studioStateCache.ins[player];
+	if(p){
+		if((p.pos != undefined) && p.pos.length){
+			let pos = Math.round(parseFloat(p.pos));
+			if(p && p.dur){
+				let dur = parseFloat(p.dur);
+				if(dur){
+					let scaled = val;
+					if(scaled < 0.0)
+						scaled = -scaled;
+					scaled = Math.pow(scaled, 3);
+					scaled = scaled * dur;
+					if(val < 0.0)
+						scaled = -scaled;
+					scaled = pos + scaled;
+					if(scaled > dur)
+						scaled = dur;
+					if(scaled < 0.0)
+						scaled = 0.0;
+					let studio = studioName.getValue();
+					if(studio.length){
+						p.pos = scaled.toString();
+						playerTimeUpdate(player);
+						fetchContent("studio/"+studio+"?cmd=pos "+player+" "+scaled);
+					}
+				}
+			}
+		}
+	}
 }
 
 async function playerAction(cmd, evt, pNum){
@@ -7355,7 +7452,8 @@ function updatePlayerFaderUI(val, pNum){
 	el = document.getElementById("pFader"+pNum);
 	if(el){
 		if(el.touching)
-			return;	// dont update fader while it is being touched		val = Math.pow(vol, 0.25);
+			return;	// dont update fader while it is being touched		
+		val = Math.pow(vol, 0.25);
 		if(val < 0.1)
 			val = 0.0;
 		if(val > 1.5)
@@ -7381,7 +7479,8 @@ function updatePlayerBalanceUI(val, pNum){
 function updatePlayerUI(p){
 	let pte = document.getElementById("pTime"+p.pNum);
 	let pde = document.getElementById("pRem"+p.pNum);
-	if(pte && pde){
+	let ppe = document.getElementById("pPos"+p.pNum);
+	if(pte && pde && ppe){
 		if(p && (p.pos != undefined) && p.pos.length){
 			let pos = Math.round(parseFloat(p.pos));
 			pte.innerText = timeFormat(pos, 1);
@@ -7392,8 +7491,11 @@ function updatePlayerUI(p){
 					if(dur < 0.00)
 						dur = 0.0;
 					pde.innerText = timeFormat(dur, 1);
-				}else
+					ppe.style.display = "block;";
+				}else{
 					pde.innerText = "";
+					ppe.style.display = "none";
+				}
 			}else
 				pde.innerText = "";
 		}else{
@@ -7426,9 +7528,535 @@ function updatePlayerUI(p){
 	}
 	updatePlayerFaderUI(p.vol, p.pNum);
 	updatePlayerBalanceUI(p.bal, p.pNum);
+	updateCueButton(p.pNum, parseInt(p.bus, 16));
 }
 
-async function syncPlayers(studio, status, index){
+function updateCueButton(pNum, bus){
+	let cue = document.getElementById("pCue"+pNum);
+	if(cue){
+		if(2 & bus)
+			cue.style.background = "Red";
+		else
+			cue.style.background = "";
+	}
+}
+
+async function genPlayerBusMenu(evt){ //pNum, bus, meta){
+	// called when bus button is clicked to show menu
+	pNum = evt.target.id;
+	pNum = parseInt(pNum.slice(7)); // trim off "pBusSel" prefix
+	let p = studioStateCache.ins[pNum];
+	let ref = refFromPlayerNumber(pNum);
+	let meta;
+	if(ref > 0)
+		meta = studioStateCache.meta[ref];
+	if(!p)
+		return;
+	if(p.bus !== false){
+		bus = parseInt(p.bus, 16);
+		bus = bus & 0x00ffffff;
+	}
+	let bdiv;
+	let fdiv;
+	let mdiv;
+	let tbdiv;
+	let list = document.getElementById("pBusList"+pNum);
+	if(!list)
+		return;
+	
+	let build = false;
+	let id = "p"+pNum+"BusSep";
+	let el = document.getElementById(id);
+	if(!el){
+		bdiv = document.createElement("div");
+		el = document.createElement("b");
+		el.innerText = "Busses";
+		el.id = id;
+		bdiv.appendChild(el);
+		bdiv.appendChild(document.createElement("br"));
+		list.appendChild(bdiv);
+		
+		fdiv = document.createElement("div");
+		el = document.createElement("hr");
+		fdiv.appendChild(el);
+		el = document.createElement("b")
+		el.innerText = "Feed 0dB";
+		el.id = "pFeedSep"+pNum;
+		fdiv.appendChild(el);
+		fdiv.appendChild(document.createElement("br"));
+		list.appendChild(fdiv);
+		
+		mdiv = document.createElement("div");
+		el = document.createElement("hr");
+		mdiv.appendChild(el);
+		el = document.createElement("b");
+		el.innerText = "Mutes";
+		mdiv.appendChild(el);
+		mdiv.appendChild(document.createElement("br"));
+		let c = document.createElement("input");
+		c.id = "p"+pNum+"b25";
+		let l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Group A"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-idx", 25);
+		c.setAttribute("data-pnum", pNum);
+		c.addEventListener('change', playerMuteTBAction, false);
+		mdiv.appendChild(c);
+		mdiv.appendChild(l);
+		mdiv.appendChild(document.createElement("br"));
+		c = document.createElement("input");
+		c.id = "p"+pNum+"b26";
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Group B"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-idx", 26);
+		c.setAttribute("data-pnum", pNum);
+		c.addEventListener('change', playerMuteTBAction, false);
+		mdiv.appendChild(c);
+		mdiv.appendChild(l);
+		mdiv.appendChild(document.createElement("br"));
+		c = document.createElement("input");
+		c.id = "p"+pNum+"b27";
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Group C"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-idx", 27);
+		c.setAttribute("data-pnum", pNum);
+		c.addEventListener('change', playerMuteTBAction, false);
+		mdiv.appendChild(c);
+		mdiv.appendChild(l);
+		mdiv.appendChild(document.createElement("br"));
+		list.appendChild(mdiv);
+		
+		tbdiv = document.createElement("div");
+		el = document.createElement("hr")
+		tbdiv.appendChild(el);
+		el = document.createElement("b")
+		el.innerText = "Talkback Source";
+		tbdiv.appendChild(el);
+		tbdiv.appendChild(document.createElement("br"));
+		c = document.createElement("input");
+		c.id = "p"+pNum+"b29";
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("TB 1"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-idx", 29);
+		c.setAttribute("data-pnum", pNum);
+		c.addEventListener('change', playerMuteTBAction, false);
+		tbdiv.appendChild(c);
+		tbdiv.appendChild(l);
+		tbdiv.appendChild(document.createElement("br"));
+		c = document.createElement("input");
+		c.id = "p"+pNum+"b30";
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("TB 2"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-idx", 30);
+		c.setAttribute("data-pnum", pNum);
+		c.addEventListener('change', playerMuteTBAction, false);
+		tbdiv.appendChild(c);
+		tbdiv.appendChild(l);
+		tbdiv.appendChild(document.createElement("br"));
+		c = document.createElement("input");
+		c.id = "p"+pNum+"b31";
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("TB 3"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-idx", 31);
+		c.setAttribute("data-pnum", pNum);
+		c.addEventListener('change', playerMuteTBAction, false);
+		tbdiv.appendChild(c);
+		tbdiv.appendChild(l);
+		tbdiv.appendChild(document.createElement("br"));
+		list.appendChild(tbdiv);
+	}
+	if(fdiv){
+		// create a feed volume control
+		id = "pfvol"+pNum;
+		c = document.createElement("input");
+		c.id = id;
+		c.setAttribute("type", "range");
+		c.setAttribute("min", "0.0");
+		c.setAttribute("max", "1.5");
+		c.setAttribute("value", "1.0");
+		c.setAttribute("step", "0.03");
+		c.style.width = "65px";
+		c.style.height = "height: 12px";
+		c.setAttribute("data-pnum", pNum);
+		c.addEventListener('input', playerFeedVolAction, false);
+		fdiv.appendChild(c);
+		fdiv.appendChild(document.createElement("br"));
+		// create a NONE feed entry
+		id = "p"+pNum+"f0";
+		c = document.createElement("input");
+		c.id = id;
+		c.name = "fGrpP"+pNum;
+		c.checked = true;
+		let l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("None"));
+		c.setAttribute("type", "radio");
+		c.setAttribute("data-idx", "0");
+		c.setAttribute("data-pnum", pNum);
+		c.addEventListener('change', playerFeedAction, false);
+		fdiv.appendChild(c);
+		fdiv.appendChild(l);
+		fdiv.appendChild(document.createElement("br"));
+	}
+	let mmbus = 0;
+	let mmvol = 0.0;
+	if(meta){
+		// default to none feed
+		mmbus = meta.MixMinusBus;
+		if(mmbus)
+			mmbus = mmbus & 0x00ffffff;
+		if(!mmbus){
+			let c = document.getElementById("p"+pNum+"f0");
+			c.checked = true;
+		}
+		mmvol = meta.MixMinusVol;
+		let el = document.getElementById("pfvol"+pNum);
+		if(el && (mmvol != undefined)){
+			// update feedvol control
+			mmvol = parseFloat(mmvol);
+			mmvol = Math.pow(mmvol, 0.25);
+			if(mmvol < 0.03)
+				mmvol = 0.0;
+			if(mmvol > 1.5)
+				mmvol = 1.5;
+			el.value = mmvol;
+			el = document.getElementById("pFeedSep"+pNum);
+			if(mmvol <= 0.00001)
+				el.innerText = "Feed Muted";
+			else{
+				let db = Math.round(20.0 * Math.log10(mmvol));
+				el.innerText = "Feed " + db + "dB";
+			}
+		}
+	}
+	for(let b=0; b<studioStateCache.buscnt; b++){
+		let c;
+		// update feed
+		id = "p"+pNum+"f"+(b+1);
+		c = document.getElementById(id);
+		if(fdiv){
+			c = document.createElement("input");
+			c.id = id;
+			c.name = "fGrpP"+pNum;
+			let l = document.createElement('label');
+			l.htmlFor = c.id;
+			c.setAttribute("type", "radio");
+			c.setAttribute("data-idx", b+1);
+			c.setAttribute("data-pnum", pNum);
+			c.addEventListener('change', playerFeedAction, false);
+			switch(b){
+				case 0:
+					l.appendChild(document.createTextNode("Monitor"));
+					break;
+				case 1:
+					l.appendChild(document.createTextNode("Cue"));
+					break;
+				case 2:
+					l.appendChild(document.createTextNode("Program"));
+					break;
+				case 3:
+					l.appendChild(document.createTextNode("Alternate"));
+					break;
+				default:
+					l.appendChild(document.createTextNode("Bus " + b));
+					break;
+			}
+			fdiv.appendChild(c);
+			fdiv.appendChild(l);
+			fdiv.appendChild(document.createElement("br"));
+		}
+		// update feed values
+		if(meta !== false){
+			if(c){
+				if(b+1 == mmbus)
+					c.checked = true;
+			}
+		}
+		// update busses
+		if(b != 1){ // skip cue channel
+			id = "p"+pNum+"b"+b;
+			c = document.getElementById(id);
+			if(bdiv){
+				c = document.createElement("input");
+				c.id = id;
+				let l = document.createElement('label');
+				l.htmlFor = c.id;
+				c.setAttribute("type", "checkbox");
+				c.setAttribute("data-idx", b);
+				c.setAttribute("data-pnum", pNum);
+				c.addEventListener('change', playerBusCheckAction, false);
+				switch(b){
+					case 0:
+						l.appendChild(document.createTextNode("Monitor"));
+						break;
+					case 2:
+						l.appendChild(document.createTextNode("Program"));
+						break;
+					case 3:
+						l.appendChild(document.createTextNode("Alternate"));
+						break;
+					default:
+						l.appendChild(document.createTextNode("Bus " + b));
+						break;
+				}
+				bdiv.appendChild(c);
+				bdiv.appendChild(l);
+				bdiv.appendChild(document.createElement("br"));
+			}
+			// update bus values
+			if(bus !== false){
+				if(c){
+					if((1 << b) & bus)
+						c.checked = true;
+					else
+						c.checked = false;
+				}
+			}
+		}
+	}
+	if(fdiv){
+		let c = document.createElement("b");
+		c.innerText = "Feed Cue on";
+		fdiv.appendChild(c);
+		fdiv.appendChild(document.createElement("br"));
+		c = document.createElement("input");
+		c.id = "p"+pNum+"b24";
+		let l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Cue"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-idx", 1<<24);
+		c.setAttribute("data-pnum", pNum);
+		c.addEventListener('change', playerFeedAction, false);
+		fdiv.appendChild(c);
+		fdiv.appendChild(l);
+		fdiv.appendChild(document.createElement("br"));
+		
+		c = document.createElement("input");
+		c.id = "p"+pNum+"b29";
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Talkback 1"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-idx", 1<<29);
+		c.setAttribute("data-pnum", pNum);
+		c.addEventListener('change', playerFeedAction, false);
+		fdiv.appendChild(c);
+		fdiv.appendChild(l);
+		fdiv.appendChild(document.createElement("br"));
+		
+		c = document.createElement("input");
+		c.id = "p"+pNum+"b30";
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Talkback 2"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-idx", 1<<30);
+		c.setAttribute("data-pnum", pNum);
+		c.addEventListener('change', playerFeedAction, false);
+		fdiv.appendChild(c);
+		fdiv.appendChild(l);
+		fdiv.appendChild(document.createElement("br"));
+		
+		c = document.createElement("input");
+		c.id = "p"+pNum+"b31";
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Talkback 3"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-idx", 1n<<31n);
+		c.setAttribute("data-pnum", pNum);
+		c.addEventListener('change', playerFeedAction, false);
+		fdiv.appendChild(c);
+		fdiv.appendChild(l);
+		fdiv.appendChild(document.createElement("br"));
+	}
+	if(meta && (meta.MixMinusBus != undefined)){
+		// set feed cue overrides
+		mmbus = BigInt(meta.MixMinusBus);
+		c = document.getElementById("p"+pNum+"b24");
+		if(c){
+			if((1n << 24n) & mmbus)
+				c.checked = true;
+			else
+				c.checked = false;
+		}
+		c = document.getElementById("p"+pNum+"b29");
+		if(c){
+			if((1n << 29n) & mmbus)
+				c.checked = true;
+			else
+				c.checked = false;
+		}
+		c = document.getElementById("p"+pNum+"b30");
+		if(c){
+			if((1n << 30n) & mmbus)
+				c.checked = true;
+			else
+				c.checked = false;
+		}
+		c = document.getElementById("p"+pNum+"b31");
+		if(c){
+			if((1n << 31n) & mmbus)
+				c.checked = true;
+			else
+				c.checked = false;
+		}
+	}
+
+	// handle talkback and mute assignments
+	let studio = studioName.getValue();
+	if(studio.length){
+		let resp;
+		resp = await fetchContent("studio/"+studio+"?cmd=showbus "+pNum+"&raw=1");
+		if(resp){
+			if(resp.ok){
+				let raw = await resp.text();
+				p.bus = raw; // update bus to include mutes and TBs
+				bus = parseInt(raw, 16);
+				for(b = 25; b < 32; b++){
+					if(b == 28)
+						continue; // ignore cue mute grp
+					c = document.getElementById("p"+pNum+"b"+b);
+					if(c){
+						if((1 << b) & bus)
+							c.checked = true;
+						else
+							c.checked = false;
+					}
+				}
+			}
+		}
+	}
+}
+
+async function playerFeedVolAction(obj, pNum){
+	// obj is either a float value from 0 to 1.5, fader value
+	// with pNum set the the player number, or it is a fader object
+	// and pNum is empty
+	let player;
+	let val;
+	if(pNum){
+		player = pNum;
+		value = obj;
+	}else{
+		player = obj.target.id;
+		player = parseInt(player.slice(5)); // trim off "pfVol" prefix
+		val = parseFloat(obj.target.value);
+	}
+	let studio = studioName.getValue();
+	if(studio.length){
+		// make val scalar
+		val = Math.pow(val, 4);
+		if(val <= 0.00001)
+			val = 0.0;
+		if(val > 5.1)
+			val = 5.1;
+		fetchContent("studio/"+studio+"?cmd=mmvol "+player+" "+val);
+		let el = document.getElementById("pFeedSep"+player);
+		if(val <= 0.00001)
+			el.innerText = "Feed Muted";
+		else{
+			let db = Math.round(20.0 * Math.log10(val));
+			el.innerText = "Feed " + db + "dB";
+		}
+	}
+}
+
+async function playerBusCheckAction(obj){
+	let b = obj.target.getAttribute("data-idx");
+	let pNum = obj.target.getAttribute("data-pnum");
+	let p = studioStateCache.ins[pNum];
+	let studio = studioName.getValue();
+	if(p && studio.length){
+		let bus = parseInt(p.bus, 16);
+		bus = bus & 0x00ffffff;
+		b = 1 << b;
+		if(bus & b)
+			bus = bus & ~b;
+		else
+			bus = bus | b;
+		let hexStr =  ("00000000" + bus.toString(16)).substr(-8);
+		fetchContent("studio/"+studio+"?cmd=bus "+pNum+" "+hexStr);
+	}
+}
+
+async function playerMuteTBAction(obj){
+	let b = BigInt(obj.target.getAttribute("data-idx"));
+	let pNum = obj.target.getAttribute("data-pnum");
+	let p = studioStateCache.ins[pNum];
+	if(!p)
+		return;
+	let bus = BigInt(parseInt(p.bus, 16));
+	let studio = studioName.getValue();
+	if(studio.length){
+		b = BigInt(1) << b;
+		if(bus & b)
+			bus = bus & ~b;
+		else
+			bus = bus | b;
+		let hexStr =  ("00000000" + bus.toString(16)).substr(-8);
+		fetchContent("studio/"+studio+"?cmd=mutes "+pNum+" "+hexStr);
+	}
+}
+
+async function playerFeedAction(obj){
+	let pNum = obj.target.getAttribute("data-pnum");
+	let p = studioStateCache.ins[pNum];
+	let ref = refFromPlayerNumber(pNum);
+	let meta;
+	if(ref > 0)
+		meta = studioStateCache.meta[ref];
+	if(!meta)
+		return;
+	mmbus = BigInt(meta.MixMinusBus);
+	let b = BigInt(obj.target.getAttribute("data-idx"));
+	if(b > 0x00ffffffn){
+		// cue override bits
+		if(mmbus & b)
+			mmbus = mmbus & ~b;
+		else
+			mmbus = mmbus | b;
+	}else{
+		mmbus = (mmbus & 0xff000000n) + b;
+	}
+	let studio = studioName.getValue();
+	if(studio.length){
+		fetchContent("studio/"+studio+"?cmd=mmbus "+pNum+" "+mmbus);
+	}
+}
+
+async function playerCueAction(evt){
+	if(evt){
+		evt.preventDefault();
+		let pNum = evt.target.getAttribute("data-idx");
+		let p = studioStateCache.ins[pNum];
+		let studio = studioName.getValue();
+		if(p && studio.length){
+			let bus = parseInt(p.bus, 16);
+			bus = bus & 0x00ffffff;
+			if(bus & 2)
+				bus = bus & ~2;
+			else
+				bus = bus | 2;
+			let hexStr =  ("00000000" + bus.toString(16)).substr(-8);
+			fetchContent("studio/"+studio+"?cmd=bus "+pNum+" "+hexStr);
+		}
+	}
+}
+
+async function syncPlayers(studio){
 	// get players list
 	let resp;
 	resp = await fetchContent("studio/"+studio+"?cmd=pstat&raw=1");
@@ -7438,14 +8066,21 @@ async function syncPlayers(studio, status, index){
 			let lines = raw.split("\n");
 			lines.pop(); // remove last, blank line
 			let keys = lines[0].split("\t");
-			if(lines.length > 1){
+			let count = lines.length;
+			if(count > 1){
+				let settings = studioStateCache.meta[0];
+				if(settings){
+					let vis = settings.client_players_visible;
+					if(vis && count > vis)
+						count = parseInt(vis)+1;
+				}
 				let mixer = document.getElementById("mixergrid");
 				// check grid size against list size
-				while(lines.length-1 < mixer.childElementCount){
+				while(count-1 < mixer.childElementCount){
 					// remove columns
 					mixer.removeChild(mixer.lastChild);
 				}
-				while(lines.length-1 > mixer.childElementCount){
+				while(count-1 > mixer.childElementCount){
 					// add columns
 					let p = document.createElement("div");
 					p.setAttribute("data-idx", mixer.childElementCount);
@@ -7453,7 +8088,7 @@ async function syncPlayers(studio, status, index){
 					p.id = "player" + mixer.childElementCount;
 					mixer.appendChild(p);
 				}
-				for(let n = 1; n < lines.length; n++){
+				for(let n = 1; n < count; n++){
 					let obj = {};
 					if(lines[n].length){
 						let fields = lines[n].split("\t");
@@ -7520,8 +8155,18 @@ async function syncPlayers(studio, status, index){
 								el.setAttribute("id", "pTime"+(n-1));
 								el = clone.querySelector("#pRem"); 
 								el.setAttribute("id", "pRem"+(n-1));
+								el = clone.querySelector("#pPos"); 
+								el.setAttribute("id", "pPos"+(n-1));
 								el = clone.querySelector("#pVU"); 
 								el.setAttribute("id", "pVU"+(n-1));
+								el = clone.querySelector("#pBusSel"); 
+								el.setAttribute("id", "pBusSel"+(n-1));
+								el.setAttribute("data-childdiv", "pBusList"+(n-1));
+								el = clone.querySelector("#pBusList"); 
+								el.setAttribute("id", "pBusList"+(n-1));
+								el = clone.querySelector("#pCue"); 
+								el.setAttribute("id", "pCue"+(n-1));
+								el.setAttribute("data-idx", n-1);
 								el = clone.querySelector("#pBal"); 
 								el.setAttribute("id", "pBal"+(n-1));
 								el = clone.querySelector("#pFader"); 
@@ -7534,7 +8179,7 @@ async function syncPlayers(studio, status, index){
 								el.setAttribute("id", "pStop"+(n-1));
 								el = clone.querySelector("#pUnload"); 
 								el.setAttribute("id", "pUnload"+(n-1));
-
+								
 								player.appendChild(clone);
 								if(meta)
 									updatePlayerTitle(n-1, meta);
@@ -7557,6 +8202,7 @@ async function syncPlayers(studio, status, index){
 function studioHandleNotice(data){
 	let val = 0;
 	let ref = 0;
+	let p;
 	switch(data.type){
 		case "outvol":			// output volume change, ref=output index, val=scalar volume
 			val = data.val;	// number
@@ -7583,14 +8229,18 @@ function studioHandleNotice(data){
 			
 			break;
 		case "inbus":			// input bus assignment change, ref=input index, val=hex string bus assignment bits
-			val = data.val;	// hex string
+			val = parseInt(data.val, 16);	// hex string
 			ref = data.num;
-			
+			p = studioStateCache.ins[ref];
+			if(p){
+				updateCueButton(ref, val);
+				p.bus = data.val;
+			}
 			break;
 		case "instat":			// input status change, ref=input index, val=status number
 			val = data.val;	// number
 			ref = data.num;
-			syncPlayers(studioName.getValue(), val, ref)
+			syncPlayers(studioName.getValue());
 			break;
 		case "status":			// over-all status change, no ref, no val.  Use "stat" command to get status
 			// no ref or value: Change in ListRev, LogTime, automation status trigger this notice. Does not include sip registoration.
@@ -7611,7 +8261,7 @@ function studioHandleNotice(data){
 		case "inpos":		// input position change, ref=input index, val=position in seconds
 			val = data.val;	// number
 			ref = data.num;
-			let p = studioStateCache.ins[ref];
+			p = studioStateCache.ins[ref];
 			if(p && p.status){
 				p.pos = val.toString();
 				playerTimeUpdate(ref);

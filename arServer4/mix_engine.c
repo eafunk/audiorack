@@ -698,14 +698,14 @@ int process(jack_nframes_t nframes, void *arg){
 			/* get samples from assigned mixbus ring buffer */
 			mixbuffer_read(mixEngineRef->mixbuses, nframes, 
 											delay, dest, c, b, 0);
-											
+			
 			if(vol < 1.0){	
 				/* scale the sample for the output group volume */
 				for(s = 0; s < nframes; s++){
-					*samp = *samp * vol;					
+					*samp = *samp * vol;
 					samp++;
-				}		
-			}									
+				}
+			}
 			out_port++;
 		}
 		/* after all requests have been handled */

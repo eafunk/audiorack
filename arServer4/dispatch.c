@@ -831,7 +831,7 @@ void *playerChangeWatcher(void *refCon){
 				}
 				
 				if((changed & change_feedvol) && (instance->UID)){
-					type = fstr(3, instance->feedVol);
+					type = fstr(instance->feedVol, 3);
 					SetMetaData(instance->UID, "MixMinusVol", type);
 					free(type);
 				}

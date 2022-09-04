@@ -355,16 +355,17 @@
 			<div id="pRem" style="font-size: 12px;"></div>
 		</div>
 		<div>
-			<input type="range" min="-1" max="1" value="0" step="0.05" style=" width: 50px; height: 12px;">
+			<input id="pPos" type="range" min="-1" max="1" value="0" step="0.05" style=" width: 50px; height: 12px;"
+				oninput="playerPosAction(this);" onchange="this.value='0.0';">
 		</div>
 		<div>
-			<select id="pBusSel" style="height: 15px; width: 64px; font-size: 8px;">
-				<option value="0">Banana</option>
-				<option value="1">Cherry</option>
-			</select>
+			<button id="pBusSel" class="editbutton" onclick="dropClick(event)" data-showcb="genPlayerBusMenu" data-childdiv="pBusList" style="height: 15px;">
+				<i class="fa fa-caret-down"></i>Busses
+			</button>
+			<div id="pBusList" class="bus-list"></div>
 		</div>
 		<div>
-			<button id="pCue" style="height: 15px; width: 32px; font-size: 8px;">Cue</button>
+			<button id="pCue" style="height: 15px; width: 32px; font-size: 8px;" onclick="playerCueAction(event);">Cue</button>
 		</div>
 		<div>
 			L<input id="pBal" type="range" min="-1" max="1" value="0" step="0.05" style=" width: 42px; height: 12px;" 

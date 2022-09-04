@@ -99,7 +99,8 @@ select {
 }
 
 i {
-	padding: 6px;
+	padding: 2px;
+	vertical-align:middle;
 }
 
 .container {
@@ -313,6 +314,19 @@ footer {
 	min-width: 230px;
 	border: 0px;
 	z-index: 10;
+}
+
+.bus-list {
+	text-align: left;
+	display: none;
+	max-height: 227px;
+	overflow-y: auto;
+	position: relative;
+	left: 0px;
+	background-color: #f6f6f6;
+	width: 72px;
+	border: 1px solid #ddd;
+	z-index: 50;
 }
 
 .search-list {

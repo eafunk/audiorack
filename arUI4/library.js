@@ -1789,7 +1789,7 @@ function deleteID(request, response, params, dirs){
 											if(reassign){
 												// reassign items with this category to another
 												// IGNORE will skip records where there is a UNIQUE conflict (Item is already in the reassign category)
-												connection.query("UPDATE IGNORE "+locConf['prefix']+"category_item SET Category = "+reassign+" WHERE category_item = "+ID+";", function(err, results){
+												connection.query("UPDATE IGNORE "+locConf['prefix']+"category_item SET Category = "+reassign+" WHERE Category = "+ID+";", function(err, results){
 													if(err){
 														//Query Error (Rollback and release connection)
 														connection.rollback(function(){
@@ -4719,7 +4719,7 @@ module.exports = {
 		}else if(dirs[2] == 'set'){
 			setIn(request, response, params, dirs);	// /set/table/{ID/}?column=value1&... If ID is excluded, a new row is created
 		}else if(dirs[2] == 'delete'){
-			deleteID(request, response, params, dirs);	// delete/table/ID?reassign=id	will reassign related items that contain 
+			deleteID(request, response, params, dirs);	// delete/table/ID?reassign=id&... will reassign related items that contain 
 																		// this property as specified, or fail if not.
 																		// remove=1 will attempt to delete an associated file.
 		}else if(dirs[2] == 'logs'){

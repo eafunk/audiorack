@@ -39,7 +39,7 @@
 
 /* program wide globals */
 const char *versionStr="4.0.3";
-const char *versionCR="2004-2020  Ethan Funk";
+const char *versionCR="2004-2022  Ethan Funk";
 mixEngineRecPtr mixEngine;
 unsigned char run;
 unsigned char quit;
@@ -555,11 +555,11 @@ int main(int argc, const char *argv[])
 		snprintf(command, sizeof command, "Failed to set working directory to %s.\n", wdir_path);
 		write(STDERR_FILENO, command, strlen(command)); 	
 	}
-			
+	
 	/* set up settings and metadata list */
 	initDataLists();
 	
-    // display version
+	// display version
 	snprintf(command, sizeof command, "AudioRack Server, version %s\n", versionStr);
 	write(STDERR_FILENO, command, strlen(command));
 	snprintf(command, sizeof command, "Copyright (C) %s\n\n", versionCR);
@@ -597,8 +597,8 @@ int main(int argc, const char *argv[])
 	}
 	
 	quit = 0;
-    run = 1;
-    restart = 0;
+	run = 1;
+	restart = 0;
 	lastp = 0;
 
 	// start audio engine
@@ -606,7 +606,7 @@ int main(int argc, const char *argv[])
 								jackServer, ourJackName, options)){
 		write(STDERR_FILENO, err, strlen(err));
 		write(STDERR_FILENO, "\n", 1);
-		goto fail;						
+		goto fail;
 	}else{
 		err = "Audio engine started.\n";
 		write(STDERR_FILENO, err, strlen(err));
@@ -615,7 +615,7 @@ int main(int argc, const char *argv[])
 	initDispatcherThreads();
 	
 	/* this initializes gstream for media metadata/tag extraction */
-	if(!mediaInit())	
+	if(!mediaInit())
 		serverLogMakeEntry("[main] mediaInit-:Failed to initialize gstreamer library. This is trouble!");
 
 	initAutomator();

@@ -1071,6 +1071,9 @@ void* TCPListener(void *refCon){
 		namelen = sizeof(client); 
 		ns = accept(listenSocket, (struct sockaddr *)&client, &namelen); /* wait for connection request */
 		if(ns > 0) {
+			// Set new socket options -- keep-alive for broken connection detection
+			int trueval = 1;
+			setsockopt(ns, SOL_SOCKET, SO_KEEPALIVE, &trueval, sizeof(trueval)); // if this fails, not much can be done
 			pthread_mutex_lock(&sMutex);
 			for(i=0; i<sessionListSize;i++){
 				recPtr = &sessionList[i];
@@ -1089,7 +1092,7 @@ void* TCPListener(void *refCon){
 				}
 			}
 			pthread_mutex_unlock(&sMutex);
-	
+			
 			if(i == sessionListSize){
 				serverLogMakeEntry("[session] TCPListener-new connections: requests exceed max number of allowed connections");
 				send( ns, "maximum number of connection exceeded. Try again later.\n", 57, 0);
