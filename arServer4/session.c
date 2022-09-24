@@ -984,7 +984,7 @@ void* sessionThread(ctl_session *session){
 	else 
 		block[0] = 0;
 	
-	session->silent = 0;	
+	session->silent = 0;
 	while(rx_length > 0){
 		// "\n" is our command delimitor, but we need to handle \r too.
 		save_pointer = block;

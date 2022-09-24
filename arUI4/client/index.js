@@ -6501,7 +6501,7 @@ setInterval('syncStudioMetalist(studioName.getValue())', 60000);
 
 function updateStudioTimers(){
 	let sec = studioStateCache.queueSec;
-	sec = sec - 1.0;
+	sec = sec - 0.5;
 	if(sec < 0.0)
 		sec = 0.0;
 	studioStateCache.queueSec = sec;
@@ -6509,7 +6509,7 @@ function updateStudioTimers(){
 	el.innerText = timeFormat(sec, 1);
 	
 	sec = studioStateCache.queueDur;
-	sec = sec - 1.0;
+	sec = sec - 0.5;
 	if(sec < 0.0)
 		sec = 0.0;
 	studioStateCache.queueDur = sec;
@@ -6520,8 +6520,8 @@ function updateStudioTimers(){
 		for(n=0; n<ins.length; n++){
 			let p = studioStateCache.ins[n];
 			if(p && (parseInt(p.status) & 0x4)){
-				let pos = Math.round(parseFloat(p.pos));
-				pos = pos + 1.0;
+				let pos = parseFloat(p.pos);
+				pos = pos + 0.5;
 				p.pos = pos.toString();
 			}
 			playerTimeUpdate(n);
