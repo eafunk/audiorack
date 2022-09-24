@@ -86,6 +86,14 @@ function getStorageLoc(){
 	return localStorage.getItem("location");
 }
 
+function setStorageMidiControl(name){
+	localStorage.setItem("midiControl", name);
+}
+
+function getStorageMidiControl(){
+	return localStorage.getItem("midiControl");
+}
+
 function quoteattr(s){
 	if(s){
 		let result = new Option(s).innerHTML;
@@ -6476,8 +6484,9 @@ async function importSelectFiles(evt){
 /***** Studio functions *****/
 
 var busmeters = [];
-var studioStateCache = {control: false, meta: {}, queue: [], queueRev: 0, queueSec: 0.0, queueDur: 0.0, logTime: 0, logs: [], ins: [], outs: [], encoders: {}, autoStat: 0, buscnt: 0};
+var studioStateCache = {control: false, meta: {}, queue: [], queueRev: 0, queueSec: 0.0, queueDur: 0.0, logTime: 0, logs: [], ins: [], outs: [], encoders: {}, autoStat: 0, runStat: 0, buscnt: 0};
 var pTemplate;
+var midiAccess;
 
 function debugNow(evt){
 	evt.preventDefault();
@@ -6487,7 +6496,7 @@ console.log(studioStateCache);
 }
 
 /***** periodic all-studio-timers update tick and sync *****/
-setInterval('updateStudioTimers()', 1000);
+setInterval('updateStudioTimers()', 500);
 setInterval('syncStudioMetalist(studioName.getValue())', 60000);
 
 function updateStudioTimers(){
@@ -6518,6 +6527,8 @@ function updateStudioTimers(){
 			playerTimeUpdate(n);
 		}
 	}
+	if(studioStateCache.control)
+		studioStateCache.control.tick();
 }
 
 function playerTimeUpdate(n){
@@ -6578,11 +6589,12 @@ function studioChangeCallback(value){
 	// new VU meter canvases will be built once we receive the first VU data event
 	eventTypeReg("vu_"+value, studioVuUpdate);
 	busmeters = [];
-	studioStateCache = {meta: {}, queueRev: -1, queueSec: 0.0, queueDur: 0.0, logTime: 0, logs: [], ins: [], outs: [], encoders: [], autoStat: 0, buscnt: 0};
+	studioStateCache = {meta: {}, queueRev: -1, queueSec: 0.0, queueDur: 0.0, logTime: 0, logs: [], ins: [], outs: [], encoders: [], runStat: 0, autoStat: 0, buscnt: 0};
 	getServerInfo(value);
 	syncStudioMetalist(value);
 	syncStudioStat(value);
 	syncPlayers(value);
+	updateControlSurface();
 }
 
 async function getServerInfo(studio){
@@ -6688,10 +6700,13 @@ async function syncStudioStat(studio){
 					let el = document.getElementById("stRun");
 					// update Queue Run/Halt button
 					fields = fields[1].split(" ");
-					if(fields[1] == "Running")
+					if(fields[1] == "Running"){
 						el.checked = true;
-					else
+						studioStateCache.runStat = 1;
+					}else{
 						el.checked = false;
+						studioStateCache.runStat = 0;
+					}
 				}else if((key == "LogTime")){
 					value =  parseInt(value);
 					if(studioStateCache.logTime != value){
@@ -6727,6 +6742,8 @@ async function syncStudioStat(studio){
 					}
 				}
 			}
+			if(studioStateCache.control)
+				studioStateCache.control.setAutoStat();
 		}
 	}
 }
@@ -7435,7 +7452,10 @@ async function playerAction(cmd, evt, pNum){
 	let studio = studioName.getValue();
 	if(studio.length){
 		fetchContent("studio/"+studio+"?cmd="+cmd+" "+player);
+console.log("studio/"+studio+"?cmd="+cmd+" "+player);
 	}
+	
+
 }
 
 function updatePlayerFaderUI(val, pNum){
@@ -8213,20 +8233,19 @@ function studioHandleNotice(data){
 			val = data.val;	// number
 			ref = data.num;
 			if(studioStateCache.control)
-				studioStateCache.control.setVol(val, ref);
+				studioStateCache.control.setPVol(val, ref);
 			updatePlayerFaderUI(val, ref);
 			break;
 		case "inbal":			// player balance change, ref=input index, val=scalar balance, zero for center
 			val = data.val;	// number
 			ref = data.num;
 			if(studioStateCache.control)
-				studioStateCache.control.setBal(val, ref);
+				studioStateCache.control.setPBal(val, ref);
 			updatePlayerBalanceUI(val, ref);
 			break;
 		case "outbus":			// output bus assignment change, ref=output index, val=hex string bus assignment bits
 			val = data.val;	// hex string
 			ref = data.num;
-			
 			break;
 		case "inbus":			// input bus assignment change, ref=input index, val=hex string bus assignment bits
 			val = parseInt(data.val, 16);	// hex string
@@ -8236,10 +8255,14 @@ function studioHandleNotice(data){
 				updateCueButton(ref, val);
 				p.bus = data.val;
 			}
+			if(studioStateCache.control)
+				studioStateCache.control.setPBus(val, ref);
 			break;
 		case "instat":			// input status change, ref=input index, val=status number
 			val = data.val;	// number
 			ref = data.num;
+			if(studioStateCache.control)
+				studioStateCache.control.setPStat(val, ref);
 			syncPlayers(studioName.getValue());
 			break;
 		case "status":			// over-all status change, no ref, no val.  Use "stat" command to get status
@@ -8262,6 +8285,8 @@ function studioHandleNotice(data){
 			val = data.val;	// number
 			ref = data.num;
 			p = studioStateCache.ins[ref];
+			if(studioStateCache.control)
+				studioStateCache.control.setPPos(val, ref);
 			if(p && p.status){
 				p.pos = val.toString();
 				playerTimeUpdate(ref);
@@ -8284,6 +8309,124 @@ function studioHandleNotice(data){
 		default:
 			// ignore unknown type;
 			return;
+	}
+}
+
+async function updateControlSurface(){
+	if(!midiAccess){
+		midiAccess = await navigator.requestMIDIAccess({sysex: true});
+		if(midiAccess)
+			midiAccess.onstatechange = updateControlSurface; // call this function when midi devices change
+	}
+	if(midiAccess){
+		let resp = await fetchContent("control");
+		if(resp && resp.ok){
+			let list = [];
+			let csmodules = await resp.json();
+			for(let i = 0; i < csmodules.length; i++)
+				csmodules[i] = csmodules[i].substring(0, csmodules[i].lastIndexOf('.')); // remove file extention
+			let inputs = midiAccess.inputs.values();
+			// inputs is an Iterator
+			for(let input = inputs.next(); input && !input.done; input = inputs.next()){
+				input = input.value;
+console.log(input.name, input.manufacturer);
+				let outputs = midiAccess.outputs.values();
+				for(let output = outputs.next(); output && !output.done; output = outputs.next()){
+					output = output.value;
+					if((output.name === input.name) && (output.manufacturer === input.manufacturer)){
+						// found matching output.  See if we have a js module for this device
+						let devname = input.manufacturer + "_" + input.name;
+						for(let i = 0; i < csmodules.length; i++){
+							if(devname.startsWith(csmodules[i])){
+								let entry = {name: devname, module: csmodules[i]+".mjs", input: input, output: output};
+								list.push(entry);
+								break;
+							}
+						}
+					}
+				}
+			}
+			studioStateCache.midiList = list;
+			// updates the control surface selection menu list
+			// when the locListCache variable changes
+			let element = document.getElementById("ctlsurf");
+			if(element){
+				let inner = "<option value='' >NONE</option>";
+				for(let i=0; i < list.length; i++)
+					inner += "<option value='"+list[i].name+"'>"+list[i].name+"</option>";
+				element.innerHTML = inner;
+			}
+			let savedname = getStorageMidiControl();
+			let i = list.length;
+			if(savedname){
+				for(i = 0; i < list.length; i++){
+					if(list[i].name == savedname){
+						selectControlSurface(list[i]);
+						break;
+					}
+				}
+			}
+			if(i == list.length)
+				selectControlSurface(undefined);
+		}else{
+			alert("Failed to fetch control surface modules from the server.");
+		}
+	}else
+		console.log("no browser support for midi");
+}
+
+async function stContSurfChange(evt){
+	if(evt)
+		evt.preventDefault();
+	if(studioStateCache.midiList){
+		let element = document.getElementById("ctlsurf");
+		if(element){
+			for(let i=0; i<studioStateCache.midiList.length; i++){
+				if(studioStateCache.midiList[i].name == element.value){
+					selectControlSurface(studioStateCache.midiList[i]);
+					return;
+				}
+			}
+			selectControlSurface(false);
+		}
+	}
+}
+
+async function selectControlSurface(entry){
+	// load module
+	if(entry){
+		if(entry.name != studioStateCache.midiName){
+			let Module = await import('/control/'+entry.module);
+			if(Module){
+				setStorageMidiControl(entry.name);
+				studioStateCache.midiName = entry.name;
+				studioStateCache.control = Module;
+				Module.init(entry.input, entry.output);
+			}
+		}
+	}else{
+		if(studioStateCache.midiName !== false){
+			studioStateCache.midiName = false;
+			studioStateCache.control = false;
+			if(entry === false){ // undefined does not changed saved, incase interface comes back
+				setStorageMidiControl(false);
+			}
+		}
+	}
+	// update list selection
+	let element = document.getElementById("ctlsurf");
+	if(element){
+		if(studioStateCache.midiName)
+			element.value = studioStateCache.midiName;
+		else
+			element.selectedIndex = 0;
+	}
+}
+
+function reloadStudioSection(el, type){
+	if(type == "control"){
+		let element = document.getElementById("ctlsurf");
+console.log(element);
 	}
 }
 

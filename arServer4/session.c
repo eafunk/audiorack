@@ -240,12 +240,12 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 		i = atoi(session->save_pointer) - 1;
 		// cancel the specified TCP thread
 		if((i >= 0) && (i < sessionListSize)){
-			pthread_mutex_lock(&sMutex);			
+			pthread_mutex_lock(&sMutex);
 			if(sessionList[i].cs > 0){
 				shutdown(sessionList[i].cs, SHUT_RDWR); 
 				close(sessionList[i].cs);
 				/* just incase the thread has become cancelable */
-				pthread_cancel(sessionList[i].sessionThread);				
+				pthread_cancel(sessionList[i].sessionThread);
 			}
 			pthread_mutex_unlock(&sMutex);
 			result = rOK;

@@ -192,9 +192,9 @@ enum{
 
 #define status_render (status_cueing | status_playing | status_talkback)
 
-float def_vol;				// default scalar gain
-unsigned int def_busses;	// default bus settings
-float def_bal;				// default balance
+extern float def_vol;				// default scalar gain
+extern unsigned int def_busses;	// default bus settings
+extern float def_bal;				// default balance
 
 void setInChanToDefault(inChannel *chrec);
 void setAllUnloadedToDefault(mixEngineRecPtr mixRef);

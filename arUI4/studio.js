@@ -136,7 +136,7 @@ function handleNotifyPacket(name, type, data){
 		switch(type){
 			case 0x01:	// nType_vol: player or output volume change, ref=0xC0000000 + index for output or 0x00 + index for input/player
 				val = data.readFloatBE(8);
-				if((ref & 0xFF000000) == 0xC0000000){
+				if((BigInt(ref) & 0xFF000000n) == 0xC0000000n){
 					// output volume
 					ref = ref & 0x00FFFFFF;
 					msg = {type: "outvol", num: ref, val: val};
@@ -155,7 +155,7 @@ function handleNotifyPacket(name, type, data){
 				break;
 			case 0x03:	// nType_bus: player or output bus change
 				val = data.readUInt32BE(8);
-				if((ref & 0xFF000000) == 0xC0000000){
+				if((BigInt(ref) & 0xFF000000n) == 0xC0000000n){
 					// output bus
 					ref = ref & 0x00FFFFFF;
 					msg = {type: "outbus", num: ref, val: val.toString(16)};
@@ -200,7 +200,7 @@ function handleNotifyPacket(name, type, data){
 				break;
 			case 0x0c:	// nType_dly: output delay setting changed
 				val = data.readFloatBE(8);
-				if((ref & 0xFF000000) == 0xC0000000){
+				if((BigInt(ref) & 0xFF000000n) == 0xC0000000n){
 					ref = ref & 0x00FFFFFF;
 					msg = {type: "outdly", num: ref, val: val};
 					sse.postSSEvent(name, JSON.stringify(msg));

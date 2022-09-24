@@ -30,7 +30,7 @@ var http = require('http');
 var https = require('https');
 var fs = require('fs');
 var path = require('path');
-const _= require('lodash');
+const _ = require('lodash');
 const multer = require('multer');
 var slug = require('slug');
 const extract = require('extract-zip');
@@ -186,7 +186,8 @@ function checkPwdHash(salt, clearpw, hashedpw){
 		"port": port-number,			// this is optional
 		"password": "password",
 		"database": "databasename",
-		"prefix": "ar_"
+		"prefix": "ar_",
+		"conLimit": 6;
 	},
 	"studios": {
 		"StudioA": {	// no spaces for easy URL passing
@@ -201,6 +202,25 @@ function checkPwdHash(salt, clearpw, hashedpw){
 	}
 }
 */
+
+function listControlDirFilesFunc(request, response){
+	if(request.session.loggedin == true){
+		fs.readdir("client/control", function(err, files){
+			if(err){
+				console.log("Error getting control surface directory listing.");
+				response.status(500);
+				response.end();
+			}else{
+				response.status(200);
+				response.json(files);
+				response.end();
+			}
+		});
+	}else{
+		response.status(403);
+		response.end();
+	}
+}
 
 function listTmpDirFilesFunc(request, response){
 	if(request.session.loggedin == true){
@@ -1096,6 +1116,10 @@ app.get('/', function(request, response){
 	response.redirect('/index.html');
 	response.end();
 });
+
+// for loading control surface mapping js modules
+app.use('/control/', express.static(__dirname + '/client/control'));
+app.use('/control', listControlDirFilesFunc); // shows the file list
 
 // everything else assumed to be requests from the client directory
 app.use('/', express.static(__dirname + '/client'));

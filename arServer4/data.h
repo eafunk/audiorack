@@ -47,14 +47,14 @@ struct itemGroup {
 };
 typedef struct itemGroup itemGroupRec;
 
-pthread_rwlock_t dataLock;
-pthread_rwlock_t inputLock;
-pthread_rwlock_t queueLock;
-pthread_rwlock_t connLock;
-uidRecord *metaList;
-inputRecord *inputList;
-queueRecord *queueList;
-connRecord *connList;
+extern pthread_rwlock_t dataLock;
+extern pthread_rwlock_t inputLock;
+extern pthread_rwlock_t queueLock;
+extern pthread_rwlock_t connLock;
+extern uidRecord *metaList;
+extern inputRecord *inputList;
+extern queueRecord *queueList;
+extern connRecord *connList;
 
 void initDataLists(void);
 void freeDataLists(void);

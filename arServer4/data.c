@@ -25,6 +25,15 @@
 #include "automate.h"
 #include "arserver.h"
 
+pthread_rwlock_t dataLock;
+pthread_rwlock_t inputLock;
+pthread_rwlock_t queueLock;
+pthread_rwlock_t connLock;
+uidRecord *metaList;
+inputRecord *inputList;
+queueRecord *queueList;
+connRecord *connList;
+
 void initDataLists(void){
 	metaList = NULL;
 	pthread_rwlock_init(&dataLock, NULL);

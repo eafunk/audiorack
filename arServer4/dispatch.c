@@ -920,7 +920,7 @@ void *playerChangeWatcher(void *refCon){
 		outstance = mixEngine->outs;
 		for(i=0; i<mixEngine->outCount; i++){
 			/* chech change flags */
-			if(changed = outstance->changed){		
+			if(changed = outstance->changed){
 				/* note: UID with top byte set to 0xC0 indicates output
 				 * group ID, not a UID.  Lower 24 bits are the output index */
 				if(changed & change_delay){

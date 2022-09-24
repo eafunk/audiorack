@@ -26,6 +26,9 @@
 #include "session.h"
 #include "data.h"
 
+pthread_rwlock_t taskLock;
+taskRecord *taskList;
+
 void taskAddSelf(taskRecord *rec){
 	// note time started
 	rec->started = time(NULL);

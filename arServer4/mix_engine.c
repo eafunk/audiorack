@@ -26,6 +26,10 @@
 #include <pthread.h>
 #include <sys/wait.h>
 
+float def_vol;				// default scalar gain
+unsigned int def_busses;	// default bus settings
+float def_bal;				// default balance
+
 void clearCBQ(callbackQueue *Q){
 	pthread_spin_lock(&Q->spinlock);
 	Q->rdIdx = 0;

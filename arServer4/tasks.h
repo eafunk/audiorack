@@ -43,8 +43,8 @@ struct modbusPollRec{
 	char				conf[256];
 };
 
-pthread_rwlock_t taskLock;
-taskRecord *taskList;
+extern pthread_rwlock_t taskLock;
+extern taskRecord *taskList;
 
 // function prototypes
 void initTaskList(void);

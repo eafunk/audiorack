@@ -286,7 +286,33 @@
 							<div id="mixergrid" class="mixer"></div>
 						</div>
 						<div id="studioSide" class="stSide">
-							Accordian
+							<div class="scroll">
+								<button class="accordion" onclick="clickAccordType(event, reloadStudioSection, 'ins')">Live Inputs</button>
+								<div class="accpanel">
+								</div>
+								<button class="accordion" onclick="clickAccordType(event, reloadStudioSection, 'outs')">Output Groupss</button>
+								<div class="accpanel">
+								</div>
+								<button class="accordion" onclick="clickAccordType(event, reloadStudioSection, 'recorders')">Recorders</button>
+								<div class="accpanel">
+								</div>
+								<button class="accordion" onclick="clickAccordType(event, reloadStudioSection, 'mixer')">Mixer Settings</button>
+								<div class="accpanel">
+								</div>
+								<button class="accordion" onclick="clickAccordType(event, reloadStudioSection, 'automation')">Automation Settings</button>
+								<div class="accpanel">
+								</div>
+								<button class="accordion" onclick="clickAccordType(event, reloadStudioSection, 'control')">Control Surface</button>
+								<div class="accpanel">
+									<label for="ctlsurf">Control Surfaces</label>
+									<select id="ctlsurf" onchange="stContSurfChange(event)">
+										<option val="" selected>NONE</option>
+									</select>
+								</div>
+								<button class="accordion" onclick="clickAccordType(event, reloadStudioSection, 'console')">Console</button>
+								<div class="accpanel">
+								</div>
+							</div>
 						</div>
 					</div>
 				</div>

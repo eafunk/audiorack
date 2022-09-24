@@ -49,12 +49,4 @@ void setSegTimes(inChannel *thisp, inChannel *nextp, int nextNum);
 void QueManagerTask(unsigned char *stop);
 void wakeQueManager(void);
 
-/*
-void checkRecorders(void);
-void UnloadItem(int pos);
-double getTargetError(double start, double target, int priority);
-void checkSwapReorder(itemGroupRec *firstGroup, itemGroupRec *nextGroup, double prior_start_time);
-unsigned char getNextMovableGroup(int PLsize, itemGroupRec *firstGroup, itemGroupRec *nextGroup, double last_start_time);
-double ItemEndTime(ARPlayer *instance, double startTime, double lastStart, int pos, double *error, int *priority, double *targetTime);
-*/
 #endif //__AUTOMATE_H__

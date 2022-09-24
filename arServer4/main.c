@@ -35,9 +35,9 @@
 
 #include <mcheck.h>
 
-#define maxSessions 20
 
 /* program wide globals */
+unsigned int maxSessions = 25;
 const char *versionStr="4.0.3";
 const char *versionCR="2004-2022  Ethan Funk";
 mixEngineRecPtr mixEngine;
@@ -141,9 +141,9 @@ void loadPreConfig(void)
 			return;
 		}
 	}
-    result = fgets(line, sizeof line, fp);
-    while(result != NULL){
-        if(line[0] == '-'){ // a preload configuartion switch ('-' first char in line)
+	result = fgets(line, sizeof line, fp);
+	while(result != NULL){
+		if(line[0] == '-'){ // a preload configuartion switch ('-' first char in line)
 			strtok_r(line, "\n\r", &param);	// strip LF/CR
 			arg = strtok_r(line, " ", &param);
 			if(strcmp(arg, "-x") == 0) {
@@ -175,6 +175,9 @@ void loadPreConfig(void)
 			}else if(strcmp(arg, "-s") == 0) {
 				// requested JACK server to connect to
 				str_setstr(&jackServer, param);
+			}else if(strcmp(arg, "-l") == 0) {
+				// set maxilum number of concurrent tcp listening command connections 
+				maxSessions = atoi(param);
 			}
 		}
 		result = fgets(line, sizeof line, fp);
@@ -229,6 +232,7 @@ int main(int argc, const char *argv[])
 			fprintf(stdout,"\t-j [requested JACK name for us (arServer)]\n");
 			fprintf(stdout,"\t-s [name of JACK server to connect to]\n");
 			fprintf(stdout,"\t-x Prevent starting of default jackd audio server if jackd isn't already running\n");
+			fprintf(stdout,"\t-l [Maximum number of concurrent tcp listening command connections]\n"); 
 			fprintf(stdout,"\t<none> uses defaults:\n");
 			fprintf(stdout,"\t\tcontrol tcp port (9550)\n");
 			fprintf(stdout,"\t\tJack name ars<control port number>\n");
@@ -490,6 +494,11 @@ int main(int argc, const char *argv[])
 			//JACK server name to connect to specified
 			i = i + 1;
 			str_setstr(&jackServer, argv[i]);
+			i = i + 1;
+		}else if(strcmp(argv[i], "-l") == 0) {
+				// set maxilum number of concurrent tcp listening command connections 
+			i = i + 1;
+			maxSessions = atoi(argv[i]);
 			i = i + 1;
 		}else
 			i = i + 1;
