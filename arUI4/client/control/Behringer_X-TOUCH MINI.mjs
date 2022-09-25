@@ -333,11 +333,11 @@ function showPPos(val, ref){
 	ref = parseInt(ref);
 	val = parseFloat(val);
 	let i = constrainPlayerNumber(ref);
-	if(i > -1){
-		let dur = parseFloat(studioStateCache.ins[ref].dur);
+	if((i > -1) && cue[i]){
 		val = parseFloat(val);
 		msg[0] = 0xb0;
 		msg[1] = 0x30 + i;
+		let dur = parseFloat(studioStateCache.ins[ref].dur);
 		if(dur){
 			dur = parseFloat(dur);
 			if(val){
@@ -372,7 +372,7 @@ function showPStat(val, ref){
 			msg[2] = 0x00;
 		if(midiout)
 			midiout.send(msg);
-		if(!val){
+			if(val == 0){
 			// clear Vpot
 			msg[0] = 0xb0;
 			msg[1] = 0x30 + i;

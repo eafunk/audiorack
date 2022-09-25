@@ -7450,12 +7450,8 @@ async function playerAction(cmd, evt, pNum){
 	}else
 		player = pNum;
 	let studio = studioName.getValue();
-	if(studio.length){
+	if(studio.length)
 		fetchContent("studio/"+studio+"?cmd="+cmd+" "+player);
-console.log("studio/"+studio+"?cmd="+cmd+" "+player);
-	}
-	
-
 }
 
 function updatePlayerFaderUI(val, pNum){
