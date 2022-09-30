@@ -25,6 +25,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
+#include <glob.h>
 #include <pwd.h>
 #include <signal.h>
 #include <pwd.h>
@@ -133,6 +134,7 @@ unsigned char handle_fadeprior(ctl_session *session);
 unsigned char handle_modbuspoll(ctl_session *session);
 unsigned char handle_coilset(ctl_session *session, unsigned char val);
 
+unsigned char handle_rtemplates(ctl_session *session);
 unsigned char handle_rstat(ctl_session *session);
 unsigned char handle_startrec(ctl_session *session);
 unsigned char handle_stoprec(ctl_session *session);
@@ -718,7 +720,7 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 	if (!strcmp(arg, "waitseg")) {
 		result = handle_waitseg(session);
 		goto finish;
-	}	
+	}
 	if (!strcmp(arg, "segnow")) {
 		result = handle_segnow(session);
 		live_event = time(NULL);
@@ -733,7 +735,7 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 		result = handle_fadeprior(session);
 		live_event = time(NULL);
 		goto finish;
-	}	
+	}
 	if (!strcmp(arg, "expand")) {
 		result = handle_expand(session);
 		live_event = time(NULL);
@@ -742,23 +744,27 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 	if (!strcmp(arg, "modbuspoll")) {
 		result = handle_modbuspoll(session);
 		goto finish;
-	}	
+	}
 	if (!strcmp(arg, "modbusset")) {
 		result = handle_coilset(session, 1);
 		goto finish;
-	}	
+	}
 	if (!strcmp(arg, "modbusclear")) {
 		result = handle_coilset(session, 0);
 		goto finish;
-    }
-    if (!strcmp(arg, "rstat")) {
+	}
+	if (!strcmp(arg, "rtemplates")) {
+		result = handle_rtemplates(session);
+		goto finish;
+	}
+	if (!strcmp(arg, "rstat")) {
 		result = handle_rstat(session);
 		goto finish;
-    }
-    if (!strcmp(arg, "startrec")) {   
+	}
+	if (!strcmp(arg, "startrec")) {   
 		result = handle_startrec(session);
 		goto finish;
-    }
+	}
 	if (!strcmp(arg, "stoprec")) {   
 		result = handle_stoprec(session);
 		goto finish;
@@ -4823,6 +4829,49 @@ unsigned char handle_closerec(ctl_session *session){
 	return rError;	
 }
 
+unsigned char handle_rtemplates(ctl_session *session){
+	char *tmp;
+	char *file;
+	int tx_length;
+	struct stat path_stat;
+	glob_t globbuf;
+	
+	// get partial path to recorder templates directory
+	tmp = GetMetaData(0, "file_rec_template_dir", 0);
+	if(strlen(tmp)){
+		if(strrchr(tmp, directoryToken) != (tmp + strlen(tmp) -1))
+			// no trailing slash... add it
+			str_appendchr(&tmp, directoryToken);
+	}else
+		str_setstr(&tmp, ".audiorack/templates/");
+	// see if path points to a valid directory
+	if(!stat(tmp, &path_stat) && S_ISDIR(path_stat.st_mode)){
+		// add glob wild card for .rec files
+		str_appendstr(&tmp, "*.rec");
+		globbuf.gl_offs = 0;
+		globbuf.gl_pathc = 0;
+		if(!glob(tmp, 0, NULL, &globbuf)){
+			if(globbuf.gl_pathc){
+				unsigned int i;
+				for(i=0; i<globbuf.gl_pathc; i++){
+					file = strrchr(globbuf.gl_pathv[i], directoryToken);
+					if(file){
+						file++; // move past dir token
+						my_send(session, file, strlen(file), session->silent, 0);
+						my_send(session, "\n", 1, session->silent, 0);
+					}
+				}
+				globfree(&globbuf);
+			}
+			free(tmp);
+			return rOK;
+		}
+	}
+	free(tmp);
+	session->errMSG = "Error: rec_template_dir invalid, or empty of .rec files.\n";
+	return rError;
+}
+
 unsigned char handle_newrec(ctl_session *session){
 	char buf[32]; /* send data buffer */
 	int tx_length;
@@ -4843,7 +4892,7 @@ unsigned char handle_newrec(ctl_session *session){
 		// get partial path to recorder templates directory
 		tmp = GetMetaData(0, "file_rec_template_dir", 0);
 		if(strlen(tmp)){
-			if(strrchr(tmp, directoryToken) != (tmp + strlen(tmp)))
+			if(strrchr(tmp, directoryToken) != (tmp + strlen(tmp) - 1))
 				// no trailing slash... add it
 				str_appendchr(&tmp, directoryToken);
 		}else
@@ -4947,7 +4996,7 @@ unsigned char handle_initrec(ctl_session *session){
 				// populate argument strings
 				tmp = GetMetaData(0, "file_bin_dir", 0);
 				if(strlen(tmp)){
-					if(strrchr(tmp, directoryToken) != (tmp + strlen(tmp)))
+					if(strrchr(tmp, directoryToken) != (tmp + strlen(tmp) - 1))
 						// no trailing slash... include it
 						str_appendstr(&tmp, "/arRecorder4");
 					else

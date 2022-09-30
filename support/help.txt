@@ -374,6 +374,11 @@ returns the UID of the first item found that has a specified metadata property v
 
 *** Recorder/Encoder Commands ***
 
+rtemplates
+returns a list of recorder template files (ending in .rec) in the file_rec_template_dir setting directory, or default .audiorack/templates/ location 
+if file_rec_template_dir setting is not specified, which can be used as a parameter for the newrec command below. Examples template files should have 
+been installed with this software to help you with creating custom files.
+
 rstat
 returns the current status and other information for all the current recorders
 

@@ -1427,7 +1427,7 @@ uint32_t LoadURLPlayer(int pNum, const char *url_str, uint32_t UID){
 	// populate argument strings
 	bin = GetMetaData(0, "file_bin_dir", 0);
 	if(strlen(bin)){
-		if(strrchr(bin, directoryToken) != (bin + strlen(bin)))
+		if(strrchr(bin, directoryToken) != (bin + strlen(bin) - 1))
 			// no trailing slash... include it
 			str_appendstr(&bin, "/arPlayer4");
 		else
@@ -1584,7 +1584,7 @@ uint32_t LoadGSTPlayer(int pNum, const char *url_str, uint32_t UID){
 		// populate argument strings
 		bin = GetMetaData(0, "file_bin_dir", 0);
 		if(strlen(bin)){
-			if(strrchr(bin, directoryToken) != (bin + strlen(bin)))
+			if(strrchr(bin, directoryToken) != (bin + strlen(bin) - 1))
 				// no trailing slash... include it
 				str_appendstr(&bin, "/arPlayer4");
 			else
