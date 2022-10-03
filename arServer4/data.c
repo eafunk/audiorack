@@ -416,7 +416,7 @@ uint32_t FindUidForKeyAndValue(const char *key, const char *value, unsigned int 
 			}
 		}
 	}
-	pthread_rwlock_unlock(&dataLock);			
+	pthread_rwlock_unlock(&dataLock);
 	return result;
 }
 

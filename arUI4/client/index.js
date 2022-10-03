@@ -8482,11 +8482,16 @@ function studioVuUpdate(data){
 						}));
 					}
 				}
+				let max = 0;
 				for(let c = 0; c < data[ref].pk.length; c++){
+					if(max < data[ref].avr[c])
+						max = data[ref].avr[c];
 					let meter = vu.vumeters[c];
 					if(meter)
 						meter.vuSetValue(data[ref].avr[c], data[ref].pk[c]);
 				}
+				if(studioStateCache.control)
+					studioStateCache.control.setPVU(max, pNum);
 			}
 		}
 	}

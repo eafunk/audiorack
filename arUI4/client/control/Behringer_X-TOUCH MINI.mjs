@@ -19,7 +19,6 @@ function constrainPlayerNumber(i){
 function initialize(inport, outport){
 	midiout = outport;
 	midiin = inport;
-	// Make sure we are in MCU protocol mode for the x-touch mini
 	midiin.onmidimessage = onMIDIRecv;
 	playersUpdate();
 	showAutoStat();
@@ -417,7 +416,7 @@ function showPVol(val, ref){
 	val = parseFloat(val);
 	let i = constrainPlayerNumber(ref);
 	if((i > -1) && !cue[i]){
-		val = Math.pow(val, 0.23);
+		val = Math.pow(val, 0.25);
 		if(val <= 0.0){
 			val = 0;
 		}else{
