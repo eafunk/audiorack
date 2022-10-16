@@ -123,7 +123,7 @@ mixbuffer_t *mixbuffer_create(size_t sizeSamples, unsigned int chanCount,
 	if(mlock(mb_rec->VUmeters, sizeof(vuData) * mb_rec->arrayCount))
 		mb_rec->mlocked_flags += 8;	
 
-	return mb_rec;						
+	return mb_rec;
 }
 
 void mixbuffer_read(mixbuffer_t *mb, size_t sampCnt, 

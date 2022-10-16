@@ -8310,9 +8310,11 @@ function studioHandleNotice(data){
 
 async function updateControlSurface(){
 	if(!midiAccess){
-		midiAccess = await navigator.requestMIDIAccess({sysex: true});
-		if(midiAccess)
-			midiAccess.onstatechange = updateControlSurface; // call this function when midi devices change
+		if(navigator.requestMIDIAccess){
+			midiAccess = await navigator.requestMIDIAccess({sysex: true});
+			if(midiAccess)
+				midiAccess.onstatechange = updateControlSurface; // call this function when midi devices change
+		}
 	}
 	if(midiAccess){
 		let resp = await fetchContent("control");
@@ -8325,7 +8327,6 @@ async function updateControlSurface(){
 			// inputs is an Iterator
 			for(let input = inputs.next(); input && !input.done; input = inputs.next()){
 				input = input.value;
-console.log(input.name, input.manufacturer);
 				let outputs = midiAccess.outputs.values();
 				for(let output = outputs.next(); output && !output.done; output = outputs.next()){
 					output = output.value;
@@ -8367,8 +8368,12 @@ console.log(input.name, input.manufacturer);
 		}else{
 			alert("Failed to fetch control surface modules from the server.");
 		}
-	}else
+	}else{
 		console.log("no browser support for midi");
+		let element = document.getElementById("ctlsurf");
+		if(element)
+			element.innerHTML = "<option value='' >No Browser Midi Support</option>";
+	}
 }
 
 async function stContSurfChange(evt){

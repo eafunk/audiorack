@@ -38,18 +38,18 @@ typedef struct{
 } vuData;
 
 typedef struct {
-    jack_default_audio_sample_t	*buf; // bufSizeSamples of audio sample data 
-    jack_port_t **busout_jPorts;	// points to arrayCount array of bus output port pointers
+	jack_default_audio_sample_t	*buf; // bufSizeSamples of audio sample data 
+	jack_port_t **busout_jPorts;	// points to arrayCount array of bus output port pointers
 	vuData *VUmeters;				// points to arrayCount array of vuData    
-    size_t arrayCount;
-    size_t index;
-    size_t bufSizeSamples;
-    size_t totalSizeBytes;
-    size_t bufIndexMask;
-    unsigned int busses;
-    unsigned int channelsPerBus;
-   	unsigned char mlocked_flags;
-   	jack_client_t *client;
+	size_t arrayCount;
+	size_t index;
+	size_t bufSizeSamples;
+	size_t totalSizeBytes;
+	size_t bufIndexMask;
+	unsigned int busses;
+	unsigned int channelsPerBus;
+	unsigned char mlocked_flags;
+	jack_client_t *client;
 } mixbuffer_t;
 
 void mixbuffer_free(mixbuffer_t *mb_rec);

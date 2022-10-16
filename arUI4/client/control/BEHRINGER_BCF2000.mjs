@@ -36,18 +36,19 @@ function selectVpotMode(mode){
 		if(midiout)
 			midiout.send(msg);
 	}
-	msg = new Array(6);
 	for(i = 0; i < 4; i++){
 		// light and clear the corrisponding mode LED
 		msg[0] = 0xb0;
 		msg[1] = 0x0c;
 		msg[2] = 11;
-		msg[3] = 0xb0 ;
-		msg[4] = 0x2c;
+		if(midiout)
+			midiout.send(msg);
+		msg[0] = 0xb0 ;
+		msg[1] = 0x2c;
 		if(i == mode)
-			msg[5] = 0x40 + (7 - i);
+			msg[2] = 0x40 + (7 - i);
 		else
-			msg[5] = 0x00 + (7 - i);
+			msg[2] = 0x00 + (7 - i);
 		if(midiout)
 			midiout.send(msg);
 	}
@@ -284,8 +285,9 @@ function tick(){
 		midiout.send(msg);
 	base = bank * pCount;
 	for(i = 0; i < pCount; i++){
-		if(volIgn[i])
+		if(volIgn[i]){
 			volIgn[i] = volIgn[i] - 1;
+		}
 		if(vPotMode == 0){
 			let pos = studioStateCache.ins[base+i].pos;
 			showPPos(pos, i + base);
@@ -294,23 +296,27 @@ function tick(){
 }
 
 function showAutoStat(){
-	let msg = new Array(6);
+	let msg = new Array(3);
 	if(studioStateCache.autoStat == 2){ 
 		// auto on
 		msg[0] = 0xb0;
 		msg[1] = 0x0c;
 		msg[2] = 14;
-		msg[3] = 0xb0;
-		msg[4] = 0x2c;
-		msg[5] = 0x41;
+		if(midiout)
+			midiout.send(msg);
+		msg[0] = 0xb0;
+		msg[1] = 0x2c;
+		msg[2] = 0x41;
 		if(midiout)
 			midiout.send(msg);
 		msg[0] = 0xb0;
 		msg[1] = 0x0c;
 		msg[2] = 14;
-		msg[3] = 0xb0;
-		msg[4] = 0x2c;
-		msg[5] = 0x02;
+		if(midiout)
+			midiout.send(msg);
+		msg[0] = 0xb0;
+		msg[1] = 0x2c;
+		msg[2] = 0x02;
 		if(midiout)
 			midiout.send(msg);
 	}else if(studioStateCache.autoStat == 1){
@@ -318,17 +324,21 @@ function showAutoStat(){
 		msg[0] = 0xb0;
 		msg[1] = 0x0c;
 		msg[2] = 14;
-		msg[3] = 0xb0;
-		msg[4] = 0x2c;
-		msg[5] = 0x42;
+		if(midiout)
+			midiout.send(msg);
+		msg[0] = 0xb0;
+		msg[1] = 0x2c;
+		msg[2] = 0x42;
 		if(midiout)
 			midiout.send(msg);
 		msg[0] = 0xb0;
 		msg[1] = 0x0c;
 		msg[2] = 14;
-		msg[3] = 0xb0;
-		msg[4] = 0x2c;
-		msg[5] = 0x41;
+		if(midiout)
+			midiout.send(msg);
+		msg[0] = 0xb0;
+		msg[1] = 0x2c;
+		msg[2] = 0x41;
 		if(midiout)
 			midiout.send(msg);
 	}else{
@@ -336,17 +346,21 @@ function showAutoStat(){
 		msg[0] = 0xb0;
 		msg[1] = 0x0c;
 		msg[2] = 14;
-		msg[3] = 0xb0;
-		msg[4] = 0x2c;
-		msg[5] = 0x01;
+		if(midiout)
+			midiout.send(msg);
+		msg[0] = 0xb0;
+		msg[1] = 0x2c;
+		msg[2] = 0x01;
 		if(midiout)
 			midiout.send(msg);
 		msg[0] = 0xb0;
 		msg[1] = 0x0c;
 		msg[2] = 14;
-		msg[3] = 0xb0;
-		msg[4] = 0x2c;
-		msg[5] = 0x02;
+		if(midiout)
+			midiout.send(msg);
+		msg[0] = 0xb0;
+		msg[1] = 0x2c;
+		msg[2] = 0x02;
 		if(midiout)
 			midiout.send(msg);
 	}
@@ -354,18 +368,22 @@ function showAutoStat(){
 		msg[0] = 0xb0;
 		msg[1] = 0x0c;
 		msg[2] = 14;
-		msg[3] = 0xb0;
-		msg[4] = 0x2c;
-		msg[5] = 0x43;
+		if(midiout)
+			midiout.send(msg);
+		msg[0] = 0xb0;
+		msg[1] = 0x2c;
+		msg[2] = 0x43;
 		if(midiout)
 			midiout.send(msg);
 	}else{
 		msg[0] = 0xb0;
 		msg[1] = 0x0c;
 		msg[2] = 14;
-		msg[3] = 0xb0;
-		msg[4] = 0x2c;
-		msg[5] = 0x03;
+		if(midiout)
+			midiout.send(msg);
+		msg[0] = 0xb0;
+		msg[1] = 0x2c;
+		msg[2] = 0x03;
 		if(midiout)
 			midiout.send(msg);
 	}
@@ -400,7 +418,7 @@ function showPPos(val, ref){
 }
 
 function showPStat(val, ref){
-	let msg = new Array(6);
+	let msg = new Array(3);
 	ref = parseInt(ref);
 	val = parseInt(val);
 	let i = constrainPlayerNumber(ref);
@@ -408,14 +426,16 @@ function showPStat(val, ref){
 		msg[0] = 0xb0;
 		msg[1] = 0x0c;
 		msg[2] = i & 0x07;
-		msg[3] = 0xb0;
-		msg[4] = 0x2c;
+		if(midiout)
+			midiout.send(msg);
+		msg[0] = 0xb0;
+		msg[1] = 0x2c;
 		if(val & 0x4)
 			// is playing
-			msg[5] = 0x42;
+			msg[2] = 0x42;
 		else
 			// is stopped
-			msg[5] = 0x02;
+			msg[2] = 0x02;
 		if(midiout)
 			midiout.send(msg);
 		if(val == 0){
@@ -427,14 +447,13 @@ function showPStat(val, ref){
 			if(midiout)
 				midiout.send(msg);
 			// set fader to zero too.
-			volIgn[i] = 0;
-			showPVol(0.0, ref);
+			showPVol(0.0, ref, true);
 		}
 	}
 }
 
 function showPBus(val, ref){
-	let msg = new Array(6);
+	let msg = new Array(3);
 	ref = parseInt(ref);
 	val = parseInt(val);
 	let i = constrainPlayerNumber(ref);
@@ -443,12 +462,14 @@ function showPBus(val, ref){
 		msg[0] = 0xb0;
 		msg[1] = 0x0c;
 		msg[2] = i & 0x07;
-		msg[3] = 0xb0;
-		msg[4] = 0x2c;
+		if(midiout)
+			midiout.send(msg);
+		msg[0] = 0xb0;
+		msg[1] = 0x2c;
 		if(val & 2)
-			msg[5] = 0x43;
+			msg[2] = 0x43;
 		else
-			msg[5] = 0x03;
+			msg[2] = 0x03;
 		if(midiout)
 			midiout.send(msg);
 	}
@@ -476,17 +497,17 @@ function showPBal(val, ref){
 	}
 }
 
-function showPVol(val, ref){
-	let msg = new Array(6);
+function showPVol(val, ref, force){
+	let msg = new Array(3);
 	ref = parseInt(ref);
 	if(val === undefined)
 		return;
 	val = parseFloat(val);
 	let i = constrainPlayerNumber(ref);
 	if(i > -1){
-		if(volIgn[i])
+		if(!force && volIgn[i]){
 			return;	// ignore updates on this fader
-			
+		}
 		val = Math.pow(val, 0.25);
 		if(val <= 0.0){
 			val = 0;
@@ -503,9 +524,11 @@ function showPVol(val, ref){
 		msg[0] = 0xb0;
 		msg[1] = 0x00 + (i & 0x0f);
 		msg[2] = 0x7f & (val >> 7);
-		msg[3] = 0xb0;
-		msg[4] = 0x20 + (i & 0x0f);
-		msg[5] = 0x7f & val;
+		if(midiout)
+			midiout.send(msg);
+		msg[0] = 0xb0;
+		msg[1] = 0x20 + (i & 0x0f);
+		msg[2] = 0x7f & val;
 		if(midiout)
 			midiout.send(msg);
 	}
@@ -546,11 +569,12 @@ function playersUpdate(){
 		let bus = parseInt(studioStateCache.ins[base+i].bus, 16);
 		showPBus(bus, base+i);
 		// show fader
-		if(stat){
+		if(parseInt(stat)){
 			let vol = studioStateCache.ins[base+i].vol;
-			showPVol(vol, base+i);
-		}else
-			showPVol(0.0, base+i);
+			showPVol(vol, base+i, true);
+		}else{
+			showPVol(0.0, base+i, true);
+		}
 		let bal = studioStateCache.ins[base+i].bal;
 		showPBal(bal, base+i);
 	}
