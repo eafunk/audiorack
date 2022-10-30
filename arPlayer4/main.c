@@ -232,7 +232,7 @@ int jack_process(jack_nframes_t nframes, void *arg){
 				 * pause/stop back from arServer, then we clear the endFlag */
 			}
 		}
-		if(data->posUpdate)
+		if(data->posUpdate){
 			if(data->seek_enabled){
 				/* send pos control for current position (at start of this process cycle) time */
 				valuetype *val;
