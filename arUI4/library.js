@@ -3377,7 +3377,7 @@ async function filePLGetMetaForFile(filepl, props){
 }
 
 async function getFileMeta(tmpDirFileName, fullpath){
-	const trans = {isrc: "ISRC", Duration: "Duration", title: "Name", artist: "Artist", album: "Album", "track number": "Track", composer: "Composer", audio: "Audio", Seekable: "Seekable"};
+	const trans = {isrc: "ISRC", Duration: "Duration", title: "Name", artist: "Artist", album: "Album", "track number": "Track", composer: "Composer", Channels: "Audio", Seekable: "Seekable"};
 	let obj = {};
 	let full = false;
 	if(tmpDir.length || fullpath){
@@ -3388,7 +3388,7 @@ async function getFileMeta(tmpDirFileName, fullpath){
 		if(res.prefix.length)
 			res.path = res.prefix + "/" + res.path; // double slash between prefix and path as prefix separator in URL, if any
 		let URL = url.pathToFileURL(res.path).href;
-		let params = [fpath];
+		let params = ["-v", fpath];
 		// check for playlist types
 		let fd = await openFile(fpath);
 		if(fd > -1){

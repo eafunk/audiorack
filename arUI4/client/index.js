@@ -2141,7 +2141,7 @@ async function saveItemTask(evt){
 		
 		el = document.getElementById("taskexec");
 		entry = el.value;
-		entry = {Property: "Path", Value: entry};
+		entry = {Property: "Command", Value: entry};
 		match = findPropObjInArray(props, "Property", "Path");
 		if(match && match.RID)
 			entry.RID = match.RID;
