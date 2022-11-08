@@ -189,7 +189,7 @@ typedef struct _CustomData {
 } CustomData;
 
 CustomData data;
-	
+
 void INThandler(int sig){	/* CONTROL-C toggles record/pause */
 	if(data.status & (rec_start | rec_running)){
 		data.status = data.status & ~(rec_start | rec_running);
@@ -591,7 +591,7 @@ static int jack_process(jack_nframes_t nframes, void *arg){
 	}
 
 	// Check tags (send queue) for non-realtime queued packets
-	// to be sent, upto one per process cycle: settings, VU, etc.
+	// to be sent, upto one per proc/usr/lib/x86_64-linux-gnu/ess cycle: settings, VU, etc.
 	cnt = jack_ringbuffer_peek(data->ctlsendqueue, (char*)&header, 7);
 	if(cnt == 7){
 		cnt = 7 + ntohs(header.dataSize);
@@ -1159,7 +1159,7 @@ void mainloop(int next_arg, char *argv[], int apl_arg, unsigned char persist, lo
 	/* create a pipeline using gst_parse_launch, which
 	 * construts a pipeline from a text description. */
 	data.pl = gst_parse_launch(argv[next_arg+4], &err);
-	if(err){
+	if(!data.pl && err){
 		g_printerr("\nERROR: failed to create specified gstreamer pipline.");
 		goto finish;
 	}

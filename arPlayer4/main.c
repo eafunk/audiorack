@@ -49,16 +49,16 @@
 #define cType_tags		0	// tags - data is counted json string of track tags
 #define cType_pos 		1	// position - data is a float (seconds)
 #define cType_start		2	// start - data is empty
-#define cType_stop	 	3	// stop - data is empty
-#define cType_end			4	// reached media end (player), close (recorder) - data is empty.
-#define cType_anc			5	// anounce (recorder only) - data is json collection of recorder settings.
-#define cType_vu			6	// vU meters (recorder only) - data is array of vuNData type (see below)
-#define cType_err			7	// error message - data is uint32 error code
+#define cType_stop		3	// stop - data is empty
+#define cType_end		4	// reached media end (player), close (recorder) - data is empty.
+#define cType_anc		5	// anounce (recorder only) - data is json collection of recorder settings.
+#define cType_vu		6	// vU meters (recorder only) - data is array of vuNData type (see below)
+#define cType_err		7	// error message - data is uint32 error code
 #define cType_reid		8	// change UID (recorder only) - data is a new uint32 UID
-#define cType_vol			9	// change volume (recorder only) - data is a float
+#define cType_vol		9	// change volume (recorder only) - data is a float
 #define cType_lock		10	// set recorder to locked (recorder only) - data is empty
-#define cType_unlock		11	// set recorder to unlocked (recorder only) - data is empty
-#define cType_posack		12	// arServer acknowlage of pos change back to a player - data is empty
+#define cType_unlock	11	// set recorder to unlocked (recorder only) - data is empty
+#define cType_posack	12	// arServer acknowlage of pos change back to a player - data is empty
 
 #define	queueSizeBytes 	64 * 1024
 
@@ -114,6 +114,8 @@ typedef struct _CustomData {
 	pthread_t changedThread;
 	unsigned char connected;	/* 1 for audio, 2 for audio and control */
 } CustomData;
+
+CustomData data;
 
 unsigned int str_CountFields(char *string, const char *token){
 	unsigned int result;
@@ -583,7 +585,6 @@ void mainloop(char *argv[], char isPipeline){
 	GError *err;
 	GstStateChangeReturn ret;
 	GstElement *vsink;
-	CustomData data;
 	GstMessage *msg = NULL;
 	GstBus *bus;
 	GstAudioInfo info;
@@ -623,7 +624,7 @@ void mainloop(char *argv[], char isPipeline){
 	
 	if(isPipeline){
 		/* create a pipeline using gst_parse_launch, which
-		 * construts a pipeline from a text description. */
+		 * constructs a pipeline from a text description. */
 		data.src = gst_parse_launch(argv[2], &err);
 		if(err){
 			g_printerr("\nERROR: failed to create specified gstreamer pipline\n");
@@ -714,14 +715,14 @@ void mainloop(char *argv[], char isPipeline){
 	audio_caps = gst_audio_info_to_caps(&info);
 	g_object_set(data.asink, "caps", audio_caps, NULL);
 	gst_caps_unref(audio_caps);
-  
+	
 	/* set appsink new sample data callback function */
-	GstAppSinkCallbacks callbackRec;
+	GstAppSinkCallbacks callbackRec = {0,0,0,0};
 	callbackRec.eos = NULL;
-    callbackRec.new_preroll = NULL;
-    callbackRec.new_sample = (GstFlowReturn (*)(GstAppSink *, void *))pull_samples;
-    gst_app_sink_set_callbacks((GstAppSink *)data.asink, &callbackRec, &data, NULL);
-    
+	callbackRec.new_preroll = NULL;
+	callbackRec.new_sample = (GstFlowReturn (*)(GstAppSink *, void *))pull_samples;
+	gst_app_sink_set_callbacks((GstAppSink *)data.asink, &callbackRec, &data, NULL);
+	
 	if(!isPipeline){
 		/* set play bin properties if using a url, not a custome pipeline */
 		g_object_set(G_OBJECT(data.src), "uri", argv[2], NULL);
@@ -849,7 +850,7 @@ int main(int argc, char *argv[]){
 		fprintf(stderr, "to client port3 AND port4. Multiple ports per channel are optional, specified with the + delimiter. \n");
 		fprintf(stderr, "The & delimiter increments the list to our next channel connection. As such, our channel count is determined\n");
 		fprintf(stderr, "by the number of & delimiters in the list.\n");
-		fprintf(stderr, "/nIf the -p option is used, the gstreamer pipline must end with a sink element named audiosink: \" ! appsink name=audiosink\"\n");
+		fprintf(stderr, "\nIf the -p option is used, the gstreamer pipline must end with a sink element named audiosink: \" ! appsink name=audiosink\"\n");
 		fprintf(stderr, "NOTE: The gstreamer pipline must be a single parameter. Quoting or escaping of spaces may be required when run from a shell.\n");
 
 		return 0;
