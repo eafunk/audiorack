@@ -532,6 +532,43 @@ function selectAccordType(evt, cb, param){
 	cb(panel, param);
 }
 
+function selectTabType(evt, cb, param){
+	// Open target, close syblings
+	let target = evt.target;
+	/* Toggle between adding and removing the "active" class,
+	to highlight the button that controls the panel */
+	if(target.classList.contains("active"))	// already selected
+		return;
+	target.classList.add("active");
+	/* start showing the active panel */
+	let panelName = target.getAttribute("data-id");
+	let panel = false;
+	if(panelName)
+		panel = document.getElementById(panelName);
+	if(!panel)
+		panel = target.nextElementSibling;
+	panel.style.display = "flex";
+	// close all syblings, except us
+	let els = target.parentNode.getElementsByClassName("tab");
+	for(let i = 0; i < els.length; i++){
+		let sib = els[i];
+		if(sib == target) // This is us... skip
+			continue;
+		if(sib.classList.contains("active")){
+			sib.classList.remove("active");
+			panelName = sib.getAttribute("data-id");
+			let sibpanel = false;
+			if(panelName)
+				sibpanel = document.getElementById(panelName);
+			if(!sibpanel)
+				sibpanel = sib.nextElementSibling;
+			if(sibpanel.style.display === "flex")
+				sibpanel.style.display = "none";
+		}
+	}
+	cb(panel, param);
+}
+
 function toggleShowSearchList(evt){ 
 	// Expected html structure:
 	// <button>			the target (onClick)
@@ -1412,22 +1449,27 @@ function setDragableInnerHTML(item, li, format){
 	li.innerHTML = inner;
 }
 
-function appendDragableItem(dragable, dropcb, item, idx, ul, format){
+function appendDragableItem(dragable, dropcb, item, idx, ul, format, urlkey){
 	let li = document.createElement("li");
 	li.setAttribute("data-idx", idx);
 	setDragableInnerHTML(item, li, format);
 	ul.appendChild(li);
 	if(dragable)
 		setDragItemEvents(li, false, dropcb)
+	if(urlkey){
+		let url = item[urlkey];
+		if(url && url.length)
+			li.setAttribute("data-url", url);
+	}
 	return li;
 }
 
-function genDragableListFromObjectArray(dragable, dropcb, list, ul, format){
+function genDragableListFromObjectArray(dragable, dropcb, list, ul, format, urlkey){
 	ul.innerHTML = "";
 	let idx = 0;
 	for(let n = 0; n < list.length; n++){
 		let item = list[n];
-		appendDragableItem(dragable, dropcb, item, idx, ul, format);
+		appendDragableItem(dragable, dropcb, item, idx, ul, format, urlkey);
 		idx++;
 	}
 }
@@ -1435,6 +1477,10 @@ function genDragableListFromObjectArray(dragable, dropcb, list, ul, format){
 function setDragItemEvents(i, dragcb, dropcb){
 	i.draggable = true;
 	i.addEventListener("dragstart", function(evt){
+		if(dragcb){
+			if(!dragcb(this))
+				return;
+		}
 		curDrag = this;
 		let target = evt.target.parentNode;
 		let items = target.getElementsByTagName("li");
@@ -1442,12 +1488,10 @@ function setDragItemEvents(i, dragcb, dropcb){
 			if(it != curDrag)
 				it.classList.add("hint"); 
 		}
-		if(dragcb)
-			dragcb(this);
 	});
 
 	i.addEventListener("dragenter", function(){
-		if((this != curDrag) && (this.parentNode === curDrag.parentNode)){
+		if(dropcb && (this != curDrag) && (this.parentNode === curDrag.parentNode)){
 			this.classList.add("active");
 		}
 	});
@@ -1467,32 +1511,46 @@ function setDragItemEvents(i, dragcb, dropcb){
 	});
 
 	i.addEventListener("dragover", function(evt){
-		evt.preventDefault();
+		if(dropcb)
+			evt.preventDefault();
 	});
 
 	i.addEventListener("drop", function(evt){
 		evt.preventDefault();
 		let target = evt.target.parentNode;
 		let items = target.getElementsByTagName("li");
-		if((this != curDrag) && (this.parentNode === curDrag.parentNode)){
-			let currentpos = 0, droppedpos = 0;
-			for(let it=0; it<items.length; it++){
-				if(curDrag == items[it])
-					currentpos = it;
-				if(this == items[it])
-					droppedpos = it;
-			}
-			let prevent = false;
-			if(dropcb)
+		if(dropcb){
+			if((this != curDrag) && (this.parentNode === curDrag.parentNode)){
+				// move in list
+				let currentpos = 0, droppedpos = 0;
+				for(let it=0; it<items.length; it++){
+					if(curDrag == items[it])
+						currentpos = it;
+					if(this == items[it])
+						droppedpos = it;
+				}
+				let prevent = false;
 				prevent = dropcb(this, currentpos, droppedpos);
-			if(!prevent){
-				if(currentpos < droppedpos)
-					this.parentNode.insertBefore(curDrag, this.nextSibling);
-				else
-					this.parentNode.insertBefore(curDrag, this);
+				if(!prevent){
+					if(currentpos < droppedpos)
+						this.parentNode.insertBefore(curDrag, this.nextSibling);
+					else
+						this.parentNode.insertBefore(curDrag, this);
+				}
+			}else{
+				// drop is from some other place
+				let atr = {url: curDrag.getAttribute("data-url"), pnum: curDrag.getAttribute("data-idx")};
+				if(atr && dropcb){
+					let droppedpos = 0;
+					for(let it=0; it<items.length; it++){
+						if(this == items[it])
+							droppedpos = it;
+					}
+					dropcb(this, false, droppedpos, atr);
+				}
 			}
-			curDrag = null;
 		}
+		curDrag = null;
 	});
 }
 
@@ -1622,7 +1680,9 @@ function appendItemToStash(item){
 	updateStashDuration();
 }
 
-function moveItemInStash(obj, fromIdx, toIdx){
+function moveItemInStash(obj, fromIdx, toIdx, param){
+	if(!fromIdx)
+		return;
 	stashList.splice(toIdx, 0, stashList.splice(fromIdx, 1)[0]);
 	setStash(stashList);
 	updateStashDuration();
@@ -6680,6 +6740,33 @@ function studioRunStop(evt){
 	}
 }
 
+async function refreshInputGroups(){
+	let studio = studioName.getValue();
+	let el = document.getElementById("stInGrpList");
+	if(studio && studio.length){
+		let resp = await fetchContent("studio/"+studio+"?cmd=dumpin&raw=1");
+		if(resp){
+			if(resp.ok){
+				let list = [];
+				let data = await resp.text();
+				let lines = data.split("\n");
+				for(let n = 1; n < lines.length; n++){
+					let fields = lines[n].split("\t");
+					let name = fields[0];
+					if(name.length)
+						list.push({url: "input:///"+name, Name: name});
+				}
+				let format = `$Name$`;
+				genDragableListFromObjectArray(true, false, list, el, format, "url");
+			}else{
+				alert("Got an error fetching input group list from server.\n"+resp.statusText);
+			}
+		}else{
+			alert("Failed to fetch input group list  from the server.");
+		}
+	}
+}
+
 async function syncStudioStat(studio){
 	let resp = await fetchContent("studio/"+studio+"?cmd=stat&raw=1");
 	if(resp instanceof Response){
@@ -7020,21 +7107,34 @@ async function breakToQueue(evt){
 	}
 }
 
-function moveItemInQueue(obj, fromIdx, toIdx){
+function moveItemInQueue(obj, fromIdx, toIdx, param){
 	// check to prevent moving of playing items
-	let meta = queueMetaFromIdx(fromIdx);
-	if(meta){
-		if(meta.stat == "Playing")
-			return true; // prevent local drop
-	}
-	let metato = queueMetaFromIdx(toIdx);
-	if(metato){
-		if(metato.stat == "Playing")
-			return true; // prevent local drop
-	}
-	let studio = studioName.getValue();
-	if(studio.length){
-		fetchContent("studio/"+studio+"?cmd=move "+fromIdx+" "+toIdx);
+	if(!fromIdx && param){
+		let val = param.pnum;
+		if(!val || !val.length){
+			// no player number, try url
+			val = param.url;
+		}
+		if(val && val.length){
+			let studio = studioName.getValue();
+			if(studio.length)
+				fetchContent("studio/"+studio+"?cmd=add%20"+toIdx+"%20"+val);
+		}
+	}else{
+		let meta = queueMetaFromIdx(fromIdx);
+		if(meta){
+			if(meta.stat == "Playing")
+				return true; // prevent local drop
+		}
+		let metato = queueMetaFromIdx(toIdx);
+		if(metato){
+			if(metato.stat == "Playing")
+				return true; // prevent local drop
+		}
+		let studio = studioName.getValue();
+		if(studio.length){
+			fetchContent("studio/"+studio+"?cmd=move "+fromIdx+" "+toIdx);
+		}
 	}
 	return true; // prevent local drop... wait from server to update queue
 }
@@ -7199,8 +7299,7 @@ function updateQueueLogDisplay(logOnly){
 			else
 				meta.pNum = "";
 			meta.stat = queueStatusText(stat);
-
-			let li = appendDragableItem(true, moveItemInQueue, meta, ref, el, format);
+			let li = appendDragableItem(true, moveItemInQueue, meta, ref, el, format, "URL");
 			queueSetItemcolor(li, meta);
 		}
 	}
@@ -7230,7 +7329,7 @@ function updateQueueLogDisplay(logOnly){
 		}
 		if(logID){
 			// display this entry
-			let li = appendDragableItem(false, moveItemInQueue, entry, logID, hel, format);
+			let li = appendDragableItem(true, false, entry, logID, hel, format, "Source");
 			queueSetItemcolor(li, entry);
 		}
 	}
@@ -7341,6 +7440,8 @@ function updatePlayerTitle(pNum, res){
 		if(res.Album)
 			str += res.Album;
 		el.title = str;
+		if(res.URL && res.URL.length)
+			el.setAttribute("data-url", res.URL);
 	}
 }
 
@@ -7522,7 +7623,7 @@ function updatePlayerUI(p){
 	let play = document.getElementById("pPlay"+p.pNum);
 	let stop = document.getElementById("pStop"+p.pNum);
 	let unload = document.getElementById("pUnload"+p.pNum);
-	if(play && stop){
+	if(play && stop && unload){
 		if(parseInt(p.status) & 0x2){
 			play.style.display = "flex";
 			stop.style.display = "flex";
@@ -7706,6 +7807,8 @@ async function genPlayerBusMenu(evt){ //pNum, bus, meta){
 		c.style.height = "height: 12px";
 		c.setAttribute("data-pnum", pNum);
 		c.addEventListener('input', playerFeedVolAction, false);
+		c.draggable = true;
+		c.addEventListener('dragstart', function(event){event.preventDefault(); event.stopPropagation();});
 		fdiv.appendChild(c);
 		fdiv.appendChild(document.createElement("br"));
 		// create a NONE feed entry
@@ -8072,6 +8175,35 @@ async function playerCueAction(evt){
 	}
 }
 
+function playerDropAllow(evt){ 
+	let target = evt.target;
+	let atr = curDrag.getAttribute("data-url");
+	if(atr && atr.length && !target.hasChildNodes())
+		evt.preventDefault();	// otherwise the default will prevent drop
+}
+
+function playerDragAllow(evt){
+	let target = evt.target;
+	if(!target.hasChildNodes())
+		evt.preventDefault();	// otherwise the default will prevent drag
+	curDrag = this;
+}
+
+function playerDropHandler(evt){
+	evt.preventDefault();
+	let target = evt.target;
+	let pNum = target.getAttribute("data-pnum");
+	let atr = curDrag.getAttribute("data-url");
+	if(atr && atr.length && !target.hasChildNodes()){ // player is empty and drag item url is set
+		let studio = studioName.getValue();
+		if(studio.length){
+			fetchContent("studio/"+studio+"?cmd=load "+pNum+" "+atr);
+			return true;
+		}
+	}
+	return false;
+}
+
 async function syncPlayers(studio){
 	// get players list
 	let resp;
@@ -8100,8 +8232,14 @@ async function syncPlayers(studio){
 					// add columns
 					let p = document.createElement("div");
 					p.setAttribute("data-idx", mixer.childElementCount);
+					p.draggable = false;
 					p.className = "player";
 					p.id = "player" + mixer.childElementCount;
+					p.addEventListener("dragstart", playerDragAllow);
+					p.addEventListener("dragenter", playerDropAllow);
+					p.addEventListener("dragover", playerDropAllow);
+					p.addEventListener("dragleave", playerDropAllow);
+					p.addEventListener("drop", playerDropHandler);
 					mixer.appendChild(p);
 				}
 				for(let n = 1; n < count; n++){
@@ -8148,12 +8286,15 @@ async function syncPlayers(studio){
 							while(player.hasChildNodes())
 								player.removeChild(player.lastChild);
 							player.title = "";
+							player.draggable = false;
 						}else{
 							if(!player.hasChildNodes()){
 								// copy player template
 								let clone = pTemplate.content.cloneNode(true);
 								let el = clone.querySelector("#pLabel"); 
 								el.setAttribute("id", "pLabel"+(n-1));
+								el.setAttribute("data-pnum", n-1);
+								el.draggable = true;
 								el.innerText = n.toString();
 								el = clone.querySelector("#pType"); 
 								el.setAttribute("id", "pType"+(n-1));
@@ -8197,6 +8338,7 @@ async function syncPlayers(studio){
 								el.setAttribute("id", "pUnload"+(n-1));
 								
 								player.appendChild(clone);
+								player.draggable = true;
 								if(meta)
 									updatePlayerTitle(n-1, meta);
 							}
@@ -8393,6 +8535,31 @@ async function stContSurfChange(evt){
 	}
 }
 
+async function stConsSend(){
+	let studio = studioName.getValue();
+	if(studio.length){
+		let resp;
+		let el = document.getElementById("conCommand");
+		let obj = {cmd: el.value, raw: 1};
+		resp = await fetchContent("studio/"+studio, {
+				method: 'POST',
+				body: JSON.stringify(obj),
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp){
+			if(resp.ok){
+				let raw = await resp.text();
+				let lines = raw.split("\n");
+				el = document.getElementById("stConsRep");
+				el.value = raw;
+			}
+		}
+	}
+}
+
 async function selectControlSurface(entry){
 	// load module
 	if(entry){
@@ -8426,8 +8593,9 @@ async function selectControlSurface(entry){
 
 function reloadStudioSection(el, type){
 	if(type == "control"){
-		let element = document.getElementById("ctlsurf");
-console.log(element);
+		updateControlSurface();
+	}else if(type == "ins"){
+		refreshInputGroups();
 	}
 }
 
@@ -8713,4 +8881,10 @@ window.onload = function(){
 	startupContent();
 	loadStashRecallOnLoad();
 	pTemplate = document.querySelector("#playerTemplate");
+	let el = document.getElementById("conCommand");
+	el.addEventListener("keyup", function(event) {
+		if(event.key === "Enter"){
+			stConsSend();
+		}
+	});
 }

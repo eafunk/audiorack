@@ -289,17 +289,10 @@
 							<div class="scroll">
 								<button class="accordion" onclick="clickAccordType(event, reloadStudioSection, 'ins')">Live Inputs</button>
 								<div class="accpanel">
-								</div>
-								<button class="accordion" onclick="clickAccordType(event, reloadStudioSection, 'outs')">Output Groups</button>
-								<div class="accpanel">
+									<ul class="ddlist" id="stInGrpList" style="float: left;">
+									</ul>
 								</div>
 								<button class="accordion" onclick="clickAccordType(event, reloadStudioSection, 'recorders')">Recorders</button>
-								<div class="accpanel">
-								</div>
-								<button class="accordion" onclick="clickAccordType(event, reloadStudioSection, 'mixer')">Mixer Settings</button>
-								<div class="accpanel">
-								</div>
-								<button class="accordion" onclick="clickAccordType(event, reloadStudioSection, 'automation')">Automation Settings</button>
 								<div class="accpanel">
 								</div>
 								<button class="accordion" onclick="clickAccordType(event, reloadStudioSection, 'control')">Control Surface</button>
@@ -309,8 +302,29 @@
 										<option val="" selected>NONE</option>
 									</select>
 								</div>
-								<button class="accordion" onclick="clickAccordType(event, reloadStudioSection, 'console')">Console</button>
-								<div class="accpanel">
+							</div>
+						</div>
+						<div id="studioAdmin" class="stAdmin">
+							<div class="scroll">
+								<button class="tab active" data-id="stConsole" onclick="selectTabType(event, reloadStudioSection, 'console')">Console</button>
+								<button class="tab" data-id="stConfOut" onclick="selectTabType(event, reloadStudioSection, 'outs')">Output Groups</button>
+								<button class="tab" data-id="stConfIn" onclick="selectTabType(event, reloadStudioSection, 'ins')">Live Inputs</button>
+								<button class="tab" data-id="stConfMixer" onclick="selectTabType(event, reloadStudioSection, 'mixer')">Mixer Settings</button>
+								<button class="tab" data-id="stConfAuto" onclick="selectTabType(event, reloadStudioSection, 'automation')">Automation Settings</button>
+								<div id="stConsole" class="accpanel" style="display: flex;">
+									<textarea id="stConsRep" rows="10" width=100% readonly=""></textarea>
+									<div>
+										<input type="text" id="conCommand" placeholder="command" style="float: left; width: calc(100% - 35px)"></input>
+										<button class="editbutton" type="submit" onClick="stConsSend()" style="float: right; width: 25px;">Send</button>
+									</div>
+								</div>
+								<div id="stConfOut" class="accpanel">
+								</div>
+								<div id="stConfIn" class="accpanel">
+								</div>
+								<div id="stConfMixer" class="accpanel">
+								</div>
+								<div id="stConfAuto" class="accpanel">
 								</div>
 							</div>
 						</div>
@@ -382,7 +396,7 @@
 		</div>
 		<div>
 			<input id="pPos" type="range" min="-1" max="1" value="0" step="0.05" style=" width: 50px; height: 12px;"
-				oninput="playerPosAction(this);" onchange="this.value='0.0';">
+				oninput="playerPosAction(this);" onchange="this.value='0.0';" ondragstart="event.preventDefault(); event.stopPropagation();" draggable="true">
 		</div>
 		<div>
 			<button id="pBusSel" class="editbutton" onclick="dropClick(event)" data-showcb="genPlayerBusMenu" data-childdiv="pBusList" style="height: 15px;">
@@ -396,7 +410,8 @@
 		<div>
 			L<input id="pBal" type="range" min="-1" max="1" value="0" step="0.05" style=" width: 42px; height: 12px;" 
 				oninput="playerBalanceAction(this);" ontouchstart="this.touching = true;" onmousedown="this.touching = true;" 
-					onmouseup="this.touching = false;" ontouchend="this.touching = false;" list="baltick">R
+					onmouseup="this.touching = false;" ontouchend="this.touching = false;" ondragstart="event.preventDefault(); event.stopPropagation();" 
+					draggable="true" list="baltick">R
 		</div>
 		<div style="display: flex; justify-content: space-around;">
 			<div>
@@ -408,7 +423,8 @@
 			<div class="player-fader">
 				<input id="pFader" type="range" min="0.0" max="1.5" value="1.0" step="0.01" 
 					oninput="playerFaderAction(this);" ontouchstart="this.touching = true;" onmousedown="this.touching = true;" 
-					onmouseup="this.touching = false;" ontouchend="this.touching = false;">
+					onmouseup="this.touching = false;" ontouchend="this.touching = false;" ondragstart="event.preventDefault(); event.stopPropagation();"
+					draggable="true">
 			</div>
 		</div>
 		<div style="padding: 2px;">

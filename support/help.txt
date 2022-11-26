@@ -153,10 +153,11 @@ returns the UID of the named input if it is currently loaded in a player or is i
 savein
 saves the current line input definitions to the line input definition configuration file if the path to the file has been set and the file permissions allow writing.
 
-setout [name string] [muteGain integer] [bus integer] [jack port list]
+setout [name string] [muteGain integer] [bus integer] [showUI integer(1,0)] [jack port list]
 creates or updates the named output device definition mapping the specified mixer output bus to the given Jack Audio sink ports therough
 and output group with controllable gain, muting, and delay. The muteGain integer (hex format) sets the output device gains when cue (LSB),
-mute-A, mute-B, or mute-C (MSB) mute groups are enables. 00=off, ff=mute attenuation gain = ((hex val) / 255).
+mute-A, mute-B, or mute-C (MSB) mute groups are enables. 00=off, ff=mute attenuation gain = ((hex val) / 255). The showUI value specifies
+that the user interface should show controls (like volume) for this output to the user, when showUI is non-zero.
 
 The jack port list format is by example:
 	client:port1+client:port2&client:port3+client:port4

@@ -210,7 +210,8 @@ footer {
 		"status"
 		"queue"
 		"ins"
-		"accord";
+		"accord"
+		"admin";
 	grid-template-rows: 150px 150px 600px 329px minmax(200px, auto);
 	height: 100%;
 }
@@ -220,7 +221,7 @@ footer {
 		grid-template-areas: 
 			"status outs  accord"
 			"queue ins accord"
-			"queue . accord";
+			"queue admin accord";
 		grid-template-columns: 1fr 584px 200px;
 		grid-template-rows: 150px 329px minmax(200px, auto);
 	}
@@ -282,6 +283,11 @@ footer {
 
 .stSide {
 	grid-area: accord;
+	background-color: #666;
+}
+
+.stAdmin {
+	grid-area: admin;
 	background-color: #666;
 }
 
@@ -512,6 +518,15 @@ audio {
 #btype {
 	flex: none;
 	width: 120px;
+}
+
+.tab {
+	background-color: #444;
+	color: #888;
+	cursor: pointer;
+	padding: 8px;
+	text-align: center;
+	transition: 0.4s;
 }
 
 .accordion {

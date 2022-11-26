@@ -2981,6 +2981,7 @@ unsigned char handle_setout(ctl_session *session){
 	uint32_t nameHash;
 	uint32_t mg; // mute group
 	uint32_t bus;
+	unsigned char showUI;
 	outChannel *instance;
 	
 	// first parameter, name string
@@ -2996,69 +2997,76 @@ unsigned char handle_setout(ctl_session *session){
 			param = strtok_r(NULL, " ", &session->save_pointer);
 			if(param != NULL){
 				bus = atoi(param);
-				// last parameter, jack port connection list
-				if(session->save_pointer != NULL){
-					firstFree = 0;
-					instance = mixEngine->outs;
-					pthread_rwlock_wrlock(&mixEngine->outGrpLock);
-					for(i=0; i<mixEngine->outCount; i++){
-						if(instance->name){
-							if((instance->nameHash == nameHash) &&
-									(!strcmp(name, instance->name))){
-								// found existing record... update
-								instance->muteLevels = mg;
-								if(instance->bus != bus){
-									instance->reqBus = bus;
-									instance->requested = instance->requested | change_bus;
-								}
-								updateOutputConnections(mixEngine, instance, 1, session->save_pointer, NULL);
+				// 4th parameter, show in UI boolean
+				param = strtok_r(NULL, " ", &session->save_pointer);
+				if(param != NULL){
+					showUI = atoi(param);
+					// last parameter, jack port connection list
+					if(session->save_pointer != NULL){
+						firstFree = 0;
+						instance = mixEngine->outs;
+						pthread_rwlock_wrlock(&mixEngine->outGrpLock);
+						for(i=0; i<mixEngine->outCount; i++){
+							if(instance->name){
+								if((instance->nameHash == nameHash) &&
+										(!strcmp(name, instance->name))){
+									// found existing record... update
+									instance->muteLevels = mg;
+									if(instance->bus != bus){
+										instance->reqBus = bus;
+										instance->requested = instance->requested | change_bus;
+									}
+									instance->showUI = showUI;
+									updateOutputConnections(mixEngine, instance, 1, session->save_pointer, NULL);
 
+									pthread_rwlock_unlock(&mixEngine->outGrpLock);
+									free(name);
+									return rOK;
+								}
+							}else{
+								if(!firstFree){
+									firstFree = i+1;
+								}
+							}
+							instance++;
+						}
+						if(i == mixEngine->outCount){
+							// not found... set new output group, with unity gain and no delay
+							if(!firstFree){
+								pthread_rwlock_unlock(&mixEngine->outGrpLock);
+								session->errMSG = "Can't setup an new output group: All output groups are in use.\n";
+								return rError;
+							}else{
+								firstFree--;
+								instance = &mixEngine->outs[firstFree];
+								instance->name = strdup(name);
+								instance->nameHash = nameHash;
+								instance->muteLevels = mg;
+								instance->reqBus = bus;
+								instance->reqVol = 1.0;
+								instance->reqDelay = 0.0;
+								instance->showUI = showUI;
+								instance->requested = instance->requested | (change_vol | change_bus | change_delay);
+
+								port = instance->jPorts;
+								max = mixEngine->chanCount;
+								/* set port name */
+								pthread_mutex_lock(&mixEngine->jackMutex);
+								for(c=0; c<max; c++){
+									snprintf(buf, sizeof buf, "%s_ch%d", instance->name, c);
+									jack_port_rename(mixEngine->client, *port, buf);
+									port++;
+								}
+								pthread_mutex_unlock(&mixEngine->jackMutex);
+								updateOutputConnections(mixEngine, instance, 1, session->save_pointer, NULL);
+								
 								pthread_rwlock_unlock(&mixEngine->outGrpLock);
 								free(name);
 								return rOK;
 							}
-						}else{
-							if(!firstFree){
-								firstFree = i+1;
-							}
 						}
-						instance++;
+						pthread_rwlock_unlock(&mixEngine->outGrpLock);
 					}
-					if(i == mixEngine->outCount){
-						// not found... set new output group, with unity gain and no delay
-						if(!firstFree){
-							pthread_rwlock_unlock(&mixEngine->outGrpLock);
-							session->errMSG = "Can't setup an new output group: All output groups are in use.\n";
-							return rError;
-						}else{
-							firstFree--;
-							instance = &mixEngine->outs[firstFree];
-							instance->name = strdup(name);
-							instance->nameHash = nameHash;
-							instance->muteLevels = mg;
-							instance->reqBus = bus;
-							instance->reqVol = 1.0;
-							instance->reqDelay = 0.0;
-							instance->requested = instance->requested | (change_vol | change_bus | change_delay);
-
-							port = instance->jPorts;
-							max = mixEngine->chanCount;
-							/* set port name */
-							pthread_mutex_lock(&mixEngine->jackMutex);
-							for(c=0; c<max; c++){
-								snprintf(buf, sizeof buf, "%s_ch%d", instance->name, c);
-								jack_port_rename(mixEngine->client, *port, buf);
-								port++;
-							}
-							pthread_mutex_unlock(&mixEngine->jackMutex);
-							updateOutputConnections(mixEngine, instance, 1, session->save_pointer, NULL);
-							
-							pthread_rwlock_unlock(&mixEngine->outGrpLock);
-							free(name);
-							return rOK;
-						}
-					}
-					pthread_rwlock_unlock(&mixEngine->outGrpLock);
 				}
 			}
 		}
@@ -3084,7 +3092,7 @@ unsigned char handle_saveout(ctl_session *session){
 			pthread_rwlock_rdlock(&mixEngine->outGrpLock);
 			for(i=0; i<mixEngine->outCount; i++){
 				if(instance->name){
-					fprintf(fp, "setout %s %08x %d %s\n", instance->name, instance->muteLevels, instance->bus, instance->portList);
+					fprintf(fp, "setout %s %08x %d %d %s\n", instance->name, instance->muteLevels, instance->bus, instance->showUI, instance->portList);
 					if(instance->vol != 1.0)
 						fprintf(fp, "outvol %s %f\n", instance->name, instance->vol);
 				}
@@ -3108,13 +3116,13 @@ unsigned char handle_dumpout(ctl_session *session){
 	outChannel *instance;
 	
 	// dump all output group definitions 
-	tx_length = snprintf(buf, sizeof buf, "Name\tvolume\tMute\tBus\tPort List\n");
+	tx_length = snprintf(buf, sizeof buf, "Name\tvolume\tMute\tBus\tShowUI\tPort List\n");
 	my_send(session, buf, tx_length, session->silent, 0);
 	instance = mixEngine->outs;
 	pthread_rwlock_rdlock(&mixEngine->outGrpLock);
 	for(i=0; i<mixEngine->outCount; i++){
 		if(instance->name){
-			tx_length = snprintf(buf, sizeof buf, "%s\t%.3f\t%08x\t%d\t%s\n", instance->name, instance->vol, instance->muteLevels, instance->bus, instance->portList);
+			tx_length = snprintf(buf, sizeof buf, "%s\t%.3f\t%08x\t%d\t%d\t%s\n", instance->name, instance->vol, instance->muteLevels, instance->bus, instance->showUI, instance->portList);
 			my_send(session, buf, tx_length, session->silent, 0);
 		}
 		instance++;
@@ -3972,7 +3980,7 @@ unsigned char handle_add(ctl_session *session){
 				bInt = atoi(session->save_pointer);
 				if(!checkPnumber(bInt)){
 					session->errMSG = "Bad player number.\n";
-					return rError;            
+					return rError;
 				}
 				AddPlayer(aInt, bInt);
 				return rOK;

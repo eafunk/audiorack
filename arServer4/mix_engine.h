@@ -107,7 +107,7 @@ typedef struct {
 	float vol;
 	float delay;			// in seconds
 	unsigned int bus;
-			
+	unsigned char showUI;
 	float reqVol;
 	float reqDelay;
 	unsigned int reqBus;
