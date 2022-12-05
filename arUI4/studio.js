@@ -158,7 +158,7 @@ function handleNotifyPacket(name, type, data){
 				if((BigInt(ref) & 0xFF000000n) == 0xC0000000n){
 					// output bus
 					ref = ref & 0x00FFFFFF;
-					msg = {type: "outbus", num: ref, val: val.toString(16)};
+					msg = {type: "outbus", num: ref, val: val};
 					sse.postSSEvent(name, JSON.stringify(msg));
 				}else{
 					// input bus

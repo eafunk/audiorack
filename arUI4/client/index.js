@@ -245,6 +245,33 @@ function flatClone(src){
 	return target;
 }
 
+function linToDBtext(lin){
+	if(lin <= 0.00001)
+		return "Mute";
+	else{
+		let db = Math.round(20.0 * Math.log10(lin));
+		return db + "dB";
+	}
+}
+
+function faderToLin(val){
+	val = Math.pow(val, 4);
+	if(val <= 0.00001)
+		val = "0.0";
+	if(val > 5.1)
+		val = 5.1;
+	return val;
+}
+
+function linToFader(lin){
+	val = Math.pow(lin, 0.25);
+	if(val < 0.056)
+		val = "0.0";
+	if(val > 1.5)
+		val = 1.5;
+	return val;
+}
+
 /***** fetch functions from http API *****/
 
 function includeScript(file) {
@@ -6612,7 +6639,6 @@ function playerTimeUpdate(n){
 	}
 }
 
-
 async function setLibUsingStudio(){
 	let settings = studioStateCache.meta[0];
 	if(settings){
@@ -6654,6 +6680,7 @@ function studioChangeCallback(value){
 	syncStudioMetalist(value);
 	syncStudioStat(value);
 	syncPlayers(value);
+	refreshOutGroups();
 	updateControlSurface();
 }
 
@@ -6767,6 +6794,126 @@ async function refreshInputGroups(){
 	}
 }
 
+function stOutVolAction(evt){
+	val = parseFloat(evt.target.value);
+	let parent = evt.target.parentNode;
+	let output = parent.previousElementSibling.innerText;
+	let studio = studioName.getValue();
+	if(studio.length){
+		// make val scalar
+		val = faderToLin(val);
+		fetchContent("studio/"+studio+"?cmd=outvol "+output+" "+val);
+	}
+}
+
+function updateOutVolUI(val, idx){
+	let vol = parseFloat(val);
+	let el = document.getElementById("stOutIdx"+(idx+1));
+	if(el){
+		let div = el.children[1];
+		let fader = div.children[0];
+		let db = div.children[1];
+		db.innerText = linToDBtext(vol);
+		if(fader.touching)
+			return;	// dont update slider while it is being touched
+		fader.value = linToFader(vol);
+	}
+}
+
+function stOutBusAction(evt){
+	let bus = evt.target.selectedIndex;
+	let parent = evt.target.parentNode.parentNode;
+	let output = parent.firstElementChild.innerText;
+	let studio = studioName.getValue();
+	if(studio.length){
+		// make val scalar
+		val = faderToLin(val);
+		fetchContent("studio/"+studio+"?cmd=outbus "+output+" "+bus);
+	}
+}
+
+function updateOutBusUI(bus, idx){
+	bus = parseFloat(bus);
+	let el = document.getElementById("stOutIdx"+(idx+1));
+	if(el){
+		let div = el.children[2];
+		let sel = div.firstElementChild;
+		sel.selectedIndex = bus;
+	}
+}
+
+function genOutBusMenuHTML(bus){
+	let html = `<select onchange="stOutBusAction(event)">`;
+	for(let b=0; b<studioStateCache.buscnt; b++){
+		let name;
+		switch(b){
+			case 0:
+				name = "Mon";
+				break;
+			case 1:
+				name = "Cue";
+				break;
+			case 2:
+				name = "Main";
+				break;
+			case 3:
+				name = "Alt";
+				break;
+			default:
+				name = "Bus " + b;
+				break;
+		}
+		if(bus == b)
+			html += "<option value='"+name+"' selected>"+name+"</option>";
+		else
+			html += "<option value='"+name+"'>"+name+"</option>";
+	}
+	html += `</select>`;
+	return html;
+}
+ 
+async function refreshOutGroups(){
+	let studio = studioName.getValue();
+	let el = document.getElementById("studioOutList");
+	if(studio && studio.length){
+		let resp = await fetchContent("studio/"+studio+"?cmd=dumpout&raw=1");
+		if(resp){
+			if(resp.ok){
+				let list = [];
+				let show = [];
+				let data = await resp.text();
+				let lines = data.split("\n");
+				for(let n = 1; n < lines.length; n++){
+					let fields = lines[n].split("\t");
+					if(fields[0].length){
+						let entry = {Idx: n, Name: fields[0], Volume: fields[1], Mutes: fields[2], Bus: fields[3], ShowUI: fields[4], Ports: fields[5]};
+						list.push(entry);
+						if(entry.ShowUI && entry.ShowUI.length && parseInt(entry.ShowUI))
+							show.push(entry);
+					}
+				}
+				studioStateCache.outs = list;
+				let format = `<div id="stOutIdx$Idx$" style="display: flex; flex-flow: row;">
+					<div style="width:100px;">$Name$</div>
+					<div style="display: flex; flex-flow: row;">
+						<input type='range' min='0.0' max='1.5' value="$Volume->linToFader$" step='0.01' oninput='stOutVolAction(event)'
+						ontouchstart='this.touching = true;' onmousedown='this.touching = true;' 
+						onmouseup='this.touching = false;' ontouchend='this.touching = false;'></input>
+						<div>$Volume->linToDBtext$</div>
+					</div>
+					<div style="width:75px; text-align: center;">
+						$Bus->genOutBusMenuHTML$
+					<div></div>`
+				genDragableListFromObjectArray(false, false, show, el, format);
+			}else{
+				alert("Got an error fetching output group list from server.\n"+resp.statusText);
+			}
+		}else{
+			alert("Failed to fetch output group list  from the server.");
+		}
+	}
+}
+
 async function syncStudioStat(studio){
 	let resp = await fetchContent("studio/"+studio+"?cmd=stat&raw=1");
 	if(resp instanceof Response){
@@ -6873,6 +7020,7 @@ async function syncStudioMetalist(studio){
 		}else if(cred.getValue()){
 			alert("Failed to fetch metalist from the studio.");
 		}
+		refreshOutGroups();
 	}
 }
 
@@ -7462,11 +7610,7 @@ async function playerFaderAction(obj, pNum){
 	let studio = studioName.getValue();
 	if(studio.length){
 		// make val scalar
-		val = Math.pow(val, 4);
-		if(val <= 0.00001)
-			val = 0.0;
-		if(val > 5.1)
-			val = 5.1;
+		val = faderToLin(val);
 		fetchContent("studio/"+studio+"?cmd=vol "+player+" "+val);
 	}
 }
@@ -7558,23 +7702,13 @@ async function playerAction(cmd, evt, pNum){
 function updatePlayerFaderUI(val, pNum){
 	let vol = parseFloat(val);
 	let el = document.getElementById("pGain"+pNum);
-	if(el){
-		if(vol <= 0.00001)
-			el.innerText = "Mute";
-		else{
-			let db = Math.round(20.0 * Math.log10(vol));
-			el.innerText = db + "dB";
-		}
-	}
+	if(el)
+		el.innerText = linToDBtext(vol);
 	el = document.getElementById("pFader"+pNum);
 	if(el){
 		if(el.touching)
-			return;	// dont update fader while it is being touched		
-		val = Math.pow(vol, 0.25);
-		if(val < 0.1)
-			val = 0.0;
-		if(val > 1.5)
-			val = 1.5;
+			return;	// dont update fader while it is being touched
+		val = linToFader(vol);
 		el.value = val;
 	}
 }
@@ -7844,19 +7978,10 @@ async function genPlayerBusMenu(evt){ //pNum, bus, meta){
 		if(el && (mmvol != undefined)){
 			// update feedvol control
 			mmvol = parseFloat(mmvol);
-			mmvol = Math.pow(mmvol, 0.25);
-			if(mmvol < 0.03)
-				mmvol = 0.0;
-			if(mmvol > 1.5)
-				mmvol = 1.5;
+			mmvol = linToFader(mmvol);
 			el.value = mmvol;
 			el = document.getElementById("pFeedSep"+pNum);
-			if(mmvol <= 0.00001)
-				el.innerText = "Feed Muted";
-			else{
-				let db = Math.round(20.0 * Math.log10(mmvol));
-				el.innerText = "Feed " + db + "dB";
-			}
+			el.innerText = "Feed " + linToDBtext(mmvol);
 		}
 	}
 	for(let b=0; b<studioStateCache.buscnt; b++){
@@ -8077,19 +8202,10 @@ async function playerFeedVolAction(obj, pNum){
 	let studio = studioName.getValue();
 	if(studio.length){
 		// make val scalar
-		val = Math.pow(val, 4);
-		if(val <= 0.00001)
-			val = 0.0;
-		if(val > 5.1)
-			val = 5.1;
+		val = faderToLin(val);
 		fetchContent("studio/"+studio+"?cmd=mmvol "+player+" "+val);
 		let el = document.getElementById("pFeedSep"+player);
-		if(val <= 0.00001)
-			el.innerText = "Feed Muted";
-		else{
-			let db = Math.round(20.0 * Math.log10(val));
-			el.innerText = "Feed " + db + "dB";
-		}
+		el.innerText = "Feed " + linToDBtext(val);
 	}
 }
 
@@ -8365,7 +8481,7 @@ function studioHandleNotice(data){
 		case "outvol":			// output volume change, ref=output index, val=scalar volume
 			val = data.val;	// number
 			ref = data.num;
-
+			updateOutVolUI(val, ref);
 			break;
 		case "invol":			// player volume change, ref=input index, val=scalar volume
 			val = data.val;	// number
@@ -8381,9 +8497,10 @@ function studioHandleNotice(data){
 				studioStateCache.control.setPBal(val, ref);
 			updatePlayerBalanceUI(val, ref);
 			break;
-		case "outbus":			// output bus assignment change, ref=output index, val=hex string bus assignment bits
-			val = data.val;	// hex string
+		case "outbus":			// output bus assignment change, ref=output index, val=bus assignment number
+			val = data.val;	// number (bus index)
 			ref = data.num;
+			updateOutBusUI(val, ref);
 			break;
 		case "inbus":			// input bus assignment change, ref=input index, val=hex string bus assignment bits
 			val = parseInt(data.val, 16);	// hex string

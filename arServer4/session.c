@@ -95,6 +95,7 @@ unsigned char handle_delin(ctl_session *session);
 unsigned char handle_saveout(ctl_session *session);
 unsigned char handle_dumpout(ctl_session *session);
 unsigned char handle_outvol(ctl_session *session);
+unsigned char handle_outbus(ctl_session *session);
 unsigned char handle_setdly(ctl_session *session);
 unsigned char handle_getdly(ctl_session *session);
 unsigned char handle_dump(void);
@@ -491,6 +492,10 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 	}
 	if (!strcmp(arg, "outvol")) {
 		result = handle_outvol(session);
+		goto finish;
+	}
+	if (!strcmp(arg, "outbus")) {
+		result = handle_outbus(session);
 		goto finish;
 	}
 	if (!strcmp(arg, "setdly")) {
@@ -3161,6 +3166,43 @@ unsigned char handle_outvol(ctl_session *session){
 						aFloat = atof(session->save_pointer);
 					instance->reqVol = aFloat;
 					instance->requested = instance->requested | change_vol;
+					
+					pthread_rwlock_unlock(&mixEngine->outGrpLock);
+					free(name);
+					return rOK;
+				}
+			}
+			instance++;
+		}
+		pthread_rwlock_unlock(&mixEngine->outGrpLock);
+		free(name);
+	}
+	session->errMSG = "Missing or bad output group name.\n";
+	return rError;
+}
+
+unsigned char handle_outbus(ctl_session *session){
+	char *param, *name;
+	outChannel *instance;
+	uint32_t nameHash;
+	uint32_t bus;
+	int i;
+	
+	param = strtok_r(NULL, " ", &session->save_pointer);
+	if(param && strlen(param)){
+		// first parameter, output name
+		name = strdup(param);
+		nameHash = ELFHash(0, name, strlen(name));
+		instance = mixEngine->outs;
+		pthread_rwlock_wrlock(&mixEngine->outGrpLock);
+		for(i=0; i<mixEngine->outCount; i++){
+			if(instance->name){
+				if((instance->nameHash == nameHash) &&
+										(!strcmp(name, instance->name))){
+					// found the record... set bus
+					bus = atoi(session->save_pointer);
+					instance->reqBus = bus;
+					instance->requested = instance->requested | change_bus;
 					
 					pthread_rwlock_unlock(&mixEngine->outGrpLock);
 					free(name);

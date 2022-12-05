@@ -280,7 +280,10 @@
 						</div>
 						<div id="studioOuts" class="stOuts">
 							<div id="studioOutsVU"></div>
-							<div id="studioOutList"></div>
+							<div style="overflow: auto;" >
+								<ul class="ddlist" id="studioOutList">
+								</ul>
+							</div>
 						</div>
 						<div id="studioIns" class="stIns">
 							<div id="mixergrid" class="mixer"></div>
@@ -295,6 +298,12 @@
 								<button class="accordion" onclick="clickAccordType(event, reloadStudioSection, 'recorders')">Recorders</button>
 								<div class="accpanel">
 								</div>
+								<button class="accordion" onclick="clickAccordType(event, reloadStudioSection, 'delay')">Delay</button>
+								<div class="accpanel">
+								</div>
+								<button class="accordion" onclick="clickAccordType(event, reloadStudioSection, 'wall')">Wall</button>
+								<div class="accpanel">
+								</div>
 								<button class="accordion" onclick="clickAccordType(event, reloadStudioSection, 'control')">Control Surface</button>
 								<div class="accpanel">
 									<label for="ctlsurf">Control Surfaces</label>
@@ -306,11 +315,12 @@
 						</div>
 						<div id="studioAdmin" class="stAdmin">
 							<div class="scroll">
-								<button class="tab active" data-id="stConsole" onclick="selectTabType(event, reloadStudioSection, 'console')">Console</button>
-								<button class="tab" data-id="stConfOut" onclick="selectTabType(event, reloadStudioSection, 'outs')">Output Groups</button>
+								Studio Server <button class="tab active" data-id="stConsole" onclick="selectTabType(event, reloadStudioSection, 'console')">Console</button>
+								<button class="tab" data-id="stConfOut" onclick="selectTabType(event, reloadStudioSection, 'outs')">Outputs</button>
 								<button class="tab" data-id="stConfIn" onclick="selectTabType(event, reloadStudioSection, 'ins')">Live Inputs</button>
-								<button class="tab" data-id="stConfMixer" onclick="selectTabType(event, reloadStudioSection, 'mixer')">Mixer Settings</button>
-								<button class="tab" data-id="stConfAuto" onclick="selectTabType(event, reloadStudioSection, 'automation')">Automation Settings</button>
+								<button class="tab" data-id="stConfLib" onclick="selectTabType(event, reloadStudioSection, 'library')">Library</button>
+								<button class="tab" data-id="stConfMixer" onclick="selectTabType(event, reloadStudioSection, 'mixer')">Mixer</button>
+								<button class="tab" data-id="stConfAuto" onclick="selectTabType(event, reloadStudioSection, 'automation')">Automation</button>
 								<div id="stConsole" class="accpanel" style="display: flex;">
 									<textarea id="stConsRep" rows="10" width=100% readonly=""></textarea>
 									<div>
@@ -321,6 +331,8 @@
 								<div id="stConfOut" class="accpanel">
 								</div>
 								<div id="stConfIn" class="accpanel">
+								</div>
+								<div id="stConfLib" class="accpanel">
 								</div>
 								<div id="stConfMixer" class="accpanel">
 								</div>

@@ -277,8 +277,10 @@ footer {
 	grid-area: outs;
 	background-color: #666;
 	display: flex;
-	justify-content: center;
+	flex-flow: row;
+	text-align: center;
 	align-items: center;
+	justify-content: space-evenly;
 }
 
 .stSide {

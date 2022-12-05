@@ -316,3 +316,28 @@ line in the .audiorack.ars_startup.conf file.  Note that this will run Carla
 via the runifnot script, which assumes that if Carla is already running, it was 
 run via that script.  So if you ran Carla manually, you will want to quit it
 befor you restart arServer, and let it run Carla.
+
+*** Using Pipewire to emulate Jack-Audio ***
+
+Pipewire has a replacement jack library file which provides application all of the 
+functions of jack up front, but use pipewire as the audio backend when the usually 
+optional pipewire-jack package is installed along with pipewire itself. The pw-jack 
+program then allows the launch of programs with the library change made via run 
+environmental variables.  Unfortuantly, arServer itself runs additonal programs 
+(like arPlayer and arRecorder) which do not inherit the environmental variable set 
+by pw-jack.  So here is how you can get most linux OSs to change the library from jack
+to the pipewir implementation by default, with out actually removing the native jack 
+libraries:
+
+This is for pipewire version 0.3, and would likely need to be modified for future 
+versions of pipewire, and assumes your OS uses glibc at it's base for library loading.
+
+You need to create the file /etc/ld.so.conf.d/pipewire-jack-x86_64-linux-gnu.conf as 
+the root user, with the following contents for Ubuntu 22.10.  Other operating systems 
+may have the library files for jack in a different location:
+
+/usr/lib/x86_64-linux-gnu/pipewire-0.3/jack/
+
+Then run sudo ldconfig. This overrides the default linker search path so that
+every program that runs and tries to use the jack client libraries, will instead 
+load the pipewire implimentation.

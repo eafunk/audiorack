@@ -1103,7 +1103,7 @@ void updateOutputConnections(mixEngineRecPtr mixEngineRef, outChannel *rec, unsi
 			if(oldChList)
 				free(oldChList);
 			cPort++;
-		}			
+		}
 		/* set new list to current; new list (portList) can be NULL */
 		if(rec->portList)
 			free(rec->portList);
@@ -1118,7 +1118,7 @@ void updateOutputConnections(mixEngineRecPtr mixEngineRef, outChannel *rec, unsi
 			rec->name = NULL;
 		}
 	}
-			
+	
 	/* make connection in the current list if not already established */
 	if(rec->portList){
 		cPort = rec->jPorts;
