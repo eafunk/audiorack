@@ -6893,23 +6893,38 @@ async function refreshOutGroups(){
 					}
 				}
 				studioStateCache.outs = list;
-				let format = `<div id="stOutIdx$Idx$" style="display: flex; flex-flow: row;">
-					<div style="width:100px;">$Name$</div>
-					<div style="display: flex; flex-flow: row;">
-						<input type='range' min='0.0' max='1.5' value="$Volume->linToFader$" step='0.01' oninput='stOutVolAction(event)'
+				let format = `<div id="stOutIdx$Idx$" style="display: flex; flex-flow: row; align-items: center;">
+					<div style="width:75px;">$Name$</div>
+					<div style="display: flex; flex-flow: row; align-items: center;">
+						<input type='range' min='0.0' max='1.0' value="$Volume->linToFader$" step='0.01' oninput='stOutVolAction(event)'
 						ontouchstart='this.touching = true;' onmousedown='this.touching = true;' 
-						onmouseup='this.touching = false;' ontouchend='this.touching = false;'></input>
+						onmouseup='this.touching = false;' ontouchend='this.touching = false;' style="width:100px;"></input>
 						<div>$Volume->linToDBtext$</div>
 					</div>
 					<div style="width:75px; text-align: center;">
 						$Bus->genOutBusMenuHTML$
-					<div></div>`
+					<div></div>`;
 				genDragableListFromObjectArray(false, false, show, el, format);
 			}else{
 				alert("Got an error fetching output group list from server.\n"+resp.statusText);
 			}
 		}else{
 			alert("Failed to fetch output group list  from the server.");
+		}
+	}
+}
+
+function stTBAction(evt, state, tb){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let studio = studioName.getValue();
+	if(studio.length){
+		if(state){
+			evt.target.style.backgroundColor = "Red";
+			fetchContent("studio/"+studio+"?cmd=tbon "+tb);
+		}else{
+			evt.target.style.backgroundColor = "LightGray";
+			fetchContent("studio/"+studio+"?cmd=tboff "+tb);
 		}
 	}
 }
@@ -7890,7 +7905,7 @@ async function genPlayerBusMenu(evt){ //pNum, bus, meta){
 		tbdiv.appendChild(el);
 		tbdiv.appendChild(document.createElement("br"));
 		c = document.createElement("input");
-		c.id = "p"+pNum+"b29";
+		c.id = "p"+pNum+"tb29";
 		l = document.createElement('label');
 		l.htmlFor = c.id;
 		l.appendChild(document.createTextNode("TB 1"));
@@ -7902,7 +7917,7 @@ async function genPlayerBusMenu(evt){ //pNum, bus, meta){
 		tbdiv.appendChild(l);
 		tbdiv.appendChild(document.createElement("br"));
 		c = document.createElement("input");
-		c.id = "p"+pNum+"b30";
+		c.id = "p"+pNum+"tb30";
 		l = document.createElement('label');
 		l.htmlFor = c.id;
 		l.appendChild(document.createTextNode("TB 2"));
@@ -7914,7 +7929,7 @@ async function genPlayerBusMenu(evt){ //pNum, bus, meta){
 		tbdiv.appendChild(l);
 		tbdiv.appendChild(document.createElement("br"));
 		c = document.createElement("input");
-		c.id = "p"+pNum+"b31";
+		c.id = "p"+pNum+"tb31";
 		l = document.createElement('label');
 		l.htmlFor = c.id;
 		l.appendChild(document.createTextNode("TB 3"));
@@ -8007,7 +8022,7 @@ async function genPlayerBusMenu(evt){ //pNum, bus, meta){
 					l.appendChild(document.createTextNode("Cue"));
 					break;
 				case 2:
-					l.appendChild(document.createTextNode("Program"));
+					l.appendChild(document.createTextNode("Main"));
 					break;
 				case 3:
 					l.appendChild(document.createTextNode("Alternate"));
@@ -8045,7 +8060,7 @@ async function genPlayerBusMenu(evt){ //pNum, bus, meta){
 						l.appendChild(document.createTextNode("Monitor"));
 						break;
 					case 2:
-						l.appendChild(document.createTextNode("Program"));
+						l.appendChild(document.createTextNode("Main"));
 						break;
 					case 3:
 						l.appendChild(document.createTextNode("Alternate"));
@@ -8172,7 +8187,7 @@ async function genPlayerBusMenu(evt){ //pNum, bus, meta){
 				for(b = 25; b < 32; b++){
 					if(b == 28)
 						continue; // ignore cue mute grp
-					c = document.getElementById("p"+pNum+"b"+b);
+					c = document.getElementById("p"+pNum+"tb"+b);
 					if(c){
 						if((1 << b) & bus)
 							c.checked = true;
@@ -8209,9 +8224,9 @@ async function playerFeedVolAction(obj, pNum){
 	}
 }
 
-async function playerBusCheckAction(obj){
-	let b = obj.target.getAttribute("data-idx");
-	let pNum = obj.target.getAttribute("data-pnum");
+async function playerBusCheckAction(evt){
+	let b = evt.target.getAttribute("data-idx");
+	let pNum = evt.target.getAttribute("data-pnum");
 	let p = studioStateCache.ins[pNum];
 	let studio = studioName.getValue();
 	if(p && studio.length){
@@ -8227,9 +8242,9 @@ async function playerBusCheckAction(obj){
 	}
 }
 
-async function playerMuteTBAction(obj){
-	let b = BigInt(obj.target.getAttribute("data-idx"));
-	let pNum = obj.target.getAttribute("data-pnum");
+async function playerMuteTBAction(evt){
+	let b = BigInt(evt.target.getAttribute("data-idx"));
+	let pNum = evt.target.getAttribute("data-pnum");
 	let p = studioStateCache.ins[pNum];
 	if(!p)
 		return;
@@ -8246,17 +8261,21 @@ async function playerMuteTBAction(obj){
 	}
 }
 
-async function playerFeedAction(obj){
-	let pNum = obj.target.getAttribute("data-pnum");
+function playerFeedAction(evt){
+	let pNum = evt.target.getAttribute("data-pnum");
 	let p = studioStateCache.ins[pNum];
 	let ref = refFromPlayerNumber(pNum);
 	let meta;
 	if(ref > 0)
 		meta = studioStateCache.meta[ref];
+console.log(meta);
 	if(!meta)
 		return;
-	mmbus = BigInt(meta.MixMinusBus);
-	let b = BigInt(obj.target.getAttribute("data-idx"));
+	if(meta.MixMinusBus == undefined)
+		mmbus = BigInt(0);
+	else
+		mmbus = BigInt(meta.MixMinusBus);
+	let b = BigInt(evt.target.getAttribute("data-idx"));
 	if(b > 0x00ffffffn){
 		// cue override bits
 		if(mmbus & b)
@@ -8518,6 +8537,8 @@ function studioHandleNotice(data){
 			ref = data.num;
 			if(studioStateCache.control)
 				studioStateCache.control.setPStat(val, ref);
+//!! handle TB status too...
+console.log("p="+ref+", st="+val);
 			syncPlayers(studioName.getValue());
 			break;
 		case "status":			// over-all status change, no ref, no val.  Use "stat" command to get status

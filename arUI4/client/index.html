@@ -280,9 +280,17 @@
 						</div>
 						<div id="studioOuts" class="stOuts">
 							<div id="studioOutsVU"></div>
-							<div style="overflow: auto;" >
+							<div style="overflow: auto;">
 								<ul class="ddlist" id="studioOutList">
 								</ul>
+							</div>
+							<div style="width: 55px;">
+								<button class="stTbBtn" ontouchstart="stTBAction(event, true, 0);" onmousedown="stTBAction(event, true, 0);"
+										onmouseup="stTBAction(event, false, 1);" ontouchend="stTBAction(event,false, 1);">TB1</button>
+								<button class="stTbBtn" ontouchstart="stTBAction(event, true, 1);" onmousedown="stTBAction(event, true, 1);"
+										onmouseup="stTBAction(event, false, 2);" ontouchend="stTBAction(event, false, 2);">TB2</button>
+								<button class="stTbBtn" ontouchstart="stTBAction(event, true, 2);" onmousedown="stTBAction(event, true, 2);"
+										onmouseup="stTBAction(event, false, 3);" ontouchend="stTBAction(event, false, 3);">TB3</button>
 							</div>
 						</div>
 						<div id="studioIns" class="stIns">
@@ -401,7 +409,7 @@
 			<div id ="pType">Type</div>
 			<button style="height: 13px; width: 13px; font-size: 8px;" onclick="playerItemInfo(event);">i</button>
 		</div>
-		<div id ="pName" style="width: 72px; display:inline-block; padding: 2px;"></div>
+		<div id ="pName" style="width: 72px; display:inline-block; padding: 2px; overflow: hidden; text-overflow: ellipsis;"></div>
 		<div>
 			<div id="pTime" style="font-size: 12px;">0:00</div>
 			<div id="pRem" style="font-size: 12px;"></div>
@@ -409,6 +417,7 @@
 		<div>
 			<input id="pPos" type="range" min="-1" max="1" value="0" step="0.05" style=" width: 50px; height: 12px;"
 				oninput="playerPosAction(this);" onchange="this.value='0.0';" ondragstart="event.preventDefault(); event.stopPropagation();" draggable="true">
+			</input>
 		</div>
 		<div>
 			<button id="pBusSel" class="editbutton" onclick="dropClick(event)" data-showcb="genPlayerBusMenu" data-childdiv="pBusList" style="height: 15px;">
@@ -423,20 +432,19 @@
 			L<input id="pBal" type="range" min="-1" max="1" value="0" step="0.05" style=" width: 42px; height: 12px;" 
 				oninput="playerBalanceAction(this);" ontouchstart="this.touching = true;" onmousedown="this.touching = true;" 
 					onmouseup="this.touching = false;" ontouchend="this.touching = false;" ondragstart="event.preventDefault(); event.stopPropagation();" 
-					draggable="true" list="baltick">R
+					draggable="true" list="baltick"></input>R
 		</div>
 		<div style="display: flex; justify-content: space-around;">
 			<div>
 				<br>
-				<div id="pGain">0 dB</div>
-				<div id="pVU">
-				</div>
+				<div id="pGain" style="width:30px">0 dB</div>
+				<div id="pVU"></div>
 			</div>
 			<div class="player-fader">
 				<input id="pFader" type="range" min="0.0" max="1.5" value="1.0" step="0.01" 
 					oninput="playerFaderAction(this);" ontouchstart="this.touching = true;" onmousedown="this.touching = true;" 
 					onmouseup="this.touching = false;" ontouchend="this.touching = false;" ondragstart="event.preventDefault(); event.stopPropagation();"
-					draggable="true">
+					draggable="true"></input>
 			</div>
 		</div>
 		<div style="padding: 2px;">

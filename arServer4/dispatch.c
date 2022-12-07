@@ -1013,7 +1013,7 @@ void *playerChangeWatcher(void *refCon){
 					triggerFile = NULL;
 				}
 				
-				// check TalkBack1	
+				// check TalkBack1
 				state = curBusses & (1L << 29);
 				if(state != (lastBusses & (1L << 29))){
 					str_setstr(&triggerFile, triggerDir);	
