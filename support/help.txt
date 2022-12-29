@@ -113,7 +113,7 @@ setin [input-name string] [bus hex] [available-controls hex] [jack port list]
 creates or updates a line input definition using the jack port list to map connections from the specified Jack Audio source ports
 to corrisponding input channels on the AR mixer when this input is loaded into a player. The mixer input bus assignment are also specified. 
 Bus number bits 0 through 23 are stereo mixer output bus enables, bits 25 through 27 are mute group A, B and C enables. Mute group is 
-enables/disabled at play/stop. Bits 29 through 31 are talkback 0, 1, and 2 enables, which also active Mutes A, B, or C.
+enables/disabled at play/stop. Bits 29 through 31 are talkback 0, 1, and 2 enables, which also active mute groups when anabled.
 
 available-controls is used to notifies clients what controls the input supports setting a bit indicates that the corresponding control is supported:
 0-volume, 1-position, 2-skip ahead, 3-skip back, 4-fade, 5-feed.
@@ -205,7 +205,7 @@ Returns the current list of persistent jack connections, including connections t
 tbon [0..2]
 tboff [0..2]
 Enables or disables the specified talkback channel.  An enabled talkback channel will route all currently loaded inputs with the corrisponding talkback
-channel bit enabled for the input's bus assignments, to the cue bus, and enable the corrisponding mute-group A, B, or C for talkback channel 0, 1, or 2.
+channel bit enabled for the input's bus assignments, to the cue bus, and enables any corrisponding mute-group for that input.
 Note: bus assignment bits 29, 30 and 31 corrispond to talkback channel 0, 1, and 2 enables for the input.
 
 *** Player Commands ***

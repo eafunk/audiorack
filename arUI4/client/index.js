@@ -173,6 +173,10 @@ function timeFormat(timesec, noDP){
 	}
 }
 
+function timeFormatNoDP(timesec){
+	return timeFormat(timesec, 1);
+}
+
 function updateListDuration(plprops){
 	// plprops is a flat array of objects.
 	let duration = 0.0;
@@ -4615,6 +4619,55 @@ function itemPrioRender(val){
 	return inner;
 }
 
+function showEncoderItem(panel, container){
+//!!
+/*
+// required settings
+GetMetaInt(uid, "TagBus", NULL)	// only relevent if MakePL is set, but must be set otherwise, even though it's ignored
+GetMetaData(uid, "Name", 0)
+GetMetaData(uid, "Pipeline", 0)
+
+// optional settings
+GetMetaInt(uid, "Persistent", NULL)	// true/false
+GetMetaInt(uid, "Limit", NULL)	// seconds
+GetMetaInt(uid, "Start", NULL)	// unix-time
+GetMetaData(uid, "MakePL", 0)		// by example: MakePL = "[rec_dir][Name].fpl" would create the PL file /the/default/recording/dir/name-of-encoder.fpl
+*/
+
+	let inner = "<form id='encitemform' style='padding:5px;'> Type: "+itemProps.Type+"<br>";
+	inner += "Name: <input type='text' id='encName' size='45' name='Name'";
+	inner += " value='"+quoteattr(itemProps.Name)+"'";
+	if(itemProps.canEdit){
+		inner += "></input><br>";
+		inner += "<button id='savepropbut' name='submit' onclick='saveItemProperties(event)'>Save "+itemProps.Type+"</button>";
+	}else
+		inner += " readonly></input>";
+	inner += "</form>";
+	inner += `<button class="accordion" id="metabut" onclick="selectAccordType(event, reloadItemSection, 'custom')">Custom</button>
+	<div class="accpanel">
+	</div>`;
+	if(itemProps.canEdit){
+		inner += "<button id='delitembut' onclick='itemDelete(event)'>Delete Item</button>";
+		inner += ` Reassign items to <button class="editbutton" id="itemreassignbtn" data-id="1" onclick="toggleShowSearchList(event)">`;
+		inner += `[None]</button>
+							<div class="search-list">
+								<button id="itemReassignRefresh" class="editbutton" onclick="refreshItemReassign(event)">Refresh List</button><br>
+								<input type="text" id="itemReassignText" data-removecb="unlistItemName" onkeyup="filterSearchList(event)" data-div="itemreassignbtn" placeholder="Enter Search..."></input>
+								<div id="itemReassignList"></div>
+							</div>`;
+	}
+	container.innerHTML = inner;
+	panel.style.width = infoWidth;
+	let el = document.getElementById("showinfobtn");
+	if(el)
+		el.style.display = "none";
+	let genbut = document.getElementById("metabut");
+	selectAccordType({target: metabut}, reloadItemSection, 'custom');
+	el = document.getElementById("itemReassignRefresh");
+	if(itemProps.canEdit)
+		refreshItemReassign();
+}
+
 async function showPropItem(panel, container){
 	let inner = "<form id='propitemform' style='padding:5px;'> Type: "+itemProps.Type+"<br><div id='itemPropID'>ID: "+itemProps.ID+"</div>";
 	inner += "Name: <input type='text' id='itemPropName' size='45' name='Name'";
@@ -4847,6 +4900,15 @@ async function showItem(props, canEdit, noShow){
 			let da = document.getElementById("infodata");
 			showTocItem(el, da);
 		}
+	}else if(props.Type == "encoder"){
+		// handle encoder/recorder settings
+		let el = document.getElementById("infopane");
+		let da = document.getElementById("infodata");
+		itemProps = props;
+		itemProps.canEdit = canEdit;
+		if(noShow)
+			return;
+		showEncoderItem(el, da);
 	}else if(props.qtype){
 		let type = props.qtype;
 		// use the properties already passed in props
@@ -4868,8 +4930,8 @@ async function showItem(props, canEdit, noShow){
 			if(el)
 				el.style.display = "none";
 		}else{
-			// new item
 			if(["artist", "album", "category"].includes(type)){
+				// new item
 				// create a new property
 				data = {ID: 0, Name: "new "+type, Type: type, meta: []};
 				itemProps = data;
@@ -6614,6 +6676,21 @@ function updateStudioTimers(){
 			playerTimeUpdate(n);
 		}
 	}
+	let enc = studioStateCache.encoders;
+	if(enc && enc.length){
+		for(n=0; n<enc.length; n++){
+			let p = studioStateCache.encoders[n];
+			if(p && (parseInt(p.Status) & 0x4)){
+				let uid = p.UID;
+				let pos = parseFloat(p.Time);
+				pos = pos + 0.5;
+				p.Time = pos.toString();
+				el = document.getElementById("rTime"+uid);
+				if(el)
+					el.innerText = timeFormat(pos, 1);
+			}
+		}
+	}
 	if(studioStateCache.control)
 		studioStateCache.control.tick();
 }
@@ -6765,6 +6842,253 @@ function studioRunStop(evt){
 		else
 			fetchContent("studio/"+studio+"?cmd=run");
 	}
+}
+
+async function refreshRecorderPanel(){
+	let studio = studioName.getValue();
+	let el = document.getElementById("stRecorderList");
+	if(studio && studio.length){
+		let resp = await fetchContent("studio/"+studio+"?cmd=rstat&raw=1");
+		if(resp){
+			if(resp.ok){
+				let list = [];
+				let data = await resp.text();
+				let lines = data.split("\n");
+				for(let n = 1; n < lines.length; n++){
+					let fields = lines[n].split("\t");
+					let name = fields[6];
+					if(name && name.length){
+						let uid = parseInt(fields[0], 16);
+						list.push({UID: uid, Status: fields[1], Time: fields[2], Limit: fields[3], Gain: fields[5], Name: name});
+					}
+				}
+				studioStateCache.encoders = list;
+				let format = 
+`<div class="stRecGrid" id="r$UID$">
+	<div data-id="$UID$" style="grid-area: head; display: flex; justify-content: space-between; padding: 2px;">
+		<div style="width: 17px;">
+			<button id="rUnload$UID$" style="height: 13px; width: 13px; font-size: 8px; padding: 0px;" data-id="$UID$"><i class="fa fa-times-circle" aria-hidden="true" onclick="stEncoderAction('unload', event);"></i></button>
+		</div>
+		<div id ="rName$UID$">$Name$</div>
+		<button style="height: 13px; width: 13px; font-size: 8px;" data-id="$UID$" onclick="stEncoderAction('settings', event);">i</button>
+	</div>
+	<div id="rTime$UID$" style="grid-area: time; font-size: 12px;">$Time->timeFormatNoDP$</div>
+	<div id="rRem" style="grid-area: rem; font-size: 12px;"></div>
+	<div id="rBus$UID$" style="grid-area: bus;">Bus</div>
+	<div id="rStatus$UID$" style="grid-area: status;"></div>
+	<div style="grid-area: button; padding: 2px;">
+		<button class="playerStopBtn" id="rRec$UID$" data-id="$UID$" style="float: left; display: flex;"><i class="fa fa-circle" aria-hidden="true" onclick="stEncoderAction('run', event);"></i></button>
+		<button class="playerStopBtn" id="rStop$UID$" data-id="$UID$" style="float: right; display: flex;"><i class="fa fa-stop" aria-hidden="true" onclick="stEncoderAction('stop', event);"></i></button>
+	</div>
+	<div style="grid-area: fade;">
+		<div style="display: flex; flex-flow: row; align-items: center;">
+			<input id="rGain$UID$" data-id="$UID$" type="range" min="0" max="1.5" value="$Gain->linToFader$" step="0.01" style=" width: 90%; height: 12px;" 
+				oninput="stEncoderVolAction(event);" ontouchstart="this.touching = true;" onmousedown="this.touching = true;" 
+				onmouseup="this.touching = false;" ontouchend="this.touching = false;"></input>
+			<div id="rdB$UID$" style="width:30px">$Gain->linToDBtext$</div>
+		</div>
+	</div>
+	<div style="grid-area: vu;" id="rVU$UID$"></div>
+</div>`;
+				genDragableListFromObjectArray(false, false, list, el, format);
+				list.forEach(item => { stEncStatus(item.UID, item.Status); } );
+				// add button and menu for new encoder/recorder
+				format =
+`<button id='stNewRecTemplateBtn' class="editbutton" onclick="toggleShowSearchList(event)">+</button>
+<div class="search-list-rtemplate">
+	<button class="editbutton" onclick="stRefreshRecTemplateList(event)">Refresh List</button><br>
+	<input id="stRecTemplateText" type="text" style="width: 120px;" onkeyup="filterSearchList(event)" data-div="stRecTemplateList" placeholder="Enter Search..."></input>
+	<div id="stRecTemplateList"></div>
+</div>`;
+				appendDragableItem(false, false, null, -1, el, format);
+			}else{
+				alert("Got an error fetching recorder list from server.\n"+resp.statusText);
+			}
+		}else{
+			alert("Failed to fetch recorder list  from the server.");
+		}
+	}
+}
+
+function stEncStatus(ref, statusBits){
+/*	rec_uninit			=0L,
+	rec_ready			=(1L << 0),
+	rec_start			=(1L << 1),
+	rec_running			=(1L << 2),		// note: same as status_playing 
+	rec_stop			=(1L << 3),
+	rec_done			=(1L << 5),		// recorder time limit exceeded
+	rec_locked			=(1L << 7),
+	rec_err_write		=(1L << 8),		// recorder encoder write error
+	rec_err_keepup		=(1L << 9),		// recorder encoder can't keep up with audio
+	rec_err_con_fail	=(1L << 10),	// recorder connection failure (stream encoder)
+	rec_err_comp		=(1L << 11),	// recorder compression error
+	rec_conn			=(1L << 12),	// recorder connecting
+	rec_wait			=(1L << 13),	// recorder time record waiting
+	rec_err_other		=(1L << 14)		// error number in high 16 bit word
+*/
+	let st = document.getElementById("rStatus"+ref);
+	let rec = document.getElementById("rRec"+ref);
+	let stop = document.getElementById("rStop"+ref);
+	let ul = document.getElementById("rUnload"+ref);
+	let rColor = "DarkGrey";
+	let sColor = "DarkGrey";
+	if(st){
+		if(statusBits & 1){
+			if(statusBits & 256)
+				st.innerText = "Err: Write fail";
+			else if(statusBits & 512)
+				st.innerText =  "Err: Overflow";
+			else if(statusBits & 1024)
+				st.innerText =  "Err: Connection";
+			else if(statusBits & 2)
+				st.innerText =  "Starting";
+			else if(statusBits & 4){
+				st.innerText =  "Running";
+				rColor = "red";
+			}else if(statusBits & 32)
+				st.innerText =  "Done";
+			else if(statusBits & 0x100)
+				st.innerText =  "Connecting";
+			else if(statusBits & 0x200)
+				st.innerText =  "Waiting";
+			else{
+				st.innerText =  "Ready";
+				sColor = "yellow";
+			}
+		}else
+			st.innerText =  "Uninitialized";
+	}
+	if(ul){
+		if(statusBits & 128)
+			ul.firstElementChild.className = "fa fa-lock";
+		else
+			ul.firstElementChild.className = "fa fa-times-circle";
+	}
+	let el = document.getElementById("rGain"+ref);
+	if(el){
+		if(statusBits & 128)
+			el.disabled = true;
+		else
+			el.disabled = false;
+	}
+	el = document.getElementById("rRec"+ref);
+	if(el){
+		if(statusBits & 128)
+			el.disabled = true;
+		else
+			el.disabled = false;
+	}
+	el = document.getElementById("rStop"+ref);
+	if(el){
+		if(statusBits & 128)
+			el.disabled = true;
+		else
+			el.disabled = false;
+	}
+	el = document.getElementById("rUnload"+ref);
+	if(el){
+		if(statusBits & 128)
+			el.disabled = true;
+		else
+			el.disabled = false;
+	}
+	if(rec)
+		rec.style.backgroundColor = rColor;
+	if(stop)
+		stop.style.backgroundColor = sColor;
+}
+function stEncoderVolAction(evt){
+	val = parseFloat(evt.target.value);
+	let uid = evt.target.getAttribute("data-id");
+	if(uid && uid.length){
+		uid = parseInt(uid);
+		if(uid){
+			let studio = studioName.getValue();
+			if(studio.length){
+				val = faderToLin(val);
+				let hexStr =  ("00000000" + uid.toString(16)).substr(-8);
+				fetchContent("studio/"+studio+"?cmd=recgain "+hexStr+" "+val);
+			}
+		}
+	}
+}
+
+function updateEncoderVolUI(ref, val){
+	let vol = parseFloat(val);
+	let fader = document.getElementById("rGain"+ref);
+	let db = document.getElementById("rdB"+ref);
+	if(fader && db){
+		db.innerText = linToDBtext(vol);
+		if(fader.touching)
+			return;	// dont update slider while it is being touched
+		fader.value = linToFader(vol);
+	}
+}
+
+function stEncoderAction(type, evt){
+	let uid = evt.target.parentNode.getAttribute("data-id");
+	if(uid && uid.length){
+		uid = parseInt(uid);
+		if(uid){
+			if(type == "settings"){
+				let item = studioStateCache.meta[uid];
+				if(item)
+					showItem(item, !(item.Locked || (item.Status & 1)));
+			}else{
+				let studio = studioName.getValue();
+				if(studio.length){
+					let hexStr =  ("00000000" + uid.toString(16)).substr(-8);
+					if(type == "run"){
+						fetchContent("studio/"+studio+"?cmd=startrec "+hexStr);
+					}else if(type == "stop"){
+						fetchContent("studio/"+studio+"?cmd=stoprec "+hexStr);
+					}else if(type == "unload"){
+						fetchContent("studio/"+studio+"?cmd=closerec "+hexStr);
+					}
+				}
+			}
+		}
+	}
+}
+
+async function stRefreshRecTemplateList(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let resp;
+	let studio = studioName.getValue();
+	if(studio.length){
+		resp = await fetchContent("studio/"+studio+"?cmd=rtemplates&raw=1");
+		if(resp){
+			if(resp.ok){
+				let list = [];
+				let data = await resp.text();
+				let lines = data.split("\n");
+				for(let n = 0; n < (lines.length-1); n++){
+					let fields = lines[n].split(".");
+					let name = fields[0];
+					if(name && name.length && fields[1] && fields[1].length)
+						list.push({Name: name, id: lines[n]});
+				}
+				// set custDropdownChange as list callback
+				let el = document.getElementById("stRecTemplateList");
+				buildSearchList(el, list, stNewRecSelection);
+			}else{
+				alert("Got an error fetching recorder templates from server.\n"+resp.status);
+			}
+		}else{
+			alert("Failed to fetch recorder templates from the server.");
+		}
+	}
+}
+
+function stNewRecSelection(evt){
+	// close search-list menu
+	let el = document.getElementById("stNewRecTemplateBtn");
+	toggleShowSearchList({target: el});
+	let id = evt.target.getAttribute("data-id");
+	let studio = studioName.getValue();
+	if(studio.length)
+		fetchContent("studio/"+studio+"?cmd=newrec "+id);
 }
 
 async function refreshInputGroups(){
@@ -7532,8 +7856,12 @@ async function updateMetaItem(studio, ref){
 				for(let n = 0; n < lines.length; n++){
 					if(lines[n].length){
 						let fields = lines[n].split("=");
-						if(fields[0].length && (fields[1] != undefined))
-							res[fields[0]] = fields[1];
+						if(fields[0].length && (fields[1] != undefined)){
+							// remove first field and keep any additionals, restoring '=' token
+							let prop = fields[0];
+							fields.splice(0,1)
+							res[prop] = fields.join("=");
+						}
 					}
 				}
 			}
@@ -8184,9 +8512,16 @@ async function genPlayerBusMenu(evt){ //pNum, bus, meta){
 				let raw = await resp.text();
 				p.bus = raw; // update bus to include mutes and TBs
 				bus = parseInt(raw, 16);
-				for(b = 25; b < 32; b++){
-					if(b == 28)
-						continue; // ignore cue mute grp
+				for(b = 25; b < 28; b++){
+					c = document.getElementById("p"+pNum+"b"+b);
+					if(c){
+						if((1 << b) & bus)
+							c.checked = true;
+						else
+							c.checked = false;
+					}
+				}
+				for(b = 29; b < 32; b++){
 					c = document.getElementById("p"+pNum+"tb"+b);
 					if(c){
 						if((1 << b) & bus)
@@ -8538,7 +8873,6 @@ function studioHandleNotice(data){
 			if(studioStateCache.control)
 				studioStateCache.control.setPStat(val, ref);
 //!! handle TB status too...
-console.log("p="+ref+", st="+val);
 			syncPlayers(studioName.getValue());
 			break;
 		case "status":			// over-all status change, no ref, no val.  Use "stat" command to get status
@@ -8550,12 +8884,12 @@ console.log("p="+ref+", st="+val);
 			updateMetaItem(studioName.getValue(), ref);
 			break;
 		case "rstat":			// recorder/encoder status change, no ref, no val. Use "rstat" command to get status of all recorders
-			
+			refreshRecorderPanel();
 			break;
 		case "recgain":		// recorder/encoder gain change, ref=recorder UID number, val=scalar gain
 			val = data.val;	// number
 			ref = data.uid;
-			
+			updateEncoderVolUI(ref, val);
 			break;
 		case "inpos":		// input position change, ref=input index, val=position in seconds
 			val = data.val;	// number
@@ -8734,6 +9068,8 @@ function reloadStudioSection(el, type){
 		updateControlSurface();
 	}else if(type == "ins"){
 		refreshInputGroups();
+	}else if(type == "recorders"){
+		refreshRecorderPanel();
 	}
 }
 
@@ -8781,7 +9117,7 @@ function studioVuUpdate(data){
 					vu.vumeters = [];
 					for(let c = 0; c < data[ref].pk.length; c++){
 						canv = document.createElement("canvas");
-						canv.setAttribute('width',7);
+						canv.setAttribute('width',8);
 						canv.setAttribute('height',128);
 						vu.appendChild(canv);
 						vu.vumeters.push(new vumeter(canv, {
@@ -8803,6 +9139,37 @@ function studioVuUpdate(data){
 				}
 				if(studioStateCache.control)
 					studioStateCache.control.setPVU(max, pNum);
+			}
+		}else{
+			// Possible recorder/encoder VU
+			let vu = document.getElementById('rVU' + ref);
+			if(vu){
+				let els = vu.getElementsByTagName("canvas");
+				if(!els.length){
+					// first data for new vu session... create view
+					vu.vumeters = [];
+					for(let c = 0; c < data[ref].pk.length; c++){
+						canv = document.createElement("canvas");
+						canv.setAttribute('class', 'rVUcanvas');
+						vu.appendChild(canv);
+						vu.vumeters.push(new vumeter(canv, {
+							"boxCount": 32,
+							"boxCountRed": 9,
+							"boxCountYellow": 7,
+							"boxGapFraction": 0.25,
+							"max": 255,
+							"rotate": true
+						}));
+					}
+				}
+				let max = 0;
+				for(let c = 0; c < data[ref].pk.length; c++){
+					if(max < data[ref].avr[c])
+						max = data[ref].avr[c];
+					let meter = vu.vumeters[c];
+					if(meter)
+						meter.vuSetValue(data[ref].avr[c], data[ref].pk[c]);
+				}
 			}
 		}
 	}

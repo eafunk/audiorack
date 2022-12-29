@@ -20,18 +20,27 @@ class vumeter{
 		this.boxCountRed     = config.boxCountRed || 4;
 		this.boxCountYellow  = config.boxCountYellow || 4;
 		this.boxGapFraction  = config.boxGapFraction || 0.2;
+		this.rotate          = config.rotate;
 		
 		// Derived and starting values
 		this.width = elem.width;
 		this.height = elem.height;
 		
-		// Gap between boxes and box height
-		this.boxHeight = this.height / (this.boxCount + (this.boxCount+1)*this.boxGapFraction);
-		this.boxGapY = this.boxHeight * this.boxGapFraction;
-		
-		this.boxWidth = this.width - (this.boxGapY*2);
-		this.boxGapX = (this.width - this.boxWidth) / 2;
-		
+		if(this.rotate){
+			// Gap between boxes and box height
+			this.boxWidth = this.width / (this.boxCount + (this.boxCount+1)*this.boxGapFraction);
+			this.boxGapX = this.boxWidth * this.boxGapFraction;
+			
+			this.boxHeight = this.height - (this.boxGapX*2);
+			this.boxGapY = (this.height - this.boxHeight) / 2;
+		}else{
+			// Gap between boxes and box height
+			this.boxHeight = this.height / (this.boxCount + (this.boxCount+1)*this.boxGapFraction);
+			this.boxGapY = this.boxHeight * this.boxGapFraction;
+			
+			this.boxWidth = this.width - (this.boxGapY*2);
+			this.boxGapX = (this.width - this.boxWidth) / 2;
+		}
 		// Canvas starting state
 		this.c = elem.getContext('2d');
 		
@@ -67,10 +76,14 @@ class vumeter{
 	
 	// Draw the boxes
 	static vuDrawBoxes(ref){
+		let id;
 		ref.c.save(); 
-		ref.c.translate(ref.boxGapX, ref.boxGapY);
+		if(ref.rotate)
+			ref.c.translate(ref.width - (ref.boxWidth + ref.boxGapX), ref.boxGapY);
+		else
+			ref.c.translate(ref.boxGapX, ref.boxGapY);
 		for(let i = 0; i < ref.boxCount; i++){
-			let id = vumeter.vuGetId(ref, i);
+			id = vumeter.vuGetId(ref, i);
 			ref.c.beginPath();
 			if(vumeter.vuIsOn(ref, id, ref.avr, 0)){
 				ref.c.shadowBlur = 10;
@@ -79,7 +92,10 @@ class vumeter{
 			ref.c.rect(0, 0, ref.boxWidth, ref.boxHeight);
 			ref.c.fillStyle = vumeter.vuGetBoxColor(ref, id, ref.avr, ref.pk);
 			ref.c.fill();
-			ref.c.translate(0, ref.boxHeight + ref.boxGapY);
+			if(ref.rotate)
+				ref.c.translate(-(ref.boxWidth + ref.boxGapX), 0);
+			else
+				ref.c.translate(0, ref.boxHeight + ref.boxGapY);
 		}
 		ref.c.restore();
 	}
@@ -101,7 +117,7 @@ class vumeter{
 		// boxCount-1 is at the bottom. The values work
 		// the other way around, so align them first to
 		// make things easier to think about.
-		return Math.abs(index - (ref.boxCount - 1)) + 1;
+		return ref.boxCount - index;
 	}
 	
 	static vuIsOn(ref, id, avr, pk){

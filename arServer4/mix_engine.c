@@ -188,7 +188,7 @@ int process(jack_nframes_t nframes, void *arg){
 	bcount = mixEngineRef->busCount;
 	frameTime = nframes / (double)mixEngineRef->mixerSampleRate;
 	  
-	/* handle received control packets */		
+	/* handle received control packets */
 	midi_buffer = jack_port_get_buffer(mixEngineRef->ctlInPort, nframes);
 	event_count = jack_midi_get_event_count(midi_buffer);
 	for(c=0; c<event_count; c++){
@@ -235,7 +235,7 @@ int process(jack_nframes_t nframes, void *arg){
 							val->iVal = ntohl(val->iVal);
 							inchrec->requested = inchrec->requested | change_vol;
 							inchrec->reqVol = val->fVal;
-							handled = 1;	
+							handled = 1;
 						}
 					}
 				}
@@ -246,7 +246,7 @@ int process(jack_nframes_t nframes, void *arg){
 					// enque packet in midi/control queue ring buffer
 					jack_ringbuffer_write(mixEngineRef->ctlInQueue, (char *)packet, size);	
 					wakeChanged = 1;
-				}				
+				}
 			}
 		}
 	}
@@ -337,7 +337,7 @@ int process(jack_nframes_t nframes, void *arg){
 						packet->type = cType_start | cPeer_player;	
 						packet->peer = htonl(i);
 						packet->dataSize = 0;
-					}	
+					}
 					inchrec->changed = inchrec->changed | change_play;
 					inchrec->status = inchrec->status | status_playing;
 					if((inchrec->busses & 2L) == 0){ 
@@ -350,7 +350,7 @@ int process(jack_nframes_t nframes, void *arg){
 					}
 				}
 				inchrec->requested = inchrec->requested & ~change_play;
-			}	
+			}
 		}
 		if(inchrec->requested & change_stop){
 			if(inchrec->status & status_standby){
@@ -359,7 +359,7 @@ int process(jack_nframes_t nframes, void *arg){
 						packet->type = cType_stop | cPeer_player;	
 						packet->peer = htonl(i);
 						packet->dataSize = 0;
-					}	
+					}
 					inchrec->status = inchrec->status & ~status_playing;
 					inchrec->changed = inchrec->changed | change_stop;
 					if((inchrec->status & status_cueing) == 0){ 
@@ -418,8 +418,8 @@ int process(jack_nframes_t nframes, void *arg){
 			// talkback is on for a TB channel that is input has enabled, route to cue
 			busbits = 2;
 			if((inchrec->sourceType == sourceTypeLive) && (inchrec->status & status_standby) && !(inchrec->status & status_loading)){
-				// live sources activeate talkback to cue bus even when not playing
-				activeBus = activeBus | 0x00000002;
+				// live sources activeate talkback to cue bus and any enabled mutes even when not playing
+				activeBus = activeBus | 0x00000002 | (busbits & 0x0f000000);
 				inchrec->status = inchrec->status | status_talkback;
 			}
 		}else{
@@ -596,7 +596,7 @@ int process(jack_nframes_t nframes, void *arg){
 						}
 					}
 				}
-			}		
+			}
 			/* check for past next APL event when playing and not in Cue */
 			if(inchrec->nextAplEvent){
 				if(((busbits & 2) == 0) && (inchrec->pos > inchrec->nextAplEvent)){
@@ -664,27 +664,27 @@ int process(jack_nframes_t nframes, void *arg){
 		if((b = outchrec->bus) >= bcount)
 			b = 0;
 
-			// set output device volume to lowest active mute group/TB channel gain * current device volume
+			// set output device volume to lowest active mute group channel gain * current device volume
 			least = 0xff;
-			if(activeBus & (0x11000000)){
+			if(activeBus & (0x01000000)){
 				// cue mute enabled
 				least = outchrec->muteLevels & 0xff; // truncate to lower byte
 			}
-			if(activeBus & (0x22000000)){
+			if(activeBus & (0x02000000)){
 				// mute group A enabled
 				groupGain = (outchrec->muteLevels >> 8); //second byte
 				groupGain = (groupGain & 0xff); // truncate to lower byte
 				if(groupGain < least)
 					least = groupGain;
 			}
-			if(activeBus & (0x44000000)){
+			if(activeBus & (0x04000000)){
 				// mute group B enabled
 				groupGain = (outchrec->muteLevels >> 16); //third byte
 				groupGain = (groupGain & 0xff); // truncate to lower byte
 				if(groupGain < least)
 					least = groupGain;
 			}
-			if(activeBus & (0x88000000)){
+			if(activeBus & (0x08000000)){
 				// mute group C enabled
 				groupGain = (outchrec->muteLevels >> 24); //fourth byte
 				groupGain = (groupGain & 0xff); // truncate to lower byte
@@ -742,7 +742,7 @@ int process(jack_nframes_t nframes, void *arg){
 					pk = SampSqrd;
 					
 				samp++;
-			}				
+			}
 
 			/* VU Block calculations */
 			i = (ccount * b) + c;
@@ -771,7 +771,7 @@ int process(jack_nframes_t nframes, void *arg){
 
 	/* advance mixbus buffer write marker */
 	mixbuffer_advance(mixEngineRef->mixbuses, nframes);
-			
+	
 	/* handle sending queued out-going control packets
 	 *  upto one per  process cycle */
 	size = jack_ringbuffer_peek(mixEngineRef->ctlOutQueue, (char*)&header, 7);
@@ -800,7 +800,7 @@ char *initMixer(mixEngineRecPtr *mixEngineRef, unsigned int width,
 						unsigned int inputs, unsigned int outputs, 
 						unsigned int buses, const char *server, 
 						const char* reqName, jack_options_t options){
-														
+						
 	unsigned int i, c, max, size;
 	char pname[32];
 	jack_port_t **port;
@@ -896,13 +896,13 @@ char *initMixer(mixEngineRecPtr *mixEngineRef, unsigned int width,
 					port++;
 				}
 			}else
-				return "memory allocation for input ports failed";						
+				return "memory allocation for input ports failed";
 			
 			/* Create Jack ports for monitor mix-minus taps */
 			max = width;
 			if(chrec->mm_jPorts = (jack_port_t**)calloc(max, 
 											sizeof(jack_port_t *))){
-				mlock(chrec->mm_jPorts, sizeof(jack_port_t *) * max);				
+				mlock(chrec->mm_jPorts, sizeof(jack_port_t *) * max);
 				port = chrec->mm_jPorts;
 				for(c=0; c<max; c++){
 					snprintf(pname, sizeof pname, "mmIn%dch%d", i, c);
@@ -948,7 +948,7 @@ char *initMixer(mixEngineRecPtr *mixEngineRef, unsigned int width,
 					port++;
 				}
 			}else
-				return "memory allocation for output group ports failed";	
+				return "memory allocation for output group ports failed";
 			chrec++;
 		}
 	}else
@@ -963,7 +963,7 @@ char *initMixer(mixEngineRecPtr *mixEngineRef, unsigned int width,
 	
 	if(jack_activate(mixRef->client)) 
 		return "cannot activate client";
-							
+		
 	/* no errors */
 	return NULL;
 }
@@ -997,12 +997,12 @@ void shutdownMixer(mixEngineRecPtr mixEngineRef){
 				munlock(chrec->mm_jPorts, sizeof(jack_port_t *) * mixEngineRef->chanCount);
 				free(chrec->mm_jPorts);	
 			}
-				
+			
 			if(chrec->VUmeters){
 				munlock(chrec->VUmeters, sizeof(vuData) * mixEngineRef->chanCount);	
 				free(chrec->VUmeters);
 			}
-				
+			
 			chrec++;	
 		}
 		munlock(mixEngineRef->ins, sizeof(inChannel) * mixEngineRef->inCount);	

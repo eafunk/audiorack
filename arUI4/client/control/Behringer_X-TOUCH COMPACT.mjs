@@ -472,6 +472,7 @@ function showPStat(val, ref){
 		}
 	}
 }
+
 function showPBus(val, ref){
 	let msg = new Array(3);
 	ref = parseInt(ref);

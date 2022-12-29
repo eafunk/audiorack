@@ -4661,6 +4661,7 @@ unsigned char handle_startrec(ctl_session *session){
 	char *param;
 	char *tmp, *end;
 	int sInt;
+	int status;
 	uint32_t uid = 0;
 
 	// first (only) parameter, meta data item UID in hex format
@@ -4678,13 +4679,19 @@ unsigned char handle_startrec(ctl_session *session){
 		}
 		if(uid){
 			tmp = GetMetaData(uid, "Type", 0);
-			if(!strcmp(tmp, "encoder")){		
+			if(!strcmp(tmp, "encoder")){
+				free(tmp);
+				status = GetMetaInt(uid, "Status", NULL);
+				if(status & rec_locked){
+					session->errMSG = "Encoder is locked\n";
+					return rError;
+				}
 				if(queueControlOutPacket(mixEngine, cPeer_recorder | cType_start, uid, 0, NULL)){
 					session->lastUID = uid;
 					return rOK; 
 				}
-			}
-			free(tmp);
+			}else
+				free(tmp);
 		}
 	}
 	session->errMSG = "Missing or bad parameter\n";
@@ -4695,6 +4702,7 @@ unsigned char handle_stoprec(ctl_session *session){
 	char *param;
 	char *tmp, *end;
 	int sInt;
+	int status;
 	uint32_t uid = 0;
 
 	// first (only) parameter, meta data item UID in hex format
@@ -4712,13 +4720,19 @@ unsigned char handle_stoprec(ctl_session *session){
 		}
 		if(uid){
 			tmp = GetMetaData(uid, "Type", 0);
-			if(!strcmp(tmp, "encoder")){		
+			if(!strcmp(tmp, "encoder")){
+				free(tmp);
+				status = GetMetaInt(uid, "Status", NULL);
+				if(status & rec_locked){
+					session->errMSG = "Encoder is locked\n";
+					return rError;
+				}
 				if(queueControlOutPacket(mixEngine, cPeer_recorder | cType_stop, uid, 0, NULL)){
 					session->lastUID = uid;
 					return rOK; 
 				}
-			}
-			free(tmp);
+			}else
+				free(tmp);
 		}
 	}
 	session->errMSG = "Missing or bad parameter\n";
@@ -4728,10 +4742,11 @@ unsigned char handle_recgain(ctl_session *session){
 	char *param;
 	char *tmp, *end;
 	int sInt;
+	int status;
 	valuetype val;
 	uint32_t uid = 0;
 
-	// first (only) parameter, meta data item UID in hex format
+	// first parameter, meta data item UID in hex format
 	param = strtok_r(NULL, " ", &session->save_pointer);
 	if(param != NULL){
 		if(strlen(param) > 2){
@@ -4751,7 +4766,13 @@ unsigned char handle_recgain(ctl_session *session){
 			val.iVal = htonl(val.iVal);
 			if(uid){
 				tmp = GetMetaData(uid, "Type", 0);
-				if(!strcmp(tmp, "encoder")){		
+				if(!strcmp(tmp, "encoder")){
+					free(tmp);
+					status = GetMetaInt(uid, "Status", NULL);
+					if(status & rec_locked){
+						session->errMSG = "Encoder is locked\n";
+						return rError;
+					}
 					if(queueControlOutPacket(mixEngine, cPeer_recorder | cType_vol, uid, 4, (char *)&(val.iVal))){
 						session->lastUID = uid;
 						// send out notifications
@@ -4762,13 +4783,13 @@ unsigned char handle_recgain(ctl_session *session){
 						notifyMakeEntry(nType_rgain, &data, sizeof(data));
 						return rOK; 
 					}
+				}else
 					free(tmp);
-				}
 			}
 		}
 	}
 	session->errMSG = "Missing or bad parameter\n";
-	return rError;		
+	return rError;
 }
 
 unsigned char handle_lockrec(ctl_session *session){
@@ -4792,13 +4813,14 @@ unsigned char handle_lockrec(ctl_session *session){
 		}
 		if(uid){
 			tmp = GetMetaData(uid, "Type", 0);
-			if(!strcmp(tmp, "encoder")){		
+			if(!strcmp(tmp, "encoder")){
+				free(tmp);
 				if(queueControlOutPacket(mixEngine, cPeer_recorder | cType_lock, uid, 0, NULL)){
 					session->lastUID = uid;
 					return rOK; 
 				}
-			}
-			free(tmp);
+			}else
+				free(tmp);
 		}
 	}
 	session->errMSG = "Missing or bad parameter\n";
@@ -4826,13 +4848,14 @@ unsigned char handle_unlockrec(ctl_session *session){
 		}
 		if(uid){
 			tmp = GetMetaData(uid, "Type", 0);
-			if(!strcmp(tmp, "encoder")){		
+			if(!strcmp(tmp, "encoder")){
+				free(tmp);
 				if(queueControlOutPacket(mixEngine, cPeer_recorder | cType_unlock, uid, 0, NULL)){
 					session->lastUID = uid;
 					return rOK; 
 				}
-			}
-			free(tmp);
+			}else
+				free(tmp);
 		}
 	}
 	session->errMSG = "Missing or bad parameter\n";
@@ -4843,6 +4866,7 @@ unsigned char handle_closerec(ctl_session *session){
 	char *param;
 	char *tmp, *end;
 	int sInt;
+	int status;
 	uint32_t uid = 0;
 
 	// first (only) parameter, meta data item UID in hex format
@@ -4860,7 +4884,13 @@ unsigned char handle_closerec(ctl_session *session){
 		if(uid){
 			tmp = GetMetaData(uid, "Type", 0);
 			if(!strcmp(tmp, "encoder")){
-				if(GetMetaInt(uid, "Status", NULL)){
+				free(tmp);
+				status = GetMetaInt(uid, "Status", NULL);
+				if(status & rec_locked){
+					session->errMSG = "Encoder is locked\n";
+					return rError;
+				}
+				if(status){
 					if(queueControlOutPacket(mixEngine, cPeer_recorder | cType_end, uid, 0, NULL)){
 						session->lastUID = uid;
 						return rOK; 
@@ -4869,10 +4899,15 @@ unsigned char handle_closerec(ctl_session *session){
 					// not initialized... just release the metadata record
 					releaseMetaRecord(uid);
 					session->lastUID = uid;
+					notifyData data;
+					data.senderID = 0;
+					data.reference = htonl(0);
+					data.value.iVal = htonl(0);
+					notifyMakeEntry(nType_rstat, &data, sizeof(data));
 					return rOK;
 				}
-			}
-			free(tmp);
+			}else
+				free(tmp);
 		}
 	}
 	session->errMSG = "Missing or bad parameter\n";
@@ -4983,6 +5018,11 @@ unsigned char handle_newrec(ctl_session *session){
 		
 		tx_length = snprintf(buf, sizeof buf, "UID=%08x\n", (unsigned int)newUID);
 		my_send(session, buf, tx_length, session->silent, 0);
+		notifyData data;
+		data.senderID = 0;
+		data.reference = htonl(0);
+		data.value.iVal = htonl(0);
+		notifyMakeEntry(nType_rstat, &data, sizeof(data));
 		return rOK;
 	}
 	session->errMSG = "Error creating a new encoder UID record.\n";
@@ -4995,6 +5035,7 @@ unsigned char handle_initrec(ctl_session *session){
 	char *tmp;
 	char *name;
 	char *pipe;
+	int status;
 	uint32_t uid;
 	
 	struct execRec{
@@ -5023,6 +5064,11 @@ unsigned char handle_initrec(ctl_session *session){
 			tmp = GetMetaData(uid, "Type", 0);
 			if(!strcmp(tmp, "encoder")){
 				free(tmp);
+				status = GetMetaInt(uid, "Status", NULL);
+				if(status & rec_locked){
+					session->errMSG = "Encoder is locked\n";
+					return rError;
+				}
 				rdir = GetMetaData(0, "def_record_dir", 0);
 				if(!strlen(rdir)){
 					// get working diretory if def_record_dir is empty
@@ -5079,7 +5125,8 @@ unsigned char handle_initrec(ctl_session *session){
 				if(strlen(tmp)){
 					// handle special rec_dir macro, which doesn't corrispond to a meta value
 					str_ReplaceAll(&tmp, "[rec_dir]", rdir);
-					// next we conver all pipeline string macros into their values
+					// next we conver all string macros into their values
+					// by example: MakePL = "[rec_dir][Name].fpl" would create the PL file /the/default/recording/dir/name-of-encoder.fpl
 					resolveStringMacros(&tmp, uid);
 					recPtr.argv[i] = strdup("-a");
 					i++;

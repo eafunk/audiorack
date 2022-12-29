@@ -1686,8 +1686,8 @@ void *controlQueueInWatcher(void *refCon){
 													free(tmp);
 													tmp = fstr(item->valuedouble, 2);
 													if(UpdateMetaData(packet->peer, item->string, tmp)){
-														if(strcmp(item->string, "Position"))
-															// any change except position will trigger a notify packet send
+														if(strcmp(item->string, "Position") && strcmp(item->string, "Volume"))
+															// any change except position and Volume will trigger a notify packet send
 															notify = 1;
 													}
 												}else if(item->type == cJSON_True){

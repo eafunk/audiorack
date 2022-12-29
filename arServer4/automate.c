@@ -1171,12 +1171,12 @@ void AutomatorTask(void){
 	}
 }
 
-
 void checkRecorders(void){
 	unsigned int i;
 	uint32_t UID;
 	long ts;
 	unsigned char empty;
+	unsigned char del = 0;
 
 	i = 0;
 	while(UID = FindUidForKeyAndValue("Type", "encoder", i)){
@@ -1184,9 +1184,18 @@ void checkRecorders(void){
 		if(!empty && ((time(NULL) - ts) > 30)){
 			// We have not heard from this recorder for more than 30 seconds, delete it
 			releaseMetaRecord(UID);
+			del = 1;
 			continue;
 		}
 		i++;
+	}
+	if(del){
+		// notify if a recorder/encoder has been removed
+		notifyData data;
+		data.senderID = 0;
+		data.reference = htonl(0);
+		data.value.iVal = htonl(0);
+		notifyMakeEntry(nType_rstat, &data, sizeof(data));
 	}
 }
 

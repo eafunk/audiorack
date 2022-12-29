@@ -69,8 +69,8 @@
 // rec status bits: b0-12 status, b16-31 are error code, if any 
 enum{
  	rec_uninit			=0L,
-	rec_ready			=(1L << 0),		
-	rec_start			=(1L << 1),		
+	rec_ready			=(1L << 0),
+	rec_start			=(1L << 1),
 	rec_running			=(1L << 2),		// note: same as status_playing 
 	rec_stop			=(1L << 3),
 	rec_done			=(1L << 5),		// recorder time limit exceeded
@@ -1490,7 +1490,7 @@ int main(int argc, char *argv[]){
 	fprintf(stderr, "-a optionally specifies a file path to log track tag data that is received from audiorack control port in audiorack .apl format.\n");
 	fprintf(stderr, "   Note that the -b option (see below) must also be set for any tracks to actually be logged.\n");
 	fprintf(stderr, "-s optionaly enables recorder auto-starting at/after the specified unix-time value.\n");
-	fprintf(stderr, "-l optionaly enables recorder auto-stoping at/after the specified record duration is reached.\n");
+	fprintf(stderr, "-l optionaly enables recorder auto-stoping at/after the specified record duration, integer seconds, is reached.\n");
 	fprintf(stderr, "-b optionaly enables the passing of song tag data, received from the control port, to the gstreamer pipeline\n");
 	fprintf(stderr, "when the received tag play bus bits have the specified bit number [1..8] set (bit number + 1).\n");
 	fprintf(stderr, "Control client name is the Jack name for an arServer instance to which we will connect our control ports,\n");

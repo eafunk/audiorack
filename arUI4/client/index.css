@@ -32,7 +32,7 @@ html, body {
 	z-index: 5; /* Stay on top */
 	top: 0px; /* Stay at the top */
 	right: 0px;
-	background-color: #eee; 
+	background-color: #888; 
 	overflow-x: hidden; /* Disable horizontal scroll */
 	padding-top: 5px; /* Place content 5px from the top */
 	transition: 0.5s; /* 0.5 second transition effect to slide in the */
@@ -212,19 +212,53 @@ footer {
 		"ins"
 		"accord"
 		"admin";
-	grid-template-rows: 150px 150px 600px 329px minmax(200px, auto);
+	grid-template-rows: 150px 150px minmax(600px, auto-fit) 329px minmax(200px, auto-fit) minmax(200px, auto-fit);
 	height: 100%;
+}
+
+.stRecGrid {
+	display: grid;
+	grid-gap: 2px;
+	font-size: 8px;
+	border-width: 1px;
+	border-style: inset;
+	overflow-wrap: break-word;
+	text-align: center;
+	vertical-align: middle;
+	align-items: center;
+	grid-template-areas: 
+		"head head head head head"
+		"button time bus vu fade"
+		"button rem status vu fade";
+	grid-template-columns: 68px 120px 100px 1fr 1fr;
+	grid-template-rows: 17px 17px 17px;
 }
 
 @media (min-width: 1420px) {
 	.stGrid {
 		grid-template-areas: 
-			"status outs  accord"
+			"status outs accord"
 			"queue ins accord"
 			"queue admin accord";
 		grid-template-columns: 1fr 584px 200px;
-		grid-template-rows: 150px 329px minmax(200px, auto);
+		grid-template-rows: 150px 329px minmax(200px, auto-fit);
 	}
+	
+	.stRecGrid {
+		grid-template-areas: 
+			"head head"
+			"bus status"
+			"time vu"
+			"rem vu"
+			"button fade";
+		grid-template-columns: 68px 1fr;
+		grid-template-rows:  17px 17px 17px 17px 34px;
+	}
+}
+
+.rVUcanvas{
+	width: 90%;
+	height: 10px;
 }
 
 .stStatus {
@@ -359,6 +393,19 @@ footer {
 	right: 0px;
 	background-color: #f6f6f6;
 	min-width: 230px;
+	border: 1px solid #ddd;
+	z-index: 20;
+}
+
+.search-list-rtemplate {
+	text-align: left;
+	display: none;
+	max-height: 150px;
+	overflow-y: auto;
+	position: relative;
+	right: 0px;
+	background-color: #f6f6f6;
+	min-width: 120px;
 	border: 1px solid #ddd;
 	z-index: 20;
 }
@@ -560,19 +607,18 @@ button.active {
 .accpanel {
 	flex: 1;
 	flex-flow: column;
-	padding: 0 18px;
 	background-color: white;
 	display: none;
 	overflow: auto;
-	padding: 5px;
+	padding: 2px;
 }
 
 /* drag and drop lists */
 .ddlist {
 	list-style: none;
 	overflow: auto;
-	padding: 5px;
-	margin: 5px;
+	padding: 1px;
+	margin: 1px;
 }
 
 .ddlist li {

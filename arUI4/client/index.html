@@ -286,11 +286,11 @@
 							</div>
 							<div style="width: 55px;">
 								<button class="stTbBtn" ontouchstart="stTBAction(event, true, 0);" onmousedown="stTBAction(event, true, 0);"
-										onmouseup="stTBAction(event, false, 1);" ontouchend="stTBAction(event,false, 1);">TB1</button>
+										onmouseup="stTBAction(event, false, 0);" ontouchend="stTBAction(event,false, 0);">TB1</button>
 								<button class="stTbBtn" ontouchstart="stTBAction(event, true, 1);" onmousedown="stTBAction(event, true, 1);"
-										onmouseup="stTBAction(event, false, 2);" ontouchend="stTBAction(event, false, 2);">TB2</button>
+										onmouseup="stTBAction(event, false, 1);" ontouchend="stTBAction(event, false, 1);">TB2</button>
 								<button class="stTbBtn" ontouchstart="stTBAction(event, true, 2);" onmousedown="stTBAction(event, true, 2);"
-										onmouseup="stTBAction(event, false, 3);" ontouchend="stTBAction(event, false, 3);">TB3</button>
+										onmouseup="stTBAction(event, false, 2);" ontouchend="stTBAction(event, false, 2);">TB3</button>
 							</div>
 						</div>
 						<div id="studioIns" class="stIns">
@@ -305,6 +305,8 @@
 								</div>
 								<button class="accordion" onclick="clickAccordType(event, reloadStudioSection, 'recorders')">Recorders</button>
 								<div class="accpanel">
+									<ul class="ddlist" id="stRecorderList">
+									</ul>
 								</div>
 								<button class="accordion" onclick="clickAccordType(event, reloadStudioSection, 'delay')">Delay</button>
 								<div class="accpanel">

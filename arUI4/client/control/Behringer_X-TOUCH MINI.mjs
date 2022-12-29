@@ -434,6 +434,10 @@ function showPVol(val, ref){
 	}
 }
 
+function showPVU(val, ref){
+
+}
+
 function playersUpdate(){
 	let base = bank * pCount;
 	for(let i=0; i<pCount; i++){
@@ -455,5 +459,6 @@ export {
 	showPStat as setPStat,
 	showPBus as setPBus,
 	showPBal as setPBal,
-	showPVol as setPVol
+	showPVol as setPVol,
+	showPVU as setPVU
 };
