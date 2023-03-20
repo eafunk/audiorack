@@ -145,8 +145,10 @@ function timeFormat(timesec, noDP){
 			timesec = -timesec;
 			negative = true;
 		}
-		let hrs = Math.floor(timesec / 3600);
-		let rem = timesec - hrs * 3600;
+		let days = Math.floor(timesec / 86400);
+		let rem = timesec - days * 86400;
+		let hrs = Math.floor(rem / 3600);
+		rem = rem - hrs * 3600;
 		let mins = Math.floor(rem / 60);
 		rem = rem - mins * 60;
 		let secs = Math.floor(rem);
@@ -154,6 +156,13 @@ function timeFormat(timesec, noDP){
 		let result = "";
 		if(negative)
 			result = "-";
+		if(days){
+			result += days;
+			if(hrs < 10)
+				result += ":0";
+			else
+				result += ":";
+		}
 		if(hrs){
 			result += hrs;
 			if(mins < 10)
@@ -2922,6 +2931,143 @@ async function saveItemProperties(evt){
 	}
 }
 
+async function saveEncProperties(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let makepl = false;
+	let err = false;
+	let form = evt.target.form.elements;
+	if(!itemProps.canEdit)
+		return;
+	let ref = itemProps.UID;
+	let studio = studioName.getValue();
+	if(ref && studio.length){
+		let hexStr =  ("00000000" + ref.toString(16)).substr(-8);
+		for(let i = 0 ; i < form.length ; i++){
+			let el = form[i];
+			let itemName = el.name;
+			let is = el.value;
+			if(el.type == "checkbox"){
+				if(el.checked)
+					is = 1;
+				else
+					is = 0;
+			}
+			
+			if(itemName === "MakePLCheck"){
+				makepl = is;
+				continue;
+			}else if(itemName === "MakePL" && !makepl){
+				is = "";
+			}else if(itemName === "submit"){
+				continue;
+			}
+			
+			let was = itemProps[itemName];
+			if(was === undefined) was = "";
+			if(was === null) was = "";
+			
+			if(was !== is){
+				is = encodeURIComponent(is);
+				let resp = await fetchContent("studio/"+studio+"?cmd=setmeta%20"+hexStr+"%20"+itemName+"%20"+is);
+				if(resp instanceof Response){
+					if(!err && resp.ok){
+						let text = await resp.text();
+						if(text.search("OK") != 0){
+							alert("Error setting "+itemName);
+							err = true;
+						}
+					}else
+						err = true;
+				}
+			}
+		}
+		if(!err){
+			let resp = await fetchContent("studio/"+studio+"?cmd=initrec%20"+hexStr);
+			if(resp instanceof Response){
+				if(resp.ok){
+					let text = await resp.text();
+					if(text.search("<br>OK") != 0)
+						alert("encoder/recorder initialized.");
+						closeInfo();
+						return;
+				}
+			}
+			alert("Failed to initialize encoder/recorder.");
+		}else
+			alert("Failed to set all properties.");
+	}
+}
+
+async function reloadEncProperties(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let makepl = false;
+	let form = document.getElementById("enitemform");
+	if(!itemProps.canEdit)
+		return;
+	let ref = itemProps.UID;
+	let studio = studioName.getValue();
+	if(ref && studio.length){
+		let hexStr =  ("00000000" + ref.toString(16)).substr(-8);
+		
+		itemProps.Pipeline = document.getElementById("enPipeline").value;
+console.log(itemProps.Pipeline);
+		is = encodeURIComponent(itemProps.Pipeline);
+		let resp = await fetchContent("studio/"+studio+"?cmd=setmeta%20"+hexStr+"%20Pipeline%20"+is);
+		if(resp instanceof Response){
+			if(resp.ok){
+				let text = await resp.text();
+				if(text.search("OK") != 0){
+					alert("Error setting "+itemName);
+					return;
+				}
+			}else
+				return;
+		}
+		
+		for(let i = 0 ; i < form.length ; i++){
+			let el = form[i];
+			let itemName = el.name;
+			let is = el.value;
+			if(el.type == "checkbox"){
+				if(el.checked)
+					is = 1;
+				else
+					is = 0;
+			}
+			
+			if(itemName === "MakePLCheck"){
+				makepl = is;
+				continue;
+			}else if(itemName === "MakePL" && !makepl){
+				is = "";
+			}else if(itemName === "submit"){
+				continue;
+			}
+			
+			let was = itemProps[itemName];
+			if(was === undefined) was = "";
+			if(was === null) was = "";
+			
+			if(was !== is){
+				is = encodeURIComponent(is);
+				let resp = await fetchContent("studio/"+studio+"?cmd=setmeta%20"+hexStr+"%20"+itemName+"%20"+is);
+				if(resp instanceof Response){
+					if(resp.ok){
+						let text = await resp.text();
+						if(text.search("OK") != 0)
+							alert("Error setting "+itemName);
+					}
+				}
+			}
+		}
+	}
+	let el = document.getElementById("infopane");
+	let da = document.getElementById("infodata");
+	showEncoderItem(el, da);
+}
+
 async function saveItemInstance(evt){
 	evt.preventDefault();
 	evt.stopPropagation();
@@ -4623,49 +4769,167 @@ function showEncoderItem(panel, container){
 //!!
 /*
 // required settings
-GetMetaInt(uid, "TagBus", NULL)	// only relevent if MakePL is set, but must be set otherwise, even though it's ignored
-GetMetaData(uid, "Name", 0)
-GetMetaData(uid, "Pipeline", 0)
+x GetMetaInt(uid, "TagBus", NULL)	// bus number + 1, can't be zero , that is the ultimate source of the audio, for which track info will be passed 
+x GetMetaData(uid, "Name", 0)
+xGetMetaData(uid, "Pipeline", 0)	// by example: 
+ "Pipeline appsrc name=audiosrc ! audioresample ! audio/x-raw,rate=[samplerate=44100,8000,16000,32000,44100,48000,96000],
+ channels=[channels=2,1,2] ! audioconvert ! avenc_aac bitrate=[bitrate=192000] ! mp4mux ! filesink location=[rec_dir][Name].m4a"
+GetMetaData(uid, "Ports", 0)	// by example: "[ourJackName]:mixBus3ch0&[ourJackName]:mixBus3ch1"
+
 
 // optional settings
-GetMetaInt(uid, "Persistent", NULL)	// true/false
-GetMetaInt(uid, "Limit", NULL)	// seconds
+x GetMetaInt(uid, "Persistent", NULL)	// true/false
+x GetMetaInt(uid, "Limit", NULL)	// seconds
 GetMetaInt(uid, "Start", NULL)	// unix-time
-GetMetaData(uid, "MakePL", 0)		// by example: MakePL = "[rec_dir][Name].fpl" would create the PL file /the/default/recording/dir/name-of-encoder.fpl
+x GetMetaData(uid, "MakePL", 0)		// by example: MakePL = "[rec_dir][Name].fpl" would create the PL file /the/default/recording/dir/name-of-encoder.fpl
 */
-
-	let inner = "<form id='encitemform' style='padding:5px;'> Type: "+itemProps.Type+"<br>";
-	inner += "Name: <input type='text' id='encName' size='45' name='Name'";
+	let inner = "<form id='enitemform' style='padding:5px;'> Type: "+itemProps.Type+"<br>";
+	inner += "Name: <input type='text' id='enName' size='45' name='Name'";
 	inner += " value='"+quoteattr(itemProps.Name)+"'";
 	if(itemProps.canEdit){
-		inner += "></input><br>";
-		inner += "<button id='savepropbut' name='submit' onclick='saveItemProperties(event)'>Save "+itemProps.Type+"</button>";
+		inner += "></input>";
 	}else
 		inner += " readonly></input>";
-	inner += "</form>";
-	inner += `<button class="accordion" id="metabut" onclick="selectAccordType(event, reloadItemSection, 'custom')">Custom</button>
-	<div class="accpanel">
-	</div>`;
-	if(itemProps.canEdit){
-		inner += "<button id='delitembut' onclick='itemDelete(event)'>Delete Item</button>";
-		inner += ` Reassign items to <button class="editbutton" id="itemreassignbtn" data-id="1" onclick="toggleShowSearchList(event)">`;
-		inner += `[None]</button>
-							<div class="search-list">
-								<button id="itemReassignRefresh" class="editbutton" onclick="refreshItemReassign(event)">Refresh List</button><br>
-								<input type="text" id="itemReassignText" data-removecb="unlistItemName" onkeyup="filterSearchList(event)" data-div="itemreassignbtn" placeholder="Enter Search..."></input>
-								<div id="itemReassignList"></div>
-							</div>`;
+		
+	inner += "<br><input type='checkbox' name='Persistent' id='enpersist' ";
+	if(itemProps.Persistent)
+		inner += "checked";
+	if(!itemProps.canEdit)
+		inner += " disabled";
+	inner += "></input> Persistent: keeps running when audio inputs are disconnected.<br>";
+	
+	inner += "<br><br>Post Tracks from Bus:<select id='enTagBus' name='TagBus'>";
+	for(let b=1; b<=studioStateCache.buscnt; b++){
+		let name;
+		switch(b){
+			case 1:
+				name = "Monitor"
+				break;
+			case 2:
+				name = "Cue"
+				break;
+			case 3:
+				name = "Main";
+				break;
+			case 4:
+				name = "Alternate";
+				break;
+			default:
+				name = "Bus "+b;
+				break;
+		}
+		if(itemProps.TagBus == b)
+			inner += "<option value='"+b+"' selected>"+name+"</option>";
+		else
+			inner += "<option value='"+b+"'>"+name+"</option>";
 	}
+	inner += "</select>";
+	inner += "<br><input type='checkbox' name='MakePLCheck' id='enmakepl' ";
+	if(itemProps.MakePL)
+		inner += "checked";
+	if(!itemProps.canEdit)
+		inner += " disabled";
+	inner += "></input>";
+	inner += "Save tracks to file: <input type='text' id='enFPL' size='30' name='MakePL'";
+	inner += " value='"+quoteattr(itemProps.MakePL)+"'  placeholder='[rec_dir][Name].fpl'";
+	if(itemProps.canEdit){
+		inner += "></input>";
+	}else
+		inner += " readonly></input>";
+	let value = parseInt(itemProps.Limit);
+	if(!value)
+		value = 0;
+	inner += "<br>Run time limit (sec.) <input type='number' min='0' max='240' id='enLimit' name='Limit' value='"+value+"'";
+		if(itemProps.canEdit){
+		inner += "></input> Zero for no limit<br>";
+	}else
+		inner += " readonly></input> Zero for no limit<br>";
+		
+	inner += encPropsFromPipeline(itemProps.Pipeline, itemProps, itemProps.canEdit);
+	
+	if(itemProps.canEdit)
+		inner += "<br><br><button id='saveinitenc' name='submit' onclick='saveEncProperties(event)'>Initialize Encoder/Recorder</button>";
+
+	inner += "</form>";
+	
+	inner += "<br><br>Raw Gstreamer Pipeline<textarea rows='12' cols='58' id='enPipeline'";
+	if(itemProps.canEdit){
+		inner += ">";
+	}else
+		inner += " readonly>";
+	inner += quoteattr(itemProps.Pipeline);
+	inner += "</textarea>";
+	if(itemProps.canEdit)
+		inner += "<br><button id='reloadenc' onclick='reloadEncProperties(event)'>Refresh properties</button>";
 	container.innerHTML = inner;
 	panel.style.width = infoWidth;
 	let el = document.getElementById("showinfobtn");
 	if(el)
 		el.style.display = "none";
-	let genbut = document.getElementById("metabut");
-	selectAccordType({target: metabut}, reloadItemSection, 'custom');
-	el = document.getElementById("itemReassignRefresh");
+	
 	if(itemProps.canEdit)
 		refreshItemReassign();
+}
+
+function encPropsFromPipeline(Pipeline, props, canEdit){
+// format: pipeline is parsed, searching for all bracketed content.  For each bracketed content section, a control is generated
+// named with the text following the first bracket; defult value set, if any by value following equil sign; and control being either 
+// a list if values are comma specified, or a text field if no commas are found.
+	let inner = "";
+	if(Pipeline.indexOf("[") > -1){
+		let parts = Pipeline.split("[");
+		parts.shift(); // ignore text prior to first "["
+		let ignore = ["rec_dir", "Name"];
+		for(let n = 0; n < parts.length; n++){
+			let sub = parts[n].split("]");
+			parts[n] = sub[0];
+			sub = parts[n].split("=");
+			let key = sub[0];
+			// ignore certain keys
+			if(ignore.includes(key)) 
+				continue; // already have a control for this
+			ignore.push(key);
+			let def = sub[1];
+			let val = props[key];
+			if(def){
+				let list = def.split(",");
+				def = list[0];
+				if(!val || !val.length)
+					val = def;
+				list.shift();
+				if(list.length){
+					// list control
+					inner += "<br>"+key+": <select id='en"+key+"' name='"+key+"'>";
+					for(let i=0; i<=list.length; i++){
+						if(list[i] && list[i].length){
+							if(list[i] == val)
+								inner += "<option value='"+list[i]+"' selected>"+list[i]+"</option>";
+							else
+								inner += "<option value='"+list[i]+"'>"+list[i]+"</option>";
+						}
+					}
+					inner += "</select>";
+				}else{
+					// text control with default value
+					inner += "<br>"+key+": <input type='text' id='en"+key+"' size='20' name='"+key+"'";
+					inner += " value='"+quoteattr(val)+"'";
+					if(canEdit)
+						inner += "></input>";
+					else
+						inner += " readonly></input>";
+				}
+			}else{
+				// text control, no default
+				inner += "<br>"+key+": <input type='text' id='en"+key+"' size='15' name='"+key+"'";
+				inner += " value='"+quoteattr(props[key])+"'";
+				if(canEdit)
+					inner += "></input>";
+				else
+					inner += " readonly></input>";
+			}
+		}
+	}
+	return inner;
 }
 
 async function showPropItem(panel, container){
@@ -6874,7 +7138,7 @@ async function refreshRecorderPanel(){
 	</div>
 	<div id="rTime$UID$" style="grid-area: time; font-size: 12px;">$Time->timeFormatNoDP$</div>
 	<div id="rRem" style="grid-area: rem; font-size: 12px;"></div>
-	<div id="rBus$UID$" style="grid-area: bus;">Bus</div>
+	<div id="rBus$UID$" style="grid-area: bus;">$Ports$</div>
 	<div id="rStatus$UID$" style="grid-area: status;"></div>
 	<div style="grid-area: button; padding: 2px;">
 		<button class="playerStopBtn" id="rRec$UID$" data-id="$UID$" style="float: left; display: flex;"><i class="fa fa-circle" aria-hidden="true" onclick="stEncoderAction('run', event);"></i></button>
@@ -7025,16 +7289,22 @@ function updateEncoderVolUI(ref, val){
 	}
 }
 
-function stEncoderAction(type, evt){
+async function stEncoderAction(type, evt){
 	let uid = evt.target.parentNode.getAttribute("data-id");
 	if(uid && uid.length){
 		uid = parseInt(uid);
 		if(uid){
 			if(type == "settings"){
+				// show properties
 				let item = studioStateCache.meta[uid];
-				if(item)
+				if(item){
+					// make sure to set the UID, so the panel can update changes
+					item.UID = uid;
+					// show the item
 					showItem(item, !(item.Locked || (item.Status & 1)));
+				}
 			}else{
+				// handle actions
 				let studio = studioName.getValue();
 				if(studio.length){
 					let hexStr =  ("00000000" + uid.toString(16)).substr(-8);
@@ -7043,7 +7313,8 @@ function stEncoderAction(type, evt){
 					}else if(type == "stop"){
 						fetchContent("studio/"+studio+"?cmd=stoprec "+hexStr);
 					}else if(type == "unload"){
-						fetchContent("studio/"+studio+"?cmd=closerec "+hexStr);
+						await fetchContent("studio/"+studio+"?cmd=closerec "+hexStr);
+						refreshRecorderPanel();
 					}
 				}
 			}
@@ -7829,6 +8100,14 @@ function studioDelMeta(ref){
 		if(el){
 			// this meta record has an element in the queue... trigger an queue update
 			syncQueue(studioName.getValue());
+		}
+		// check recorder list for update
+		for(let i=0; i<studioStateCache.encoders.length; i++){
+			let item = studioStateCache.encoders[i];
+			if(item.UID == ref){
+				// in recorder list
+				refreshRecorderPanel();
+			}
 		}
 	}
 }

@@ -416,11 +416,11 @@ int process(jack_nframes_t nframes, void *arg){
 		busbits = inchrec->busses;
 		if(tbBits & busbits){
 			// talkback is on for a TB channel that is input has enabled, route to cue
-			busbits = 2;
 			if((inchrec->sourceType == sourceTypeLive) && (inchrec->status & status_standby) && !(inchrec->status & status_loading)){
 				// live sources activeate talkback to cue bus and any enabled mutes even when not playing
 				activeBus = activeBus | 0x00000002 | (busbits & 0x0f000000);
 				inchrec->status = inchrec->status | status_talkback;
+				busbits = 2;
 			}
 		}else{
 			if(inchrec->status & status_talkback)
