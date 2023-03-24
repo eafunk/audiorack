@@ -102,6 +102,15 @@ function quoteattr(s){
 		return "";
 }
 
+function dateToISOLocal(date){
+	let offsetMs = date.getTimezoneOffset() * 60 * 1000;
+	let msLocal =  date.getTime() - offsetMs;
+	let dateLocal = new Date(msLocal);
+	let iso = dateLocal.toISOString();
+	let isoLocal = iso.slice(0, 19);
+	return isoLocal;
+}
+
 function unixTimeToDateStr(ts){
 	if(ts){
 		let millis = ts * 1000;
@@ -2932,11 +2941,14 @@ async function saveItemProperties(evt){
 }
 
 async function saveEncProperties(evt){
-	evt.preventDefault();
-	evt.stopPropagation();
+	if(evt){
+		evt.preventDefault();
+		evt.stopPropagation();
+	}
+	let enstart = false;
 	let makepl = false;
 	let err = false;
-	let form = evt.target.form.elements;
+	let form = document.getElementById("enitemform");
 	if(!itemProps.canEdit)
 		return;
 	let ref = itemProps.UID;
@@ -2959,6 +2971,15 @@ async function saveEncProperties(evt){
 				continue;
 			}else if(itemName === "MakePL" && !makepl){
 				is = "";
+			}else if(itemName === "StartCheck"){
+				enstart = is;
+				continue;
+			}else if(itemName === "Start"){
+				if(enstart){
+					// convert to unixtime from local ISO format 
+					is = Date.parse(is) / 1000;
+				}else
+					is = "0";
 			}else if(itemName === "submit"){
 				continue;
 			}
@@ -2987,10 +3008,11 @@ async function saveEncProperties(evt){
 			if(resp instanceof Response){
 				if(resp.ok){
 					let text = await resp.text();
-					if(text.search("<br>OK") != 0)
+					if(text.search("OK<br>") == 0){
 						alert("encoder/recorder initialized.");
 						closeInfo();
 						return;
+					}
 				}
 			}
 			alert("Failed to initialize encoder/recorder.");
@@ -3010,9 +3032,8 @@ async function reloadEncProperties(evt){
 	let studio = studioName.getValue();
 	if(ref && studio.length){
 		let hexStr =  ("00000000" + ref.toString(16)).substr(-8);
-		
+		// save the pipeline property
 		itemProps.Pipeline = document.getElementById("enPipeline").value;
-console.log(itemProps.Pipeline);
 		is = encodeURIComponent(itemProps.Pipeline);
 		let resp = await fetchContent("studio/"+studio+"?cmd=setmeta%20"+hexStr+"%20Pipeline%20"+is);
 		if(resp instanceof Response){
@@ -3025,43 +3046,8 @@ console.log(itemProps.Pipeline);
 			}else
 				return;
 		}
-		
-		for(let i = 0 ; i < form.length ; i++){
-			let el = form[i];
-			let itemName = el.name;
-			let is = el.value;
-			if(el.type == "checkbox"){
-				if(el.checked)
-					is = 1;
-				else
-					is = 0;
-			}
-			
-			if(itemName === "MakePLCheck"){
-				makepl = is;
-				continue;
-			}else if(itemName === "MakePL" && !makepl){
-				is = "";
-			}else if(itemName === "submit"){
-				continue;
-			}
-			
-			let was = itemProps[itemName];
-			if(was === undefined) was = "";
-			if(was === null) was = "";
-			
-			if(was !== is){
-				is = encodeURIComponent(is);
-				let resp = await fetchContent("studio/"+studio+"?cmd=setmeta%20"+hexStr+"%20"+itemName+"%20"+is);
-				if(resp instanceof Response){
-					if(resp.ok){
-						let text = await resp.text();
-						if(text.search("OK") != 0)
-							alert("Error setting "+itemName);
-					}
-				}
-			}
-		}
+		// save all the other properties in the form
+		saveEncProperties();
 	}
 	let el = document.getElementById("infopane");
 	let da = document.getElementById("infodata");
@@ -4765,7 +4751,7 @@ function itemPrioRender(val){
 	return inner;
 }
 
-function showEncoderItem(panel, container){
+async function showEncoderItem(panel, container){
 //!!
 /*
 // required settings
@@ -4780,7 +4766,7 @@ GetMetaData(uid, "Ports", 0)	// by example: "[ourJackName]:mixBus3ch0&[ourJackNa
 // optional settings
 x GetMetaInt(uid, "Persistent", NULL)	// true/false
 x GetMetaInt(uid, "Limit", NULL)	// seconds
-GetMetaInt(uid, "Start", NULL)	// unix-time
+x GetMetaInt(uid, "Start", NULL)	// unix-time
 x GetMetaData(uid, "MakePL", 0)		// by example: MakePL = "[rec_dir][Name].fpl" would create the PL file /the/default/recording/dir/name-of-encoder.fpl
 */
 	let inner = "<form id='enitemform' style='padding:5px;'> Type: "+itemProps.Type+"<br>";
@@ -4798,6 +4784,9 @@ x GetMetaData(uid, "MakePL", 0)		// by example: MakePL = "[rec_dir][Name].fpl" w
 		inner += " disabled";
 	inner += "></input> Persistent: keeps running when audio inputs are disconnected.<br>";
 	
+	let devList = await stGetSourceList();
+console.log(devList);
+
 	inner += "<br><br>Post Tracks from Bus:<select id='enTagBus' name='TagBus'>";
 	for(let b=1; b<=studioStateCache.buscnt; b++){
 		let name;
@@ -4825,7 +4814,7 @@ x GetMetaData(uid, "MakePL", 0)		// by example: MakePL = "[rec_dir][Name].fpl" w
 	}
 	inner += "</select>";
 	inner += "<br><input type='checkbox' name='MakePLCheck' id='enmakepl' ";
-	if(itemProps.MakePL)
+	if(Number(itemProps.MakePL))
 		inner += "checked";
 	if(!itemProps.canEdit)
 		inner += " disabled";
@@ -4839,11 +4828,31 @@ x GetMetaData(uid, "MakePL", 0)		// by example: MakePL = "[rec_dir][Name].fpl" w
 	let value = parseInt(itemProps.Limit);
 	if(!value)
 		value = 0;
-	inner += "<br>Run time limit (sec.) <input type='number' min='0' max='240' id='enLimit' name='Limit' value='"+value+"'";
+	inner += "<br><br>Run time limit (sec.) <input type='number' min='0' max='240' id='enLimit' name='Limit' value='"+value+"'";
 		if(itemProps.canEdit){
 		inner += "></input> Zero for no limit<br>";
 	}else
 		inner += " readonly></input> Zero for no limit<br>";
+	
+	inner += "<br><br>Start: <input type='checkbox' name='StartCheck' id='enStartChk' ";
+	if(Number(itemProps.Start))
+		inner += "checked";
+	if(!itemProps.canEdit)
+		inner += " disabled";
+	inner += "></input>";
+	inner += " <input id='enStart' type='datetime-local' name='Start' value='";
+	let val = Number(itemProps.Start)
+	if(val){
+		let theDate = new Date(val * 1000);
+		inner += dateToISOLocal(theDate)+"'";
+	}else{
+		let theDate = new Date();	// now
+		inner += dateToISOLocal(theDate)+"'";
+	}
+	if(itemProps.canEdit){
+		inner += "></input>";
+	}else
+		inner += " readonly></input>";  
 		
 	inner += encPropsFromPipeline(itemProps.Pipeline, itemProps, itemProps.canEdit);
 	
@@ -4879,7 +4888,7 @@ function encPropsFromPipeline(Pipeline, props, canEdit){
 	if(Pipeline.indexOf("[") > -1){
 		let parts = Pipeline.split("[");
 		parts.shift(); // ignore text prior to first "["
-		let ignore = ["rec_dir", "Name"];
+		let ignore = ["rec_dir", "Name", "channels"];
 		for(let n = 0; n < parts.length; n++){
 			let sub = parts[n].split("]");
 			parts[n] = sub[0];
@@ -5818,6 +5827,13 @@ async function logsToStash(evt){
 			}
 		}
 	}
+}
+
+function logNowBtn(){
+	let el = document.getElementById("logdatesel");
+	let dateObj = new Date();
+	el.valueAsNumber = dateObj.getTime();
+	loadLogs();
 }
 
 async function loadLogs(evt){
@@ -7211,9 +7227,9 @@ function stEncStatus(ref, statusBits){
 				rColor = "red";
 			}else if(statusBits & 32)
 				st.innerText =  "Done";
-			else if(statusBits & 0x100)
+			else if(statusBits & 4096)
 				st.innerText =  "Connecting";
-			else if(statusBits & 0x200)
+			else if(statusBits & 8192)
 				st.innerText =  "Waiting";
 			else{
 				st.innerText =  "Ready";
@@ -7320,6 +7336,75 @@ async function stEncoderAction(type, evt){
 			}
 		}
 	}
+}
+
+function stParseAudioList(data){
+	let lines = data.split("\n");
+	let devList = [];
+	let lastName = "";
+	let dev;
+	for(let n = 1; n < (lines.length-1); n++){
+		let fields = lines[n].split(":");
+		let name = fields[0];
+		let chan = fields[1];
+		if(name && name.length && chan && chan.length){
+			if(name != lastName){
+				lastName = name;
+				if(dev){
+					devList.push(dev);
+				}
+				dev = {name: name, channels: []};
+			}
+			if(dev){
+				dev.channels.push(chan);
+			}
+		}
+	}
+	return devList; // array of dev objects.  dev object = {name: "theName", channels: array-of-channel-names}
+}
+
+async function stGetSourceList(){
+	let resp;
+	let studio = studioName.getValue();
+	if(studio.length){
+		resp = await fetchContent("studio/"+studio+"?cmd=srcports&raw=1");
+		if(resp){
+			if(resp.ok){
+				let data = await resp.text();
+				return stParseAudioList(data);
+			}else{
+				alert("Got an error fetching audio source list from server.\n"+resp.status);
+			}
+		}else{
+			alert("Failed to fetch audio source list from the server.");
+		}
+	}
+}
+
+async function stGetDestinationList(){
+	let resp;
+	let studio = studioName.getValue();
+	if(studio.length){
+		resp = await fetchContent("studio/"+studio+"?cmd=dstports&raw=1");
+		if(resp){
+			if(resp.ok){
+				let data = await resp.text();
+				return stParseAudioList(data);
+			}else{
+				alert("Got an error fetching audio source list from server.\n"+resp.status);
+			}
+		}else{
+			alert("Failed to fetch audio source list from the server.");
+		}
+	}
+}
+
+async function stRenderPortsControl(devList, el, portString){
+	//!!
+}
+
+async function stPortsControlValue(el){
+	//!!
 }
 
 async function stRefreshRecTemplateList(evt){
@@ -8882,7 +8967,6 @@ function playerFeedAction(evt){
 	let meta;
 	if(ref > 0)
 		meta = studioStateCache.meta[ref];
-console.log(meta);
 	if(!meta)
 		return;
 	if(meta.MixMinusBus == undefined)

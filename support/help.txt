@@ -403,9 +403,10 @@ The Pipeline property is interperited prior to final initialization converting b
 the corrisponding property values, or default values, if specified. For example, if SampleRate is 
 not set, ChanNum is 2, Name is Rec2020-07-12_1335, the arserver top level setting def_record_dir 
 is ~/myrecordings and Pipleline is:
-appsrc name=audiosrc ! audioconvert ! audioresample ! audio/x-raw-int,rate=[SampleRate=44100],channels=[ChanNum=2,1,2],width=16,depth=16,signed=true ! wavenc ! filesink location=[rec_dir][Name].wav
+appsrc name=audiosrc ! audioconvert ! audioresample ! audio/x-raw-int,rate=[SampleRate=44100],channels=[channels],width=16,depth=16,signed=true ! wavenc ! filesink location=[rec_dir][Name].wav
 this will be converted to the following just before running the recorder:
 appsrc name=audiosrc ! audioconvert ! audioresample ! audio/x-raw-int,rate=44100,channels=2,width=16,depth=16,signed=true ! wavenc ! filesink location=~/myrecordings/Rec2020-07-12_1335.wav
+When the Ports property has one & in it, implying 2 input channels to connect, since [channels] is resolved to the count of & in Ports + 1.
 Note the special [rec_dir] macro which accesses the arserver def_record_dir setting rather than a recoder setting, and makes sure there is a trailing '/'.
 
 Likewise, the Ports property is interperited replacing "[ourJackName]" with the jack-audio client 

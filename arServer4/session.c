@@ -5044,7 +5044,7 @@ unsigned char handle_initrec(ctl_session *session){
 	} recPtr;
 	char *wdir, *rdir;
 	char *save_pointer;
-	int i, fd;
+	int i, fd, chanCnt;
 	char pidStr[256];
 	long val;
 	float gain;
@@ -5125,7 +5125,7 @@ unsigned char handle_initrec(ctl_session *session){
 				if(strlen(tmp)){
 					// handle special rec_dir macro, which doesn't corrispond to a meta value
 					str_ReplaceAll(&tmp, "[rec_dir]", rdir);
-					// next we conver all string macros into their values
+					// next we convert all string macros into their values
 					// by example: MakePL = "[rec_dir][Name].fpl" would create the PL file /the/default/recording/dir/name-of-encoder.fpl
 					resolveStringMacros(&tmp, uid);
 					recPtr.argv[i] = strdup("-a");
@@ -5159,6 +5159,15 @@ unsigned char handle_initrec(ctl_session *session){
 							if(strlen(pipe)){
 								// handle special rec_dir macro, which doesn't corrispond to a meta value
 								str_ReplaceAll(&pipe, "[rec_dir]", rdir);
+								chanCnt=1;
+								while(*tmp){
+									if(*tmp == '&')
+										chanCnt++;
+									tmp++;
+								}
+								char *val = istr(chanCnt);
+								str_ReplaceAll(&pipe, "[channels]", val);
+								free(val);
 								// next we conver all pipeline string macros into their values
 								resolveStringMacros(&pipe, uid);
 								

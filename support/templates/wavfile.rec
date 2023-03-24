@@ -1,4 +1,4 @@
-setmeta -1 Pipeline appsrc name=audiosrc ! audioresample ! audio/x-raw,rate=[samplerate=44100,8000,16000,32000,44100,48000,96000],channels=[channels=2,1,2],width=16,depth=16,signed=true ! wavenc ! filesink location=[rec_dir][Name].wav
+setmeta -1 Pipeline appsrc name=audiosrc ! audioresample ! audio/x-raw,rate=[samplerate=44100,8000,16000,32000,44100,48000,96000],channels=[channels],width=16,depth=16,signed=true ! wavenc ! filesink location=[rec_dir][Name].wav
 ; use our alt mix bus as a recording source
 setmeta -1 TagBus 4
 setmeta -1 Ports [ourJackName]:mixBus3ch0&[ourJackName]:mixBus3ch1

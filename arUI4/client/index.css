@@ -490,7 +490,7 @@ input[type="number"] {
 	width: 50px;
 }
 
-input[type="date"] {
+input[type="date"], [type="datetime-local"]{
 	font-size: 10px;
 }
 

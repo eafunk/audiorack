@@ -690,14 +690,14 @@ static int jack_process(jack_nframes_t nframes, void *arg){
 	} 
 
 	/* check for start time trigger */
-	if((data->status & rec_wait) && (data->start >= time(NULL))){
-		data->status = data->status & ~rec_wait;	
+	if((data->status & rec_wait) && (data->start <= time(NULL))){
+		data->status = data->status & ~rec_wait;
 		if(data->state == GST_STATE_PLAYING)
-			data->status = data->status | rec_running;	
+			data->status = data->status | rec_running;
 		else
-			data->status = data->status | rec_start;	
+			data->status = data->status | rec_start;
 		change_flag = TRUE;
-		data->start = 0;	
+		data->start = 0;
 	}
 	
 	sampWrite = 0;

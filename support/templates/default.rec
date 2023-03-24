@@ -1,4 +1,4 @@
-setmeta -1 Pipeline appsrc name=audiosrc ! audioresample ! audio/x-raw,rate=[samplerate=44100,8000,16000,32000,44100,48000,96000],channels=[channels=2,1,2] ! audioconvert ! avenc_aac bitrate=[bitrate=192000] ! mp4mux ! filesink location=[rec_dir][Name].m4a
+setmeta -1 Pipeline appsrc name=audiosrc ! audioresample ! audio/x-raw,rate=[samplerate=44100,8000,16000,32000,44100,48000,96000],channels=[channel] ! audioconvert ! avenc_aac bitrate=[bitrate=192000] ! mp4mux ! filesink location=[rec_dir][Name].m4a
 ; use our alt mix bus as a recording source
 setmeta -1 TagBus 4
 setmeta -1 Ports [ourJackName]:mixBus3ch0&[ourJackName]:mixBus3ch1
