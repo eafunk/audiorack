@@ -373,6 +373,7 @@ async function logOut(){
 	let err = await loadElement("nav", document.getElementById("navtab"));
 	if(err)
 		return err;
+	document.getElementById('studioAdmin').innerHTML = "";
 	showTabElement(document.getElementById('navlogin'), 'login');
 	return false;
 }
@@ -9994,6 +9995,7 @@ function startupContent(){
 			});
 		}
 	});
+	loadElement("stadmin", document.getElementById("studioAdmin"));
 }
 
 window.onload = function(){

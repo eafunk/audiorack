@@ -851,6 +851,41 @@ app.get('/who', function(request, response){
 	response.end();
 });
 
+app.get('/stadmin', function(request, response){
+	let html = "";
+	if(request.session.permission === 'admin'){
+		html = `
+							<div class="scroll">
+								Studio Server <button class="tab active" data-id="stConsole" onclick="selectTabType(event, reloadStudioSection, 'console')">Console</button>
+								<button class="tab" data-id="stConfOut" onclick="selectTabType(event, reloadStudioSection, 'outs')">Outputs</button>
+								<button class="tab" data-id="stConfIn" onclick="selectTabType(event, reloadStudioSection, 'ins')">Live Inputs</button>
+								<button class="tab" data-id="stConfLib" onclick="selectTabType(event, reloadStudioSection, 'library')">Library</button>
+								<button class="tab" data-id="stConfMixer" onclick="selectTabType(event, reloadStudioSection, 'mixer')">Mixer</button>
+								<button class="tab" data-id="stConfAuto" onclick="selectTabType(event, reloadStudioSection, 'automation')">Automation</button>
+								<div id="stConsole" class="accpanel" style="display: flex;">
+									<textarea id="stConsRep" rows="10" width=100% readonly=""></textarea>
+									<div>
+										<input type="text" id="conCommand" placeholder="command" style="float: left; width: calc(100% - 35px)"></input>
+										<button class="editbutton" type="submit" onClick="stConsSend()" style="float: right; width: 25px;">Send</button>
+									</div>
+								</div>
+								<div id="stConfOut" class="accpanel">
+								</div>
+								<div id="stConfIn" class="accpanel">
+								</div>
+								<div id="stConfLib" class="accpanel">
+								</div>
+								<div id="stConfMixer" class="accpanel">
+								</div>
+								<div id="stConfAuto" class="accpanel">
+								</div>
+							</div>`;
+	}
+	response.status(200);
+	response.send(html);
+	response.end();
+});
+
 app.get('/nav', async function(request, response){
 	let html; 
 	if(!request.session.loggedin){
