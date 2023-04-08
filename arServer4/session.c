@@ -1182,7 +1182,7 @@ void shutdownSessions(void){
 	}			
 	if(sessionList){
 		for(i=0; i<sessionListSize; i++){
-			pthread_mutex_lock(&sMutex);			
+			pthread_mutex_lock(&sMutex);
 			if(sessionList[i].cs > 0){
 				shutdown(sessionList[i].cs, SHUT_RDWR);
 				close(sessionList[i].cs);

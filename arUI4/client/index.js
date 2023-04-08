@@ -2969,6 +2969,8 @@ async function saveEncProperties(evt){
 			if(itemName === "MakePLCheck"){
 				makepl = is;
 				continue;
+			}else if(itemName === "Ports"){
+				is = el.parentElement.userPortList;
 			}else if(itemName === "MakePL" && !makepl){
 				is = "";
 			}else if(itemName === "StartCheck"){
@@ -2981,6 +2983,8 @@ async function saveEncProperties(evt){
 				}else
 					is = "0";
 			}else if(itemName === "submit"){
+				continue;
+			}else if(!itemName){
 				continue;
 			}
 			
@@ -3003,21 +3007,23 @@ async function saveEncProperties(evt){
 				}
 			}
 		}
-		if(!err){
-			let resp = await fetchContent("studio/"+studio+"?cmd=initrec%20"+hexStr);
-			if(resp instanceof Response){
-				if(resp.ok){
-					let text = await resp.text();
-					if(text.search("OK<br>") == 0){
-						alert("encoder/recorder initialized.");
-						closeInfo();
-						return;
+		if(evt){
+			if(!err){
+				let resp = await fetchContent("studio/"+studio+"?cmd=initrec%20"+hexStr);
+				if(resp instanceof Response){
+					if(resp.ok){
+						let text = await resp.text();
+						if(text.search("OK<br>") == 0){
+							alert("encoder/recorder initialized.");
+							closeInfo();
+							return;
+						}
 					}
 				}
-			}
-			alert("Failed to initialize encoder/recorder.");
-		}else
-			alert("Failed to set all properties.");
+				alert("Failed to initialize encoder/recorder.");
+			}else
+				alert("Failed to set all properties.");
+		}
 	}
 }
 
@@ -3981,7 +3987,7 @@ async function reloadItemSection(el, type){
 		if(itemProps.history){
 			let inner = "<form id='histitemform'>";
 			inner += "Before date: <input type='date' id='histdatesel' name='histdate' value='"+histdateVal+"' onchange='refreshItemHistory()'></input>";
-			inner += "<input type='number' id='histlimsel' name='histlimit' onchange='refreshItemHistory()' value='"+histlimitVal+"' max='210' min='10' step='50'></input>"
+			inner += "<input type='number' id='histlimsel' name='histlimit' onchange='refreshItemHistory()' value='"+histlimitVal+"' max='310' min='10' step='50'></input>"
 			inner += "<div id='itemhistlist'></div>"
 			el.innerHTML = inner + "</form>";
 			let div = document.getElementById("itemhistlist");
@@ -4752,23 +4758,6 @@ function itemPrioRender(val){
 }
 
 async function showEncoderItem(panel, container){
-//!!
-/*
-// required settings
-x GetMetaInt(uid, "TagBus", NULL)	// bus number + 1, can't be zero , that is the ultimate source of the audio, for which track info will be passed 
-x GetMetaData(uid, "Name", 0)
-xGetMetaData(uid, "Pipeline", 0)	// by example: 
- "Pipeline appsrc name=audiosrc ! audioresample ! audio/x-raw,rate=[samplerate=44100,8000,16000,32000,44100,48000,96000],
- channels=[channels=2,1,2] ! audioconvert ! avenc_aac bitrate=[bitrate=192000] ! mp4mux ! filesink location=[rec_dir][Name].m4a"
-GetMetaData(uid, "Ports", 0)	// by example: "[ourJackName]:mixBus3ch0&[ourJackName]:mixBus3ch1"
-
-
-// optional settings
-x GetMetaInt(uid, "Persistent", NULL)	// true/false
-x GetMetaInt(uid, "Limit", NULL)	// seconds
-x GetMetaInt(uid, "Start", NULL)	// unix-time
-x GetMetaData(uid, "MakePL", 0)		// by example: MakePL = "[rec_dir][Name].fpl" would create the PL file /the/default/recording/dir/name-of-encoder.fpl
-*/
 	let inner = "<form id='enitemform' style='padding:5px;'> Type: "+itemProps.Type+"<br>";
 	inner += "Name: <input type='text' id='enName' size='45' name='Name'";
 	inner += " value='"+quoteattr(itemProps.Name)+"'";
@@ -4783,9 +4772,8 @@ x GetMetaData(uid, "MakePL", 0)		// by example: MakePL = "[rec_dir][Name].fpl" w
 	if(!itemProps.canEdit)
 		inner += " disabled";
 	inner += "></input> Persistent: keeps running when audio inputs are disconnected.<br>";
-	
-	let devList = await stGetSourceList();
-console.log(devList);
+
+	inner += "<br>Auidio Ports:<br><div id='enPorts'></div>";
 
 	inner += "<br><br>Post Tracks from Bus:<select id='enTagBus' name='TagBus'>";
 	for(let b=1; b<=studioStateCache.buscnt; b++){
@@ -4871,8 +4859,20 @@ console.log(devList);
 	if(itemProps.canEdit)
 		inner += "<br><button id='reloadenc' onclick='reloadEncProperties(event)'>Refresh properties</button>";
 	container.innerHTML = inner;
+	
+	// create ports control
+	let el = document.getElementById("enPorts");
+	if(el){
+		let devList = await stGetSourceList();
+		stRenderPortsControl(el, devList, itemProps.Ports, itemProps.canEdit);
+		let inputHidden = document.createElement("input");
+		inputHidden.setAttribute("type", "hidden");
+		inputHidden.setAttribute("name", "Ports");
+		el.appendChild(inputHidden);
+	}
+
 	panel.style.width = infoWidth;
-	let el = document.getElementById("showinfobtn");
+	el = document.getElementById("showinfobtn");
 	if(el)
 		el.style.display = "none";
 	
@@ -7360,7 +7360,48 @@ function stParseAudioList(data){
 			}
 		}
 	}
-	return devList; // array of dev objects.  dev object = {name: "theName", channels: array-of-channel-names}
+	return devList; // array of dev objects.  dev object = {name: "theName", channels: array-of-port-names}
+}
+
+async function stParsePortList(data){
+	let ourName;
+	let chans = data.split("&");
+	let chList = [];
+	for(let n = 0; n < (chans.length); n++){
+		let ports = chans[n].split("+");
+		let chan = [];
+		for(let i = 0; i < (ports.length); i++){
+			let fields = ports[i].split(":");
+			let name = fields[0];
+			if(name == "[ourJackName]"){
+				if(!ourName){
+					let studio = studioName.getValue();
+					if(studio.length){
+						let resp = await fetchContent("studio/"+studio+"?cmd=info&raw=1");
+						if(resp instanceof Response){
+							if(resp.ok){
+								let data = await resp.text();
+								let lines = data.split("\n");
+								for(let n = 0; n < lines.length; n++){
+									let fields = lines[n].split(" = ");
+									let key = fields[0];
+									let value = fields[1];
+									if((key == "\tJACK-Audio name"))
+										ourName = value;
+								}
+							}
+						}
+					}
+				}
+				name = ourName;
+			}
+			let port = fields[1];
+			if(name && name.length && port && port.length)
+				chan.push({device: name, port: port});
+		}
+		chList.push(chan);
+	}
+	return chList; // array (channels) of array (connections) of objects. object = {device: "devName", port: "portName"}
 }
 
 async function stGetSourceList(){
@@ -7399,12 +7440,243 @@ async function stGetDestinationList(){
 	}
 }
 
-async function stRenderPortsControl(devList, el, portString){
-	//!!
+function stPortsAddChan(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let row = evt.target.parentNode.parentNode.parentNode;
+	let table = row.parentNode.parentNode;	
+	let el = table.parentNode;
+	row = table.insertRow(row.rowIndex);
+	let cell = row.insertCell(-1);
+	cell = row.insertCell(-1);
+	let devtable = document.createElement("table");
+	devtable.className = "tableleftj";
+	row = devtable.insertRow(-1);
+	row.insertCell(-1);
+	row.insertCell(-1);
+	let dcell = row.insertCell(-1);
+	dcell.innerHTML = `<button class="editbutton" onclick="stPortsAddPort(event)">+</button>`;
+	dcell.width = '18px';
+	cell.appendChild(devtable);
+	// renumber channel rows
+	for(let i = 1; i < (table.rows.length - 1); i++){
+		row = table.rows[i];
+		cell = row.firstElementChild;
+		cell.innerHTML = `<span style='float: left;'>`+i+`</span><span style='float: right;'><button class="editbutton" onclick="stPortsDelChan(event)">-</button></span>`;
+	}
 }
 
-async function stPortsControlValue(el){
-	//!!
+function stPortsDelChan(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let row = evt.target.parentNode.parentNode.parentNode;
+	let table = row.parentNode.parentNode;
+	let el = table.parentNode;
+	row.remove();
+	// renumber channel rows
+	for(let i = 1; i < (table.rows.length - 1); i++){
+		row = table.rows[i];
+		let cell = row.firstElementChild;
+		cell.innerHTML = `<span style='float: left;'>`+i+`</span><span style='float: right;'><button class="editbutton" onclick="stPortsDelChan(event)">-</button></span>`;
+	}
+	stPortsControlValue(el);
+}
+
+function stPortsAddPort(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let row = evt.target.parentNode.parentNode;
+	let table = row.parentNode;
+	let el = table.parentNode.parentNode.parentNode.parentNode.parentNode.parentNode;
+	row = table.insertRow(row.rowIndex);
+	let cell = row.insertCell(-1);
+	let devsel = stCreateDevSel(el.userDevList);
+	cell.appendChild(devsel);
+	cell = row.insertCell(-1);
+	cell.appendChild(stCreatePortSel(el.userDevList, devsel.value));
+	cell = row.insertCell(-1);
+	cell.width = '18px';
+	cell.innerHTML = `<button class="editbutton" onclick="stPortsDelPort(event)">-</button>`;
+	stPortsControlValue(el);
+}
+
+function stPortsDelPort(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let row = evt.target.parentNode.parentNode;
+	let el = row.parentNode.parentNode.parentNode.parentNode.parentNode.parentNode.parentNode;
+	row.remove();
+	stPortsControlValue(el);
+}
+
+function stPortsDevChange(evt){
+	let devName = evt.target.value;
+	let row = evt.target.parentNode.parentNode;
+	let table = row.parentNode.parentNode.parentNode.parentNode.parentNode.parentNode;
+	let el = table.parentNode;
+	let cell = row.childNodes[1];
+	cell.removeChild(cell.firstElementChild);
+	cell.appendChild(stCreatePortSel(el.userDevList, devName));
+	stPortsControlValue(el);
+}
+
+function stPortsPortChange(evt){
+	let el = evt.target.parentNode.parentNode.parentNode.parentNode.parentNode.parentNode.parentNode.parentNode.parentNode;
+	stPortsControlValue(el);
+}
+
+function stCreateDevSel(devList, selected){
+	let select = document.createElement('select');
+	for(let i = 0; i < devList.length; i++){
+		let entry = devList[i];
+		let opt = document.createElement('option');
+		opt.value = entry.name;
+		opt.innerHTML = entry.name;
+		if(selected == entry.name)
+			opt.selected = true;
+		select.appendChild(opt);
+	}
+	select.addEventListener("change", stPortsDevChange, false);
+	return select;
+}
+
+function stCreatePortSel(devList, devName, selected){
+	let select = document.createElement('select');
+	let dev = findPropObjInArray(devList, "name", devName);
+	if(dev){
+		let chans = dev.channels;
+		for(let i = 0; i < chans.length; i++){
+			let entry = chans[i];
+			let opt = document.createElement('option');
+			opt.value = entry;
+			opt.innerHTML = entry;
+			if(selected == entry)
+				opt.selected = true;
+			select.appendChild(opt);
+		}
+	}
+	select.addEventListener("change", stPortsPortChange, false);
+	return select;
+}
+
+async function stRenderPortsControl(el, devList, portList, settable, fixedChan){
+	el.userDevList = devList;
+	let connList = [];
+	if(portList){
+		el.userPortList = portList;
+		connList = await stParsePortList(portList);
+	}
+	let cols = [, ""];
+	// Create a table element
+	let table = document.createElement("table");
+	table.className = "tableleftj";
+	// Create table row tr element of a table
+	let tr = table.insertRow(-1);
+	// Create the table header th elements
+	let theader = document.createElement("th");
+	theader.className = "tselcell";
+	theader.innerHTML = "Chan.";
+	theader.width = "40px";
+	tr.appendChild(theader);
+	theader = document.createElement("th");
+	theader.className = "tselcell";
+	theader.innerHTML = "Device & Source";
+	tr.appendChild(theader);
+	// create channel rows
+	let chanCnt = 0;
+	if(fixedChan)
+		chanCnt = fixedChan;
+	else
+		chanCnt = connList.length;
+	// use connList to build channels
+	for(let i = 0; i < chanCnt; i++){
+		let trow = table.insertRow(-1);
+		let cell = trow.insertCell(-1);
+		if(settable && !fixedChan)
+			cell.innerHTML = `<span style='float: left;'>`+(i+1)+`</span><span style='float: right;'><button class="editbutton" onclick="stPortsDelChan(event)">-</button></span>`;
+		else
+			cell.innerHTML = `<span style='float: left;'>`+(i+1)+`</span>`;
+		let con;
+		if(connList)
+			con = connList[i];
+		cell = trow.insertCell(-1);
+		let devtable = document.createElement("table");
+		devtable.className = "tableleftj";
+		let portCnt = 1;
+		if(con)
+			portCnt = con.length;
+		for(let j = 0; j < portCnt; j++){
+			let dtrow = devtable.insertRow(-1);
+			let dcell = dtrow.insertCell(-1);
+			let entry = {device: "", port: ""};
+			if(con)
+				entry = con[j];
+			if(settable){
+				dcell.appendChild(stCreateDevSel(devList, entry.device));
+				dcell = dtrow.insertCell(-1);
+				dcell.appendChild(stCreatePortSel(devList, entry.device, entry.port));
+			}else{
+				dcell.innerHTML = entry.device;
+				dcell = dtrow.insertCell(-1);
+				dcell.innerHTML = entry.port;
+			}
+			dcell = dtrow.insertCell(-1);
+			dcell.width = '18px';
+			if(settable)
+				dcell.innerHTML = `<button class="editbutton" onclick="stPortsDelPort(event)">-</button>`;
+		}
+		if(settable){
+			let dtrow = devtable.insertRow(-1);
+			dtrow.insertCell(-1);
+			dtrow.insertCell(-1);
+			let dcell = dtrow.insertCell(-1);
+			dcell.innerHTML = `<button class="editbutton" onclick="stPortsAddPort(event)">+</button>`;
+		}
+		cell.appendChild(devtable);
+	}
+	if(settable && !fixedChan){
+		// add new channel button row
+		trow = table.insertRow(-1);
+		let cell = trow.insertCell(-1);
+		cell.innerHTML = `<span style='float: right;'><button class="editbutton" onclick="stPortsAddChan(event)">+</button></span>`;
+		// one emply columns
+		trow.insertCell(-1);
+	}
+	el.appendChild(table);
+	if(connList.length == 0){
+console.log("no dev list");
+		stPortsControlValue(el);
+	}
+}
+
+function stPortsControlValue(el){
+console.log(el);
+//	let ctable = el.firstElementChild;
+	let ctable = el.querySelector("table:first-of-type");
+	let pStr = "";
+	let rows = ctable.rows;
+	for(let c = 1; c < rows.length; c++){
+		let row = rows[c];
+		if(row){
+			let ptable = row.childNodes[1].firstElementChild;
+			if(ptable){
+				let prows = ptable.rows;
+				if(c > 1)
+					pStr += "&";
+				for(let p = 0; p < (prows.length); p++){
+					let prow = prows[p];
+					let dev = prow.childNodes[0].firstElementChild;
+					let port = prow.childNodes[1].firstElementChild;
+					if(dev && port){
+						if(p > 0)
+							pStr += "+";
+						pStr += dev.value + ":" + port.value;
+					}
+				}
+			}
+		}
+	}
+	el.userPortList = pStr;	// save the port list for which this control is based on
 }
 
 async function stRefreshRecTemplateList(evt){

@@ -438,7 +438,7 @@ async function sendCommand(connection, command){
 function commandResponse(request, response, params, dirs){
 	let st_name = dirs[2];	// length already verified
 	// check for permission
-	if((request.session.permission != "admin") && (request.session.permission != "manage") && (request.session.permission != "user")){
+	if((request.session.permission != "admin") && (request.session.permission != "manager") && (request.session.permission != "studio") && (request.session.permission != "programming")){
 		response.status(401);
 		response.end();
 		return;
