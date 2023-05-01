@@ -612,7 +612,7 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 		data.senderID = 0;
 		data.value.iVal = 0;
 		notifyMakeEntry(nType_status, &data, sizeof(data));
-		result = rNone;
+		result = rOK;
 		goto finish;
 	}
 	if(!strcmp(arg, "stat")) {
@@ -1319,10 +1319,12 @@ unsigned char handle_info(ctl_session *session){
 		
 		tx_length = snprintf(buf, sizeof buf, "Mixer Settings:\n\tcore sample rate = %u\n"
 					"\tmatrix input count = %d x %d\n"
-					"\tmatrix output bus count = %d x %d\n"
+					"\tmatrix bus count = %d x %d\n"
+					"\toutput group count = %d x %d\n"
 					"\tJACK-Audio name = %s\n\n", 
 					mixEngine->mixerSampleRate, mixEngine->inCount, mixEngine->chanCount, 
-					mixEngine->busCount, mixEngine->chanCount, mixEngine->ourJackName);
+					mixEngine->busCount, mixEngine->chanCount,
+					mixEngine->outCount, mixEngine->chanCount, mixEngine->ourJackName);
 		my_send(session, buf, tx_length, session->silent, 0);
 		
 		tx_length = snprintf(buf, sizeof buf, "============================================================================\n");
@@ -1486,14 +1488,14 @@ unsigned char handle_attach(ctl_session *session){
 			if(run == 0)
 				kill(recPtr->child, 9);
 		}while(waitpid(recPtr->child, NULL, WNOHANG) == 0);
-		close(sockpair[0]);		
+		close(sockpair[0]);
 		close(sockpair[1]);
 		free(recPtr->str);
 		free(recPtr->argv);
 		free(recPtr);
 		return rOK;
 	}
-	return rNone;	
+	return rNone;
 }
 
 unsigned char handle_external(ctl_session *session){
@@ -2971,7 +2973,7 @@ unsigned char handle_delin(ctl_session *session){
 		pthread_rwlock_unlock(&inputLock);
 	}
 	if(rec)
-		return rNone;
+		return rOK;
 	session->errMSG = "Missing or bad input name.\n";
 	return rError;
 }
@@ -3237,19 +3239,19 @@ unsigned char handle_setdly(ctl_session *session){
 				if((instance->nameHash == nameHash) &&
 										(!strcmp(name, instance->name))){
 					// found the record... set volume
-					aFloat = atof(session->save_pointer);						
+					aFloat = atof(session->save_pointer);
 					instance->reqDelay = aFloat;
 					instance->requested = instance->requested | change_delay;
 					
 					pthread_rwlock_unlock(&mixEngine->outGrpLock);
-					free(name);						
+					free(name);
 					return rOK;
 				}
 			}
 			instance++;
 		}
 		pthread_rwlock_unlock(&mixEngine->outGrpLock);
-		free(name);				
+		free(name);
 	}
 	session->errMSG = "Missing or bad output group name.\n";
 	return rError;
@@ -4270,7 +4272,7 @@ unsigned char handle_expand(ctl_session *session){
 		
 		session->lastUID = aLong;
 		plTaskRunner(aLong);
-		return rNone;
+		return rOK;
 	}else
 		session->errMSG = "Missing parameter.\n";
 	return rError;
@@ -4380,7 +4382,7 @@ unsigned char handle_waitseg(ctl_session *session){
 		session->errMSG = "Missing parameter.\n";
 		return rError;
 	}
-	return rNone;
+	return rOK;
 }
 
 unsigned char handle_segnow(ctl_session *session){

@@ -870,8 +870,59 @@ app.get('/stadmin', function(request, response){
 									</div>
 								</div>
 								<div id="stConfOut" class="accpanel">
+									<table>
+										<tr>
+											<td style="width: 120px;">
+												<div id="stOutConfList" class="scroll" style="height: 240px;border: 1px; border-style: solid;">
+													No Ourputs
+												</div>
+												<button onclick="stConfOutNew(event)">New</button>
+											</td>
+											<td>
+												<div id="stConfOutSettings">
+													Name: <input id="stConfOutName" type="text" size="20" value=""><button onclick="stConfOutDelete(event)">Delete</button>
+													<div id="stConfOutPorts">
+													</div>
+													<br>
+													<table class="tableleftj">
+														<tr>
+															<td><div id="stConfOutBus"></div></td>
+															<td><div id="stConfOutMute"></div></td>
+														</tr>
+													</table>
+													<span style='float: center;'><button onclick="stConfOutSave(event)">Save</button></span>
+												</div>
+											</td>
+										</tr>
+									</table>
 								</div>
 								<div id="stConfIn" class="accpanel">
+									<table>
+										<tr>
+											<td style="width: 120px;">
+												<div id="stInConfList" class="scroll" style="height: 240px;border: 1px; border-style: solid;">
+													No Live Inputs
+												</div>
+												<button onclick="stConfInNew(event)">New</button>
+											</td>
+											<td>
+												<div id="stConfInSettings">
+													Name: <input id="stConfInName" type="text" size="20" value=""><button onclick="stConfInDelete(event)">Delete</button>
+													<div id="stConfInPorts">
+													</div>
+													<br>
+													<table class="tableleftj">
+														<tr>
+															<td><div id="stConfInBus"></div></td>
+															<td><div id="stConfInTB"></div></td>
+															<td><div id="stConfInMute"></div></td>
+														</tr>
+													</table>
+													<span style='float: center;'><button onclick="stConfInSave(event)">Save</button></span>
+												</div>
+											</td>
+										</tr>
+									</table>
 								</div>
 								<div id="stConfLib" class="accpanel">
 								</div>

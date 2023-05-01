@@ -1033,13 +1033,13 @@ void GetURLMetaData(uint32_t UID, const char *url){
 		else if(!strcmp(type, "input"))
 			GetInputMetaData(UID, url);
 		else if(!strcmp(type, "stop")){
-			SetMetaData(UID, "Name", "--- Play List Stop ---");	
+			SetMetaData(UID, "Name", "--- Play List Stop ---");
 			SetMetaData(UID, "Missing", "0");
 		}else if(!strcmp(type, "gst")){
-			SetMetaData(UID, "Name", "custom gstreamer pipeline player");	
+			SetMetaData(UID, "Name", "custom gstreamer pipeline player");
 			SetMetaData(UID, "Missing", "0");
 		}else if(!strcmp(type, "sip")){
-			SetMetaData(UID, "Name", "sip URLs are not loadable directly");	
+			SetMetaData(UID, "Name", "sip URLs are not loadable directly");
 			SetMetaData(UID, "Missing", "1");
 		}else
 			GetGstDiscoverMetaData(UID, url);

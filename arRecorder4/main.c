@@ -1170,8 +1170,8 @@ void mainloop(int next_arg, char *argv[], int apl_arg, unsigned char persist, lo
 	}
 	data.chCount = str_CountFields(argv[next_arg+3], "&") + 1;
 	g_object_set(G_OBJECT(data.asrc), "stream-type", 0,
-            "is-live", TRUE, "format", GST_FORMAT_TIME, NULL);
-            
+						"is-live", TRUE, "format", GST_FORMAT_TIME, NULL);
+	
 	/* setup JACK and get pads properties */
 	data.client = jack_client_open(argv[next_arg], options, &status, server);
 	if(data.client == NULL) {
@@ -1191,7 +1191,7 @@ void mainloop(int next_arg, char *argv[], int apl_arg, unsigned char persist, lo
 		goto finish;
 	}
 	mlock(data.ringbuffer, rbsize);
-
+	
 	if((data.ctlsendqueue = jack_ringbuffer_create(queueSizeBytes)) == NULL){
 		g_printerr("\nERROR: control queue send (settings, VU, etc.) ring buffer allocation failed.\n");
 		goto finish;
@@ -1203,7 +1203,7 @@ void mainloop(int next_arg, char *argv[], int apl_arg, unsigned char persist, lo
 		goto finish;
 	}
 	mlock(data.ctlrecvqueue, queueSizeBytes);	
-		
+	
 	/* create jack ports (audio and midi) */
 	data.UID = atoi(argv[next_arg+2]);
 	char pname[256];
@@ -1214,7 +1214,7 @@ void mainloop(int next_arg, char *argv[], int apl_arg, unsigned char persist, lo
 							sizeof(jack_default_audio_sample_t *));
 	if(data.audioIn_jPorts = (jack_port_t**)calloc(data.chCount, 
 											sizeof(jack_port_t *))){
-
+		
 		port = data.audioIn_jPorts; 
 		for(i=0; i<data.chCount; i++){
 			snprintf(pname, sizeof pname, "Input%d", i);
@@ -1238,7 +1238,7 @@ void mainloop(int next_arg, char *argv[], int apl_arg, unsigned char persist, lo
 		g_printerr("\nERROR: JACK midi ports allocation failed.\n");
 		goto finish;
 	}
-
+	
 	/* Configure appsource to match JACK pad properties */
 	gst_audio_info_set_format(&info, GST_AUDIO_FORMAT_F32, data.sampleRate, data.chCount, NULL);
 	audio_caps = gst_audio_info_to_caps(&info);
@@ -1257,7 +1257,7 @@ void mainloop(int next_arg, char *argv[], int apl_arg, unsigned char persist, lo
 	
 	if(apl_arg){
 		if(data.ascPlayList = fopen(argv[apl_arg], "w+")){
-
+			
 			char *tmp, *loc, *cpy = strdup(argv[apl_arg]);
 			tmp = basename(cpy);
 			if(loc = strrchr(tmp, '.'))
@@ -1274,7 +1274,7 @@ void mainloop(int next_arg, char *argv[], int apl_arg, unsigned char persist, lo
 	/* set JACK callbacks */
 	jack_set_process_callback(data.client, jack_process, &data);
 	jack_on_shutdown(data.client, jack_shutdown_callback, &data);
-
+	
 	if(data.persist){
 		jack_set_port_registration_callback(data.client, jack_reg_callback, &data);
 		jack_set_port_rename_callback(data.client, jack_rename_callback, &data);
@@ -1326,17 +1326,17 @@ void mainloop(int next_arg, char *argv[], int apl_arg, unsigned char persist, lo
 	}
 
 	signal(SIGINT, INThandler);		// CTL-c
-	signal(SIGQUIT, QUIThandler);	// ctl-\
-
+	signal(SIGQUIT, QUIThandler);		// ctl-\
+	
 	data.settingsChanged = TRUE;	// trigger initial setting announcement
 	pthread_cond_broadcast(&data.ctlSemaphore);
-
+	
 	/* Listen to the bus */
 	do{
 		msg = gst_bus_timed_pop_filtered(bus, 1000 * GST_MSECOND,
 				GST_MESSAGE_STATE_CHANGED | GST_MESSAGE_ERROR | 
 				GST_MESSAGE_EOS);
-
+		
 		/* Parse message */
 		if(msg != NULL){
 			handle_message(&data, msg);
@@ -1376,7 +1376,7 @@ void mainloop(int next_arg, char *argv[], int apl_arg, unsigned char persist, lo
 		}
 		
 	}while(!data.terminate);
-  
+	
 finish:
 	/* free and shutdown */
 	data.terminate = 1;
@@ -1440,7 +1440,6 @@ int main(int argc, char *argv[]){
 	long limit;
 	time_t start;
 	unsigned char pers;
-
 	
 	if(argc >= 6){
 		pers = 0;
@@ -1504,6 +1503,6 @@ int main(int argc, char *argv[]){
 	fprintf(stderr, "by the number of & delimiters in the list.\n");
 	fprintf(stderr, "\nThe gstreamer pipline must start with a source element named audiosrc: \"  appsrc name=audiosrc ! \"\n");
 	fprintf(stderr, "NOTE: The gstreamer pipline must be a single parameter. Quoting or escaping of spaces may be required when run from a shell.\n");
-
+	
 	return 0;
 }

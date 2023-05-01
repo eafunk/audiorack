@@ -4768,7 +4768,7 @@ async function showEncoderItem(panel, container){
 		inner += " readonly></input>";
 		
 	inner += "<br><input type='checkbox' name='Persistent' id='enpersist' ";
-	if(itemProps.Persistent)
+	if(itemProps.Persistent && Number(itemProps.Persistent))
 		inner += "checked";
 	if(!itemProps.canEdit)
 		inner += " disabled";
@@ -4776,7 +4776,11 @@ async function showEncoderItem(panel, container){
 
 	inner += "<br>Auidio Ports:<br><div id='enPorts'></div>";
 
-	inner += "<br><br>Post Tracks from Bus:<select id='enTagBus' name='TagBus'>";
+	inner += "<br><br>Post Tracks from Bus:<select id='enTagBus' name='TagBus'";
+	if(!itemProps.canEdit)
+		inner += " disabled>";
+	else
+		inner += ">";
 	for(let b=1; b<=studioStateCache.buscnt; b++){
 		let name;
 		switch(b){
@@ -4803,7 +4807,7 @@ async function showEncoderItem(panel, container){
 	}
 	inner += "</select>";
 	inner += "<br><input type='checkbox' name='MakePLCheck' id='enmakepl' ";
-	if(Number(itemProps.MakePL))
+	if(itemProps.MakePL && itemProps.MakePL.length)
 		inner += "checked";
 	if(!itemProps.canEdit)
 		inner += " disabled";
@@ -5833,7 +5837,7 @@ async function logsToStash(evt){
 function logNowBtn(){
 	let el = document.getElementById("logdatesel");
 	let dateObj = new Date();
-	el.valueAsNumber = dateObj.getTime();
+	el.valueAsDate = new Date(Date.UTC(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate()));
 	loadLogs();
 }
 
@@ -6914,7 +6918,7 @@ async function importSelectFiles(evt){
 /***** Studio functions *****/
 
 var busmeters = [];
-var studioStateCache = {control: false, meta: {}, queue: [], queueRev: 0, queueSec: 0.0, queueDur: 0.0, logTime: 0, logs: [], ins: [], outs: [], encoders: {}, autoStat: 0, runStat: 0, buscnt: 0};
+var studioStateCache = {control: false, meta: {}, queue: [], queueRev: 0, queueSec: 0.0, queueDur: 0.0, logTime: 0, logs: [], live: [], ins: [], outs: [], encoders: {}, autoStat: 0, runStat: 0, chancnt: 0, buscnt: 0, outcnt: 0};
 var pTemplate;
 var midiAccess;
 
@@ -7033,7 +7037,7 @@ function studioChangeCallback(value){
 	// new VU meter canvases will be built once we receive the first VU data event
 	eventTypeReg("vu_"+value, studioVuUpdate);
 	busmeters = [];
-	studioStateCache = {meta: {}, queueRev: -1, queueSec: 0.0, queueDur: 0.0, logTime: 0, logs: [], ins: [], outs: [], encoders: [], runStat: 0, autoStat: 0, buscnt: 0};
+	studioStateCache = {meta: {}, queueRev: -1, queueSec: 0.0, queueDur: 0.0, logTime: 0, logs: [], live: [], ins: [], outs: [], encoders: [], runStat: 0, autoStat: 0, chancnt: 0, buscnt: 0, outcnt: 0};
 	getServerInfo(value);
 	syncStudioMetalist(value);
 	syncStudioStat(value);
@@ -7052,9 +7056,13 @@ async function getServerInfo(studio){
 				let fields = lines[n].split(" = ");
 				let key = fields[0];
 				let value = fields[1];
-				if((key == "\tmatrix output bus count")){
+				if((key == "\tmatrix bus count")){
 					let part = value.split(" x ");
 					studioStateCache.buscnt = parseInt(part[0]);
+				}else if((key == "\toutput group count")){
+					let part = value.split(" x ");
+					studioStateCache.outcnt = parseInt(part[0]);
+					studioStateCache.chancnt = parseInt(part[1]);
 				}
 			}
 		}
@@ -7593,7 +7601,7 @@ async function stRenderPortsControl(el, devList, portList, settable, fixedChan){
 	for(let i = 0; i < chanCnt; i++){
 		let trow = table.insertRow(-1);
 		let cell = trow.insertCell(-1);
-		if(settable && !fixedChan)
+		if(settable && (!fixedChan))
 			cell.innerHTML = `<span style='float: left;'>`+(i+1)+`</span><span style='float: right;'><button class="editbutton" onclick="stPortsDelChan(event)">-</button></span>`;
 		else
 			cell.innerHTML = `<span style='float: left;'>`+(i+1)+`</span>`;
@@ -7603,6 +7611,7 @@ async function stRenderPortsControl(el, devList, portList, settable, fixedChan){
 		cell = trow.insertCell(-1);
 		let devtable = document.createElement("table");
 		devtable.className = "tableleftj";
+		devtable.style = "table-layout: auto;";
 		let portCnt = 1;
 		if(con)
 			portCnt = con.length;
@@ -7613,7 +7622,10 @@ async function stRenderPortsControl(el, devList, portList, settable, fixedChan){
 			if(con)
 				entry = con[j];
 			if(settable){
-				dcell.appendChild(stCreateDevSel(devList, entry.device));
+				let dmenu = stCreateDevSel(devList, entry.device);
+				dcell.appendChild(dmenu);
+				if(!entry.device)
+					entry.device = dmenu.value;
 				dcell = dtrow.insertCell(-1);
 				dcell.appendChild(stCreatePortSel(devList, entry.device, entry.port));
 			}else{
@@ -7635,7 +7647,7 @@ async function stRenderPortsControl(el, devList, portList, settable, fixedChan){
 		}
 		cell.appendChild(devtable);
 	}
-	if(settable && !fixedChan){
+	if(settable && (!fixedChan)){
 		// add new channel button row
 		trow = table.insertRow(-1);
 		let cell = trow.insertCell(-1);
@@ -7645,14 +7657,11 @@ async function stRenderPortsControl(el, devList, portList, settable, fixedChan){
 	}
 	el.appendChild(table);
 	if(connList.length == 0){
-console.log("no dev list");
 		stPortsControlValue(el);
 	}
 }
 
 function stPortsControlValue(el){
-console.log(el);
-//	let ctable = el.firstElementChild;
 	let ctable = el.querySelector("table:first-of-type");
 	let pStr = "";
 	let rows = ctable.rows;
@@ -7733,9 +7742,16 @@ async function refreshInputGroups(){
 				for(let n = 1; n < lines.length; n++){
 					let fields = lines[n].split("\t");
 					let name = fields[0];
+					let bus = fields[1];
+					let ctl = fields[2];
+					let ports = fields[3];
 					if(name.length)
-						list.push({url: "input:///"+name, Name: name});
+						list.push({url: "input:///"+name, Name: name, Bus: bus, Controls: ctl, Ports: ports});
 				}
+				studioStateCache.live = list;
+				// update server settings panel here, of any
+				refreshStAdminInputs(list);
+				// update the studio live source tab
 				let format = `$Name$`;
 				genDragableListFromObjectArray(true, false, list, el, format, "url");
 			}else{
@@ -7744,6 +7760,259 @@ async function refreshInputGroups(){
 		}else{
 			alert("Failed to fetch input group list  from the server.");
 		}
+	}
+}
+
+function refreshStAdminInputs(list){
+	let el = document.getElementById("stInConfList");
+	let colMap = {url: false, Name: "Name", Bus: false, Controls: false, Ports: false};
+	genPopulateTableFromArray(list, el, colMap, selectStAdminInputItem);
+	
+	el = document.getElementById("stConfInSettings");
+	el.style.display = "none";
+}
+
+function stConfInNew(evt){
+	// unselect all in live input list
+	let par = document.getElementById("stInConfList");
+	let els = par.getElementsByClassName("tselrow");
+	for(let i = 0; i < els.length; i++){
+		els[i].className = els[i].className.replace(" active", "");
+	}
+	// load new in settings
+	selectStAdminInputItem();
+}
+
+async function stConfInDelete(evt){
+	let nel = document.getElementById("stConfInName");
+	let oldname = nel.getAttribute("data-idx");
+	if(oldname > -1)
+		oldname = studioStateCache.live[oldname].Name;
+	else
+		oldname = "";
+	if(oldname){
+		let studio = studioName.getValue();
+		if(studio.length){
+			let resp = await fetchContent("studio/"+studio+"?cmd=delin "+oldname);
+			if(resp && resp.ok){
+				refreshInputGroups();
+				await fetchContent("studio/"+studio+"?cmd=savein");
+			}
+		}
+	}
+}
+
+async function stConfInSave(evt){
+	let el = evt.target.parentElement.parentElement;
+	let buses = el.querySelectorAll("input[type='checkbox']:checked");
+	let bus = BigInt(0);
+	for(let i = 0; i < buses.length; i++)
+		bus += (1n << BigInt(parseInt(buses[i].getAttribute("data-bus"))));
+	bus =  ("00000000" + bus.toString(16)).substr(-8);
+	let pel = document.getElementById("stConfInPorts");
+	stPortsControlValue(pel);
+	let ports = pel.userPortList;
+	let nel = document.getElementById("stConfInName");
+	let newname = nel.value;
+	newname = newname.replace(/ /g,"_");
+	let oldname = nel.getAttribute("data-idx");
+	if(oldname > -1)
+		oldname = studioStateCache.live[oldname].Name;
+	else
+		oldname = "";
+	let studio = studioName.getValue();
+	if(studio.length){
+		let obj = {cmd: "setin "+newname+" "+bus+" 00000011 "+ports, raw: 1};
+		let resp = await fetchContent("studio/"+studio, {
+				method: 'POST',
+				body: JSON.stringify(obj),
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp && resp.ok){
+			if(oldname && (newname !== oldname))
+				// rename: delete old
+				resp = await fetchContent("studio/"+studio+"?cmd=delin "+oldname);
+		}
+		if(resp && resp.ok){
+			refreshInputGroups();
+			await fetchContent("studio/"+studio+"?cmd=savein");
+		}
+	}
+}
+
+async function selectStAdminInputItem(evt){
+	let entry;
+	let i = -1;
+	if(evt){
+		let par = evt.target.parentElement.parentElement.parentElement;
+		i = evt.target.parentElement.rowIndex - 1;
+		entry = studioStateCache.live[i];
+		// Get all elements with class="tselcell" and remove the class "active" from btype div
+		let els = par.getElementsByClassName("tselrow");
+		for(let i = 0; i < els.length; i++){
+			els[i].className = els[i].className.replace(" active", "");
+		}
+		// and activate the selected element
+		els[i].className += " active";
+	}else{
+		// create new entry
+		entry = {Name: "NewLiveInput", Bus: "00000d", Controls: 0, Ports:""};
+	}
+	let el = document.getElementById("stConfInSettings");
+	// fill in settings for selected
+	if(entry){
+		el.style.display = "block";
+		el = document.getElementById("stConfInName");
+		el.value = entry.Name;
+		el.setAttribute("data-idx", i);
+		el = document.getElementById("stConfInPorts");
+		let devList = await stGetSourceList();
+		el.innerHTML = "";
+		stRenderPortsControl(el, devList, entry.Ports, true, studioStateCache.chancnt);
+
+		let bus = parseInt(entry.Bus, 16);
+		el = document.getElementById("stConfInBus");
+		el.innerHTML = "";
+		el.appendChild(document.createTextNode("Bus Assignment"));
+		el.appendChild(document.createElement("br"));
+		for(let b=0; b<studioStateCache.buscnt; b++){
+			// update busses
+			if(b != 1){ // skip cue channel
+				let c = document.createElement("input");
+				c.id = "LiveInBus"+b;
+				let l = document.createElement('label');
+				l.htmlFor = c.id;
+				c.setAttribute("type", "checkbox");
+				c.setAttribute("data-bus", b);
+				switch(b){
+					case 0:
+						l.appendChild(document.createTextNode("Monitor"));
+						break;
+					case 2:
+						l.appendChild(document.createTextNode("Main"));
+						break;
+					case 3:
+						l.appendChild(document.createTextNode("Alternate"));
+						break;
+					default:
+						l.appendChild(document.createTextNode("Bus " + b));
+						break;
+				}
+				el.appendChild(c);
+				el.appendChild(l);
+				el.appendChild(document.createElement("br"));
+				// update bus values
+				if(bus !== false){
+					if(c){
+						if((1 << b) & bus)
+							c.checked = true;
+						else
+							c.checked = false;
+					}
+				}
+			}
+		}
+		
+		el = document.getElementById("stConfInTB");
+		el.innerHTML = "";
+		el.appendChild(document.createTextNode("Talkback Assignment"));
+		el.appendChild(document.createElement("br"));
+		c = document.createElement("input");
+		c.id = "LiveInBus"+29;
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Talkback 1"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-bus", 29);
+		el.appendChild(c);
+		if((1<<29) & bus)
+			c.checked = true;
+		else
+			c.checked = false;
+		el.appendChild(l);
+		el.appendChild(document.createElement("br"));
+		
+		c = document.createElement("input");
+		c.id = "LiveInBus"+30;
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Talkback 2"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-bus", 30);
+		el.appendChild(c);
+		if((1<<30) & bus)
+			c.checked = true;
+		else
+			c.checked = false;
+		el.appendChild(l);
+		el.appendChild(document.createElement("br"));
+		
+		c = document.createElement("input");
+		c.id = "LiveInBus"+31;
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Talkback 3"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-bus", 31);
+		el.appendChild(c);
+		if((1<<31) & bus)
+			c.checked = true;
+		else
+			c.checked = false;
+		el.appendChild(l);
+		el.appendChild(document.createElement("br"));
+		
+		el = document.getElementById("stConfInMute");
+		el.innerHTML = "";
+		el.appendChild(document.createTextNode("Mute Group"));
+		el.appendChild(document.createElement("br"));
+		c = document.createElement("input");
+		c.id = "LiveInBus"+25;
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Mute A"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-bus", 25);
+		el.appendChild(c);
+		if((1<<25) & bus)
+			c.checked = true;
+		else
+			c.checked = false;
+		el.appendChild(l);
+		el.appendChild(document.createElement("br"));
+		
+		c = document.createElement("input");
+		c.id = "LiveInBus"+26;
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Mute B"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-bus", 26);
+		el.appendChild(c);
+		if((1<<26) & bus)
+			c.checked = true;
+		else
+			c.checked = false;
+		el.appendChild(l);
+		el.appendChild(document.createElement("br"));
+		
+		c = document.createElement("input");
+		c.id = "LiveInBus"+27;
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Mute C"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-bus", 27);
+		el.appendChild(c);
+		if((1<<27) & bus)
+			c.checked = true;
+		else
+			c.checked = false;
+		el.appendChild(l);
+		el.appendChild(document.createElement("br"));
 	}
 }
 
@@ -7846,6 +8115,9 @@ async function refreshOutGroups(){
 					}
 				}
 				studioStateCache.outs = list;
+				// update server settings panel here, of any
+				refreshStAdminOuts(list);
+				// update the studio output controls
 				let format = `<div id="stOutIdx$Idx$" style="display: flex; flex-flow: row; align-items: center;">
 					<div style="width:75px;">$Name$</div>
 					<div style="display: flex; flex-flow: row; align-items: center;">
@@ -7866,6 +8138,213 @@ async function refreshOutGroups(){
 		}
 	}
 }
+
+function refreshStAdminOuts(list){
+//!!vvv
+	let el = document.getElementById("stOutConfList");
+	let colMap = {url: false, Name: "Name", Bus: false, Mutes: false, Volume: false, ShowUI: false, Ports: false};
+	genPopulateTableFromArray(list, el, colMap, selectStAdminInputItem);
+	
+	el = document.getElementById("stConfOutSettings");
+	el.style.display = "none";
+}
+
+function stConfOutNew(evt){
+	// unselect all in live input list
+	let par = document.getElementById("stOutConfList");
+	let els = par.getElementsByClassName("tselrow");
+	for(let i = 0; i < els.length; i++){
+		els[i].className = els[i].className.replace(" active", "");
+	}
+	// load new in settings
+	selectStAdminOutItem();
+}
+
+async function stConfOutDelete(evt){
+	let nel = document.getElementById("stConfOutName");
+	let oldname = nel.getAttribute("data-idx");
+	if(oldname > -1)
+		oldname = studioStateCache.outs[oldname].Name;
+	else
+		oldname = "";
+	if(oldname){
+		let studio = studioName.getValue();
+		if(studio.length){
+			let resp = await fetchContent("studio/"+studio+"?cmd=delout "+oldname);
+			if(resp && resp.ok){
+				refreshInputGroups();
+				await fetchContent("studio/"+studio+"?cmd=saveout");
+			}
+		}
+	}
+}
+
+async function stConfOutSave(evt){
+	// note: current volume settings will be saved too!
+	let el = evt.target.parentElement.parentElement;
+	let buses = el.querySelectorAll("input[type='checkbox']:checked");
+	let bus = BigInt(0);
+	for(let i = 0; i < buses.length; i++)
+		bus += (1n << BigInt(parseInt(buses[i].getAttribute("data-bus"))));
+	bus =  ("00000000" + bus.toString(16)).substr(-8);
+	let pel = document.getElementById("stConfOutPorts");
+	stPortsControlValue(pel);
+	let ports = pel.userPortList;
+	let nel = document.getElementById("stConfOutName");
+	let newname = nel.value;
+	newname = newname.replace(/ /g,"_");
+	let oldname = nel.getAttribute("data-idx");
+	if(oldname > -1)
+		oldname = studioStateCache.live[oldname].Name;
+	else
+		oldname = "";
+	let studio = studioName.getValue();
+	if(studio.length){
+		let obj = {cmd: "setout "+newname+" "+bus+" 00000000 "+ports, raw: 1};
+		let resp = await fetchContent("studio/"+studio, {
+				method: 'POST',
+				body: JSON.stringify(obj),
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp && resp.ok){
+			if(oldname && (newname !== oldname))
+				// rename: delete old
+				resp = await fetchContent("studio/"+studio+"?cmd=delout "+oldname);
+		}
+		if(resp && resp.ok){
+			refreshInputGroups();
+			await fetchContent("studio/"+studio+"?cmd=saveout");
+		}
+	}
+}
+
+async function selectStAdminOutItem(evt){
+	let entry;
+	let i = -1;
+	if(evt){
+		let par = evt.target.parentElement.parentElement.parentElement;
+		i = evt.target.parentElement.rowIndex - 1;
+		entry = studioStateCache.live[i];
+		// Get all elements with class="tselcell" and remove the class "active" from btype div
+		let els = par.getElementsByClassName("tselrow");
+		for(let i = 0; i < els.length; i++){
+			els[i].className = els[i].className.replace(" active", "");
+		}
+		// and activate the selected element
+		els[i].className += " active";
+	}else{
+		// create new entry
+		entry = {Name: "NewOutput", Bus: "00000d", Controls: 0, Ports:""};
+	}
+	let el = document.getElementById("stConfOutSettings");
+	// fill in settings for selected
+	if(entry){
+		el.style.display = "block";
+		el = document.getElementById("stConfOutName");
+		el.value = entry.Name;
+		el.setAttribute("data-idx", i);
+		el = document.getElementById("stConfOutPorts");
+		let devList = await stGetSourceList();
+		el.innerHTML = "";
+		stRenderPortsControl(el, devList, entry.Ports, true, studioStateCache.chancnt);
+
+		let bus = parseInt(entry.Bus, 16);
+		el = document.getElementById("stConfOutBus");
+		el.innerHTML = "";
+		el.appendChild(document.createTextNode("Bus Assignment"));
+		el.appendChild(document.createElement("br"));
+		for(let b=0; b<studioStateCache.buscnt; b++){
+			// update busses
+			if(b != 1){ // skip cue channel
+				let c = document.createElement("input");
+				c.id = "OutBusGrp"+b;
+				let l = document.createElement('label');
+				l.htmlFor = c.id;
+				c.setAttribute("type", "checkbox");
+				c.setAttribute("data-bus", b);
+				switch(b){
+					case 0:
+						l.appendChild(document.createTextNode("Monitor"));
+						break;
+					case 2:
+						l.appendChild(document.createTextNode("Main"));
+						break;
+					case 3:
+						l.appendChild(document.createTextNode("Alternate"));
+						break;
+					default:
+						l.appendChild(document.createTextNode("Bus " + b));
+						break;
+				}
+				el.appendChild(c);
+				el.appendChild(l);
+				el.appendChild(document.createElement("br"));
+				// update bus values
+				if(bus !== false){
+					if(c){
+						if((1 << b) & bus)
+							c.checked = true;
+						else
+							c.checked = false;
+					}
+				}
+			}
+		}
+		
+		el = document.getElementById("stConfOutMute");
+		el.innerHTML = "";
+		el.appendChild(document.createTextNode("Mute Levels"));
+		el.appendChild(document.createElement("br"));
+		c = document.createElement("input");
+		c.id = "OutBusGrp"+25;
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Mute A"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-bus", 25);
+		el.appendChild(c);
+		if((1<<25) & bus)
+			c.checked = true;
+		else
+			c.checked = false;
+		el.appendChild(l);
+		el.appendChild(document.createElement("br"));
+		
+		c = document.createElement("input");
+		c.id = "OutBusGrp"+26;
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Mute B"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-bus", 26);
+		el.appendChild(c);
+		if((1<<26) & bus)
+			c.checked = true;
+		else
+			c.checked = false;
+		el.appendChild(l);
+		el.appendChild(document.createElement("br"));
+		
+		c = document.createElement("input");
+		c.id = "OutBusGrp"+27;
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Mute C"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-bus", 27);
+		el.appendChild(c);
+		if((1<<27) & bus)
+			c.checked = true;
+		else
+			c.checked = false;
+		el.appendChild(l);
+		el.appendChild(document.createElement("br"));
+	}
+}
+//!!^^^^
 
 function stTBAction(evt, state, tb){
 	evt.preventDefault();
@@ -7988,7 +8467,6 @@ async function syncStudioMetalist(studio){
 		}else if(cred.getValue()){
 			alert("Failed to fetch metalist from the studio.");
 		}
-		refreshOutGroups();
 	}
 }
 
@@ -9298,7 +9776,7 @@ function playerDragAllow(evt){
 function playerDropHandler(evt){
 	evt.preventDefault();
 	let target = evt.target;
-	let pNum = target.getAttribute("data-pnum");
+	let pNum = target.getAttribute("data-idx");
 	let atr = curDrag.getAttribute("data-url");
 	if(atr && atr.length && !target.hasChildNodes()){ // player is empty and drag item url is set
 		let studio = studioName.getValue();
@@ -9704,8 +10182,18 @@ function reloadStudioSection(el, type){
 		updateControlSurface();
 	}else if(type == "ins"){
 		refreshInputGroups();
+	}else if(type == "outs"){
+		refreshOutGroups();
+	}else if(type == "mixer"){
+		
+	}else if(type == "automation"){
+		
+	}else if(type == "library"){
+		
 	}else if(type == "recorders"){
 		refreshRecorderPanel();
+	}else if(type == "jconns"){
+		
 	}
 }
 
@@ -9976,7 +10464,7 @@ function buffToUvObj(buffer){
 
 /**** startup and load functions *****/
 
-function startupContent(){
+async function startupContent(){
 	loadElement("nav", document.getElementById("navtab")).then((err) => {
 		if(!err){
 			checkLogin().then((res)=> {
@@ -9995,7 +10483,15 @@ function startupContent(){
 			});
 		}
 	});
-	loadElement("stadmin", document.getElementById("studioAdmin"));
+	await loadElement("stadmin", document.getElementById("studioAdmin"));
+	let el = document.getElementById("conCommand");
+	if(el){
+		el.addEventListener("keyup", function(event) {
+			if(event.key === "Enter"){
+				stConsSend();
+			}
+		});
+	}
 }
 
 window.onload = function(){
@@ -10023,10 +10519,4 @@ window.onload = function(){
 	startupContent();
 	loadStashRecallOnLoad();
 	pTemplate = document.querySelector("#playerTemplate");
-	let el = document.getElementById("conCommand");
-	el.addEventListener("keyup", function(event) {
-		if(event.key === "Enter"){
-			stConsSend();
-		}
-	});
 }
