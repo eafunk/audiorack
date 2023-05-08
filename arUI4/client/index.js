@@ -8105,14 +8105,20 @@ async function refreshOutGroups(){
 				let show = [];
 				let data = await resp.text();
 				let lines = data.split("\n");
+				let cnt = 0;
 				for(let n = 1; n < lines.length; n++){
 					let fields = lines[n].split("\t");
 					if(fields[0].length){
-						let entry = {Idx: n, Name: fields[0], Volume: fields[1], Mutes: fields[2], Bus: fields[3], ShowUI: fields[4], Ports: fields[5]};
+						cnt++;
+						let entry = {Idx: cnt, Name: fields[0], Volume: fields[1], Mutes: fields[2], Bus: fields[3], ShowUI: fields[4], Ports: fields[5]};
 						list.push(entry);
 						if(entry.ShowUI && entry.ShowUI.length && parseInt(entry.ShowUI))
 							show.push(entry);
 					}
+				}
+				while(list.length < studioStateCache.outcnt){
+					cnt++;
+					list.push({url: false, Idx: cnt, Name: false, Bus: false, Mutes: false, Volume: false, ShowUI: false, Ports: false});
 				}
 				studioStateCache.outs = list;
 				// update server settings panel here, of any
@@ -8138,18 +8144,25 @@ async function refreshOutGroups(){
 		}
 	}
 }
+function stAdminOutNameFormat(val){
+	if(val)
+		return val;
+	else
+		return "<button onclick='stConfOutNew(event)'>New</button>"
+}
 
 function refreshStAdminOuts(list){
-//!!vvv
 	let el = document.getElementById("stOutConfList");
-	let colMap = {url: false, Name: "Name", Bus: false, Mutes: false, Volume: false, ShowUI: false, Ports: false};
-	genPopulateTableFromArray(list, el, colMap, selectStAdminInputItem);
+	let colMap = {url: false, Idx: " ", Name: "Name", Bus: false, Mutes: false, Volume: false, ShowUI: false, Ports: false};
+	let fields = {Name: stAdminOutNameFormat};
+	genPopulateTableFromArray(list, el, colMap, selectStAdminInputItem, false, false, false, false, fields, false);
 	
 	el = document.getElementById("stConfOutSettings");
 	el.style.display = "none";
 }
 
 function stConfOutNew(evt){
+//!!vvv
 	// unselect all in live input list
 	let par = document.getElementById("stOutConfList");
 	let els = par.getElementsByClassName("tselrow");
@@ -8227,7 +8240,7 @@ async function selectStAdminOutItem(evt){
 	if(evt){
 		let par = evt.target.parentElement.parentElement.parentElement;
 		i = evt.target.parentElement.rowIndex - 1;
-		entry = studioStateCache.live[i];
+		entry = studioStateCache.outs[i];
 		// Get all elements with class="tselcell" and remove the class "active" from btype div
 		let els = par.getElementsByClassName("tselrow");
 		for(let i = 0; i < els.length; i++){
