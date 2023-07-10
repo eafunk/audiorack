@@ -7570,6 +7570,7 @@ function stCreatePortSel(devList, devName, selected){
 
 async function stRenderPortsControl(el, devList, portList, settable, fixedChan){
 	el.userDevList = devList;
+	el.style.overflowY = "auto";
 	let connList = [];
 	if(portList){
 		el.userPortList = portList;
@@ -8155,22 +8156,23 @@ function refreshStAdminOuts(list){
 	let el = document.getElementById("stOutConfList");
 	let colMap = {url: false, Idx: " ", Name: "Name", Bus: false, Mutes: false, Volume: false, ShowUI: false, Ports: false};
 	let fields = {Name: stAdminOutNameFormat};
-	genPopulateTableFromArray(list, el, colMap, selectStAdminInputItem, false, false, false, false, fields, false);
+	genPopulateTableFromArray(list, el, colMap, selectStAdminOutItem, false, false, false, false, fields, false);
 	
 	el = document.getElementById("stConfOutSettings");
 	el.style.display = "none";
 }
 
 function stConfOutNew(evt){
-//!!vvv
-	// unselect all in live input list
+	// unselect any currently selected outputs and select this one
 	let par = document.getElementById("stOutConfList");
 	let els = par.getElementsByClassName("tselrow");
+	let idx = evt.target.parentNode.parentNode.rowIndex - 1;
 	for(let i = 0; i < els.length; i++){
-		els[i].className = els[i].className.replace(" active", "");
+		if(idx == i)
+			els[i].className += " active";
+		else
+			els[i].className = els[i].className.replace(" active", "");
 	}
-	// load new in settings
-	selectStAdminOutItem();
 }
 
 async function stConfOutDelete(evt){
@@ -8195,25 +8197,43 @@ async function stConfOutDelete(evt){
 async function stConfOutSave(evt){
 	// note: current volume settings will be saved too!
 	let el = evt.target.parentElement.parentElement;
-	let buses = el.querySelectorAll("input[type='checkbox']:checked");
-	let bus = BigInt(0);
-	for(let i = 0; i < buses.length; i++)
-		bus += (1n << BigInt(parseInt(buses[i].getAttribute("data-bus"))));
-	bus =  ("00000000" + bus.toString(16)).substr(-8);
+	let ctlel = el.querySelector("input[type='radio']:checked");
+	let bus = parseInt(ctlel.getAttribute("data-bus"));
+	let showui = 0;
+	ctlel = document.getElementById("stConfOutVolUI");
+	if(ctlel.checked)
+		showui = 1;
+		
 	let pel = document.getElementById("stConfOutPorts");
 	stPortsControlValue(pel);
 	let ports = pel.userPortList;
+	
+	el = document.getElementById("OutMuteC");
+	let mute = BigInt(parseInt(el.value));
+
+	el = document.getElementById("OutMuteB");
+	mute = (256n * mute) + BigInt(parseInt(el.value));
+	
+	el = document.getElementById("OutMuteA");
+	mute = (256n * mute) + BigInt(parseInt(el.value));
+	
+	el = document.getElementById("OutMuteCue");
+	mute = (256n * mute) + BigInt(parseInt(el.value));
+	
+	mutgain = ("00000000" + mute.toString(16)).substr(-8);
+
 	let nel = document.getElementById("stConfOutName");
 	let newname = nel.value;
 	newname = newname.replace(/ /g,"_");
 	let oldname = nel.getAttribute("data-idx");
 	if(oldname > -1)
-		oldname = studioStateCache.live[oldname].Name;
+		oldname = studioStateCache.outs[oldname].Name;
 	else
 		oldname = "";
 	let studio = studioName.getValue();
+
 	if(studio.length){
-		let obj = {cmd: "setout "+newname+" "+bus+" 00000000 "+ports, raw: 1};
+		let obj = {cmd: "setout "+newname+" "+mutgain+" "+bus+" "+showui+" "+ports, raw: 1};
 		let resp = await fetchContent("studio/"+studio, {
 				method: 'POST',
 				body: JSON.stringify(obj),
@@ -8228,16 +8248,21 @@ async function stConfOutSave(evt){
 				resp = await fetchContent("studio/"+studio+"?cmd=delout "+oldname);
 		}
 		if(resp && resp.ok){
-			refreshInputGroups();
+			refreshOutGroups();
 			await fetchContent("studio/"+studio+"?cmd=saveout");
 		}
 	}
 }
 
+function stConfOutMuteChange(evt){
+	let sib = evt.target.nextSibling;
+	sib.innerText = linToDBtext(evt.target.value / 255);
+}
+
 async function selectStAdminOutItem(evt){
 	let entry;
 	let i = -1;
-	if(evt){
+	if(evt.target.nodeName == "TD"){
 		let par = evt.target.parentElement.parentElement.parentElement;
 		i = evt.target.parentElement.rowIndex - 1;
 		entry = studioStateCache.outs[i];
@@ -8250,7 +8275,7 @@ async function selectStAdminOutItem(evt){
 		els[i].className += " active";
 	}else{
 		// create new entry
-		entry = {Name: "NewOutput", Bus: "00000d", Controls: 0, Ports:""};
+		entry = {Name: "NewOutput", Bus: 0, Mutes: "FFFFFFFF", Ports:""};
 	}
 	let el = document.getElementById("stConfOutSettings");
 	// fill in settings for selected
@@ -8259,8 +8284,14 @@ async function selectStAdminOutItem(evt){
 		el = document.getElementById("stConfOutName");
 		el.value = entry.Name;
 		el.setAttribute("data-idx", i);
+		
+		el = document.getElementById("stConfOutVolUI");
+		if(parseInt(entry.ShowUI))
+			el.checked = true;
+		else
+			el.checked = false;
 		el = document.getElementById("stConfOutPorts");
-		let devList = await stGetSourceList();
+		let devList = await stGetDestinationList();
 		el.innerHTML = "";
 		stRenderPortsControl(el, devList, entry.Ports, true, studioStateCache.chancnt);
 
@@ -8269,95 +8300,145 @@ async function selectStAdminOutItem(evt){
 		el.innerHTML = "";
 		el.appendChild(document.createTextNode("Bus Assignment"));
 		el.appendChild(document.createElement("br"));
+		let fs = document.createElement("fieldset");
+		el.appendChild(fs);
 		for(let b=0; b<studioStateCache.buscnt; b++){
 			// update busses
-			if(b != 1){ // skip cue channel
-				let c = document.createElement("input");
-				c.id = "OutBusGrp"+b;
-				let l = document.createElement('label');
-				l.htmlFor = c.id;
-				c.setAttribute("type", "checkbox");
-				c.setAttribute("data-bus", b);
-				switch(b){
-					case 0:
-						l.appendChild(document.createTextNode("Monitor"));
-						break;
-					case 2:
-						l.appendChild(document.createTextNode("Main"));
-						break;
-					case 3:
-						l.appendChild(document.createTextNode("Alternate"));
-						break;
-					default:
-						l.appendChild(document.createTextNode("Bus " + b));
-						break;
-				}
-				el.appendChild(c);
-				el.appendChild(l);
-				el.appendChild(document.createElement("br"));
-				// update bus values
-				if(bus !== false){
-					if(c){
-						if((1 << b) & bus)
-							c.checked = true;
-						else
-							c.checked = false;
-					}
+			let c = document.createElement("input");
+			c.id = "OutBusGrp"+b;
+			let l = document.createElement('label');
+			l.htmlFor = c.id;
+			c.setAttribute("type", "radio");
+			c.setAttribute("name", "stConfOutBus");
+			c.setAttribute("data-bus", b);
+			switch(b){
+				case 0:
+					l.appendChild(document.createTextNode("Monitor"));
+					break;
+				case 1:
+					l.appendChild(document.createTextNode("Cue"));
+					break;
+				case 2:
+					l.appendChild(document.createTextNode("Main"));
+					break;
+				case 3:
+					l.appendChild(document.createTextNode("Alternate"));
+					break;
+				default:
+					l.appendChild(document.createTextNode("Bus " + b));
+					break;
+			}
+			fs.appendChild(c);
+			fs.appendChild(l);
+			fs.appendChild(document.createElement("br"));
+			// update bus values
+			if(bus !== false){
+				if(c){
+					if(b == bus)
+						c.checked = true;
+					else
+						c.checked = false;
 				}
 			}
 		}
-		
+		let mute = BigInt(parseInt(entry.Mutes, 16));
+		let vol = Number(mute & BigInt(0xFF));
 		el = document.getElementById("stConfOutMute");
 		el.innerHTML = "";
 		el.appendChild(document.createTextNode("Mute Levels"));
 		el.appendChild(document.createElement("br"));
 		c = document.createElement("input");
-		c.id = "OutBusGrp"+25;
+		c.id = "OutMuteCue";
 		l = document.createElement('label');
+		l.style.width = "25px"; 
+		l.style.display = "inline-block";
 		l.htmlFor = c.id;
-		l.appendChild(document.createTextNode("Mute A"));
-		c.setAttribute("type", "checkbox");
-		c.setAttribute("data-bus", 25);
-		el.appendChild(c);
-		if((1<<25) & bus)
-			c.checked = true;
-		else
-			c.checked = false;
+		l.appendChild(document.createTextNode("Cue"));
+		c.setAttribute("type", "range");
+		c.setAttribute("min", "0");
+		c.setAttribute("max", "255");
+		c.addEventListener("input", stConfOutMuteChange, false);
+		c.setAttribute("value", vol);
+		c.setAttribute("data-bus", 0);
 		el.appendChild(l);
+		el.appendChild(c);
+		c = document.createElement('div');
+		c.style.width = "45px";
+		c.style.display = "inline-block";
+		c.innerText = linToDBtext(vol / 255);
+		el.appendChild(c);
 		el.appendChild(document.createElement("br"));
 		
+		vol = Number((mute & BigInt(0xFF00)) / BigInt(0x100));
 		c = document.createElement("input");
-		c.id = "OutBusGrp"+26;
+		c.id = "OutMuteA";
 		l = document.createElement('label');
+		l.style.width = "25px"; 
+		l.style.display = "inline-block";
 		l.htmlFor = c.id;
-		l.appendChild(document.createTextNode("Mute B"));
-		c.setAttribute("type", "checkbox");
-		c.setAttribute("data-bus", 26);
-		el.appendChild(c);
-		if((1<<26) & bus)
-			c.checked = true;
-		else
-			c.checked = false;
+		l.appendChild(document.createTextNode("A"));
+		c.setAttribute("type", "range");
+		c.setAttribute("min", "0");
+		c.setAttribute("max", "255");
+		c.addEventListener("input", stConfOutMuteChange, false);
+		c.setAttribute("value", vol);
+		c.setAttribute("data-bus", 1);
 		el.appendChild(l);
+		el.appendChild(c);
+		c = document.createElement('div');
+		c.style.width = "45px";
+		c.style.display = "inline-block";
+		c.innerText = linToDBtext(vol / 255);
+		el.appendChild(c);
 		el.appendChild(document.createElement("br"));
 		
+		vol = Number((mute & BigInt(0xFF0000)) / BigInt(0x10000));
 		c = document.createElement("input");
-		c.id = "OutBusGrp"+27;
+		c.id = "OutMuteB";
 		l = document.createElement('label');
+		l.style.width = "25px"; 
+		l.style.display = "inline-block";
 		l.htmlFor = c.id;
-		l.appendChild(document.createTextNode("Mute C"));
-		c.setAttribute("type", "checkbox");
-		c.setAttribute("data-bus", 27);
-		el.appendChild(c);
-		if((1<<27) & bus)
-			c.checked = true;
-		else
-			c.checked = false;
+		l.appendChild(document.createTextNode("B"));
+		c.setAttribute("type", "range");
+		c.setAttribute("min", "0");
+		c.setAttribute("max", "255");
+		c.addEventListener("input", stConfOutMuteChange, false);
+		c.setAttribute("value", vol);
+		c.setAttribute("data-bus", 2);
 		el.appendChild(l);
+		el.appendChild(c);
+		c = document.createElement('div');
+		c.style.width = "45px";
+		c.style.display = "inline-block";
+		c.innerText = linToDBtext(vol / 255);
+		el.appendChild(c);
+		el.appendChild(document.createElement("br"));
+		
+		vol = Number((mute & BigInt(0xFF000000)) / BigInt(0x1000000));
+		c = document.createElement("input");
+		c.id = "OutMuteC";
+		l = document.createElement('label');
+		l.style.width = "25px"; 
+		l.style.display = "inline-block";
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("C"));
+		c.setAttribute("type", "range");
+		c.setAttribute("min", "0");
+		c.setAttribute("max", "255");
+		c.addEventListener("input", stConfOutMuteChange, false);
+		c.setAttribute("value", vol);
+		c.setAttribute("data-bus", 3);
+		el.appendChild(l);
+		el.appendChild(c);
+		c = document.createElement('div');
+		c.style.width = "45px";
+		c.style.display = "inline-block";
+		c.innerText = linToDBtext(vol / 255);
+		el.appendChild(c);
 		el.appendChild(document.createElement("br"));
 	}
 }
-//!!^^^^
 
 function stTBAction(evt, state, tb){
 	evt.preventDefault();
@@ -10193,20 +10274,24 @@ async function selectControlSurface(entry){
 function reloadStudioSection(el, type){
 	if(type == "control"){
 		updateControlSurface();
+	}else if(type == "delay"){
+		//!! show delay settings
+	}else if(type == "wall"){
+		//!! load wall list
 	}else if(type == "ins"){
 		refreshInputGroups();
 	}else if(type == "outs"){
 		refreshOutGroups();
 	}else if(type == "mixer"){
-		
+		//!! create HTML, load settings values
 	}else if(type == "automation"){
-		
+		//!! create HTML, load settings values
 	}else if(type == "library"){
-		
+		//!! create HTML, load settings values
 	}else if(type == "recorders"){
 		refreshRecorderPanel();
 	}else if(type == "jconns"){
-		
+		//!! create HTML, load jconns list
 	}
 }
 

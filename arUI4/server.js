@@ -863,7 +863,7 @@ app.get('/stadmin', function(request, response){
 								<button class="tab" data-id="stConfMixer" onclick="selectTabType(event, reloadStudioSection, 'mixer')">Mixer</button>
 								<button class="tab" data-id="stConfAuto" onclick="selectTabType(event, reloadStudioSection, 'automation')">Automation</button>
 								<div id="stConsole" class="accpanel" style="display: flex;">
-									<textarea id="stConsRep" rows="17" width=100% readonly=""></textarea>
+									<textarea id="stConsRep" rows="19" width=100% readonly=""></textarea>
 									<div>
 										<input type="text" id="conCommand" placeholder="command" style="float: left; width: calc(100% - 35px)"></input>
 										<button class="editbutton" type="submit" onClick="stConsSend()" style="float: right; width: 25px;">Send</button>
@@ -873,20 +873,20 @@ app.get('/stadmin', function(request, response){
 									<table>
 										<tr>
 											<td style="width: 130px;">
-												<div id="stOutConfList" class="scroll" style="height: 206px;border: 1px; border-style: solid;">
-													No Ourputs
+												<div id="stOutConfList" class="scroll" style="height: 283px; border: 1px; border-style: solid;">
+													No Outputs
 												</div>
 											</td>
 											<td>
 												<div id="stConfOutSettings">
-													Name: <input id="stConfOutName" type="text" size="20" value=""><button onclick="stConfOutDelete(event)">Delete</button>
-													<div id="stConfOutPorts">
+													Show Volume: <input id="stConfOutVolUI" type="checkbox"> Name: <input id="stConfOutName" type="text" size="20" value=""><button onclick="stConfOutDelete(event)">Delete</button>
+													<div id="stConfOutPorts" style="height: 114px;">
 													</div>
 													<br>
 													<table class="tableleftj">
 														<tr>
 															<td><div id="stConfOutBus"></div></td>
-															<td><div id="stConfOutMute"></div></td>
+															<td style="width:60%"><div id="stConfOutMute"></div></td>
 														</tr>
 													</table>
 													<span style='float: center;'><button onclick="stConfOutSave(event)">Save</button></span>
@@ -899,7 +899,7 @@ app.get('/stadmin', function(request, response){
 									<table>
 										<tr>
 											<td style="width: 120px;">
-												<div id="stInConfList" class="scroll" style="height: 206px;border: 1px; border-style: solid;">
+												<div id="stInConfList" class="scroll" style="height: 262px; border: 1px; border-style: solid;">
 													No Live Inputs
 												</div>
 												<button onclick="stConfInNew(event)">New</button>
@@ -907,7 +907,7 @@ app.get('/stadmin', function(request, response){
 											<td>
 												<div id="stConfInSettings">
 													Name: <input id="stConfInName" type="text" size="20" value=""><button onclick="stConfInDelete(event)">Delete</button>
-													<div id="stConfInPorts">
+													<div id="stConfInPorts" style="height: 114px;">
 													</div>
 													<br>
 													<table class="tableleftj">

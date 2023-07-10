@@ -241,7 +241,7 @@ footer {
 			"queue ins accord"
 			"queue admin accord";
 		grid-template-columns: 1fr 584px 200px;
-		grid-template-rows: 150px 329px 300px;
+		grid-template-rows: 150px 329px 355px;
 	}
 	
 	.stRecGrid {

@@ -103,6 +103,7 @@ unsigned char handle_getout(ctl_session *session);
 unsigned char handle_setout(ctl_session *session);
 unsigned char handle_delout(ctl_session *session);
 unsigned char handle_jconlist(ctl_session *session);
+unsigned char handle_savejcons(ctl_session *session);
 unsigned char handle_jackconn(ctl_session *session);
 unsigned char handle_jackdisc(ctl_session *session);
 unsigned char handle_setmm(ctl_session *session);
@@ -522,10 +523,14 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 		result = handle_jconlist(session);
 		goto finish;
 	}  
+	if (!strcmp(arg, "savejcons")) {
+		result = handle_savejcons(session);
+		goto finish;
+	} 
 	if (!strcmp(arg, "jackconn")) {
 		result = handle_jackconn(session);
 		goto finish;
-	}  
+	}   
 	if (!strcmp(arg, "jackdisc")) {
 		result = handle_jackdisc(session);
 		goto finish;
@@ -3331,14 +3336,14 @@ unsigned char handle_delout(ctl_session *session){
 					updateOutputConnections(mixEngine, instance, 1, NULL, NULL);
 					
 					pthread_rwlock_unlock(&mixEngine->outGrpLock);
-					free(name);						
+					free(name);
 					return rOK;
 				}
 			}
 			instance++;
 		}
 		pthread_rwlock_unlock(&mixEngine->outGrpLock);
-		free(name);				
+		free(name);
 	}
 	session->errMSG = "Missing or bad output group name.\n";
 	return rError;
@@ -3422,6 +3427,37 @@ unsigned char handle_jconlist(ctl_session *session){
 	}
 	pthread_rwlock_unlock(&connLock);
 	return rNone;
+}
+
+unsigned char handle_savejcons(ctl_session *session){
+	FILE *fp;
+	char *fPath;
+	char buf[4096]; /* send data buffer */
+	connRecord *rec;
+	jack_port_t *jport;
+	const char **conns, **ptr;
+	const char *name;
+	unsigned char flag;	int i;
+
+	// save all jack connection definition
+	fPath = GetMetaData(0, "file_jackcons", 0);
+	if(strlen(fPath) > 0){
+		if((fp=fopen(fPath, "w")) != NULL){
+			fprintf(fp, "; jack audio connection definitions\necho setting up jack audio connections\n");
+			pthread_rwlock_rdlock(&connLock);
+			rec = (connRecord *)&connList;
+			while(rec = (connRecord *)getNextNode((LinkedListEntry *)rec)){
+				fprintf(fp, "jackconn %s>%s\n", rec->src, rec->dest);
+			}
+			pthread_rwlock_unlock(&connLock);
+			free(fPath);
+			fclose(fp);
+			return rOK;
+		}
+	}
+	free(fPath);
+	session->errMSG = "Missing or invalid path specified in file_jackcons setting.\n";
+	return rError;
 }
 
 unsigned char handle_jackconn(ctl_session *session){

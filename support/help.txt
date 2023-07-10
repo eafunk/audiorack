@@ -201,6 +201,9 @@ will not persist through an arServer quit and restart until the connections made
 jconlist
 Returns the current list of persistent jack connections, including connections that might be waiting to reconnect when a jack client comes back on-line.  This list is manipulated with the jackconn and jackdisc commands.
 
+savejcons
+saves the current jack connection list to the jack connection definition configuration file if the path to the file has been set and the file permissions allow writing.
+
 
 tbon [0..2]
 tboff [0..2]
