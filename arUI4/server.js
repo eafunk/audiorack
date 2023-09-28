@@ -479,6 +479,7 @@ function loadConfiguration(){
 			fs.readFile('/opt/audiorack/support/arui_defconf.json', function(err, data){
 				if(err){
 					console.log('No configuration found. Creating minimal configuarion file.');
+					// default user: admin, password: configure
 					let hash = generatePwdHash("configure");
 					let str = "{ \"http\": {\"http_port\": 3000, \"ses_secret\": \""+crypto.randomBytes(64).toString('base64')+"\"}, ";
 					str += " \"users\": { \"admin\": { \"salt\": \"";
@@ -856,12 +857,14 @@ app.get('/stadmin', function(request, response){
 	if(request.session.permission === 'admin'){
 		html = `
 							<div class="scroll">
-								Studio Server <button class="tab active" data-id="stConsole" onclick="selectTabType(event, reloadStudioSection, 'console')">Console</button>
+								<button class="tab active" data-id="stConsole" onclick="selectTabType(event, reloadStudioSection, 'console')">Console</button>
 								<button class="tab" data-id="stConfOut" onclick="selectTabType(event, reloadStudioSection, 'outs')">Outputs</button>
 								<button class="tab" data-id="stConfIn" onclick="selectTabType(event, reloadStudioSection, 'ins')">Live Inputs</button>
 								<button class="tab" data-id="stConfLib" onclick="selectTabType(event, reloadStudioSection, 'library')">Library</button>
 								<button class="tab" data-id="stConfMixer" onclick="selectTabType(event, reloadStudioSection, 'mixer')">Mixer</button>
 								<button class="tab" data-id="stConfAuto" onclick="selectTabType(event, reloadStudioSection, 'automation')">Automation</button>
+								<button class="tab" data-id="stConfSIP" onclick="selectTabType(event, reloadStudioSection, 'voip')">VoIP</button>
+								<button class="tab" data-id="stConfRoute" onclick="selectTabType(event, reloadStudioSection, 'jconns')">Wire</button>
 								<div id="stConsole" class="accpanel" style="display: flex;">
 									<textarea id="stConsRep" rows="19" width=100% readonly=""></textarea>
 									<div>
@@ -905,29 +908,143 @@ app.get('/stadmin', function(request, response){
 												<button onclick="stConfInNew(event)">New</button>
 											</td>
 											<td>
-												<div id="stConfInSettings">
+												<div id="stConfInSettings" class="scroll" style="height: 290px;">
 													Name: <input id="stConfInName" type="text" size="20" value=""><button onclick="stConfInDelete(event)">Delete</button>
-													<div id="stConfInPorts" style="height: 114px;">
+													<div id="stConfInMain" class="boxed">
+														<div id="stConfInPorts" style="height: 114px;">
+														</div>
+														<br>
+														<table class="tableleftj">
+															<tr>
+																<td><div id="stConfInBus"></div></td>
+																<td><div id="stConfInTB"></div></td>
+																<td><div id="stConfInMute"></div></td>
+															</tr>
+														</table>
 													</div>
-													<br>
-													<table class="tableleftj">
-														<tr>
-															<td><div id="stConfInBus"></div></td>
-															<td><div id="stConfInTB"></div></td>
-															<td><div id="stConfInMute"></div></td>
-														</tr>
-													</table>
+													<div id="stConfInFeed" class="boxed">
+														Feed (Mix-minus)
+														<div id="stConfInFeedPorts" style="height: 114px;">
+														</div>
+														<table class="tableleftj">
+															<tr>
+																<td><div id="stConfInFeedBus"></div></td>
+																<td><div id="stConfInFeedTB"></div></td>
+																<td><div id="stConfInFeedVol">
+																	Feed level (dBf): <input id="stConfInFeedLevel" type="text" size="4">
+																</div></td>
+															</tr>
+														</table>
+													</div>
 													<span style='float: center;'><button onclick="stConfInSave(event)">Save</button></span>
 												</div>
 											</td>
 										</tr>
 									</table>
 								</div>
-								<div id="stConfLib" class="accpanel">
+								<div id="stConfLib" class="accpanel" style="text-align: left; height: 303px;">
+									<div class="boxed">
+										<button onclick="stConfDbCopy(event)">Copy & Apply from Library Settings</button><br>
+										<table class="tableleftj">
+											<tr><td>Type</td><td><div id="stConfDbType"></div></td></tr>
+											<tr><td>Name</td><td><div id="stConfDbName"></div></td></tr>
+											<tr><td>Host</td><td><input id="stConfDbHost" type="text" size="20" value=""><button onclick="stConfDbApplyHost(event)">Apply Host</button></td></tr>
+											<tr><td>Port (Blank for default)</td><td><input id="stConfDbPort" type="text" size="5" value=""><button onclick="stConfDbApplyPort(event)">Apply Port</button></td></tr>
+										</table>
+									</div>
+									<div class="boxed">
+										<label for="stConfDbLoc">Library Location:</label>
+										<select id="stConfDbLoc" onchange="stConfDbLocChange(event)"></select><br>
+										<input id="stConfDbMark" type="checkbox" onchange="stConfDbMarkChange(event)"> Mark Missing -- only one studio should have this set
+									</div>
 								</div>
-								<div id="stConfMixer" class="accpanel">
+								<div id="stConfMixer" class="accpanel" style="text-align: left; height: 303px;">
+									<table class="tableleftj">
+										<tr>
+											<td>Defaults:
+												<div id="stConfMixDefBus" class="boxed" onchange="stConfMixDefBusChange(event)">
+												
+												</div>
+												Recording Directory (defaults to home directory when empty):<br><input id="stConfMixRecDir" type="text" size="20"><button onclick="stConfMixRecDirChange(event)">Apply</button>
+											</td>
+											<td>Silence Detection:
+												<div id="stConfMixSilenceBus" class="boxed" onchange="stConfMixSilenceBusChange(event)">
+
+												</div>
+												Silence level (dBf, must be negative): <input id="stConfMixSilenceLevel" type="text" size="4"><button onclick="stConfMixSilenceLevelChange(event)">Apply</button>
+												<br><br>
+												Silence time-out (sec.): <input id="stConfMixSilenceTO" type="number" min="0" max="600" value="30" onchange="stConfMixSilenceTOChange(event)"> Zero to disable.<br>
+												When enabled, silence detection will first trigger a segue, then if silence persists, an arServer shutdown. 
+												<br>When run normally, arSerever restarts when shutdown. Alternate silence behavior can be scripted by adding scripts to the triggers directory.
+											</td>
+										</tr>
+									</table>
 								</div>
-								<div id="stConfAuto" class="accpanel">
+								<div id="stConfAuto" class="accpanel" style="text-align: left; height: 303px;">
+									<table class="tableleftj">
+										<tr>
+											<td>Automation state at Startup:
+												<div id="stConfAutoStart" class="boxed">
+												<ul style="list-style-type:none; text-align: left; padding-left: 0px;" onchange="stConfAutoChange(event)">
+													<li><input id="stConfAutoStart1" type="radio" name="auto" value="1" checked="checked">On</li>
+													<li><input id="stConfAutoStart0" type="radio" name="auto" value="0">Off</li>
+												</ul>
+												</div>
+											</td>
+											<td>Live Mode Queue Behavior:
+												<div class="boxed">
+													<ul id="stConfAutoLive" style="list-style-type:none; text-align: left; padding-left: 0px;" onchange="stConfLiveChange(event)">
+														<li><input id="stConfAutoLive1" type="checkbox" name="1">Filling</li>
+														<li><input id="stConfAutoLive2" type="checkbox" name="2">Inserting (Priority < 8)</li>
+														<li><input id="stConfAutoLive8" type="checkbox" name="8">Target Time Reordering</li>
+														<li><input id="stConfAutoLive4" type="checkbox" name="4">Allow stopping</li>
+													</ul>
+													Live mode inactivity time-out (minutes): <input id="stConfAutoLiveTO" type="number" min="1" max="120" value="30" onchange="stConfLiveTOChange(event)">
+												</div>
+											</td>
+											<td>Queue:
+												<div id="stConfAutoFill" class="boxed">
+													Number of Fill items to keep in Queue: <input id="stConfAutoFillCount" type="number" min="1" max="20" value="8" onchange="stConfAutoFillCountChange(event)">
+													<br><br>
+													Default Segue time (seconds before end): <input id="stConfAutoSegTime" type="number" min="0" max="20" value="6" onchange="stConfAutoSegTimeChange(event)">
+													<br><br>
+													Level based Segue hold-off (dBf, must be negative): <input id="stConfAutoSegLevel" type="text" size="4"><button onclick="stConfAutoSegLevelChange(event)">Apply</button>
+													<br>Leave blank to disable.
+												</div>
+											</td>
+										</tr>
+									</table>
+								</div>
+								<div id="stConfSIP" class="accpanel" style="text-align: left; height: 303px;">
+									<table class="tableleftj">
+										<tr>
+											<td>
+												BareSip Control Port Number (zero to disable): <input id="stConfSIPCtl" type="text" size="5"><button onclick="stConfSIPCtlChange(event)">Apply</button>
+												<div id="stConfSIPBus" class="boxed" onchange="stConfSIPBusChange(event)">
+												</div>
+												Default Volume (dB): <input id="stConfSIPVol" type="text" size="5"><button onclick="stConfSIPVolChange(event)">Apply</button>
+											</td>
+										</tr>
+										<tr>
+											<td>
+												<div id="stConfSIPFeed" class="boxed" >
+													<table class="tableleftj">
+														<tr>
+															<td><div id="stConfSIPFeedBus" onchange="stConfSIPFeedChange(event)"></div></td>
+															<td><div id="stConfSIPFeedTB" onchange="stConfSIPFeedChange(event)"></div></td>
+															<td><div>
+																Feed level (dBf): <input id="stConfSIPFeedVol" type="text" size="4"><button onclick="stConfSIPFeedVolChange(event)">Apply</button>
+															</div></td>
+														</tr>
+													</table>
+												</div>
+											</td>
+										</tr>
+									</table>
+								</div>
+								<div id="stConfRoute" class="accpanel" style="text-align: left; height: 303px;">
+									<div id="stConfJackConns">
+									</div>
 								</div>
 							</div>`;
 	}

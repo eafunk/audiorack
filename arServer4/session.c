@@ -3535,8 +3535,7 @@ unsigned char handle_setmm(ctl_session *session){
 	if(param != NULL){
 		pthread_rwlock_wrlock(&inputLock);
 		if(rec = getRecordForInput((inputRecord *)&inputList, param)){
-			// second parameter, mix bus assignment bit
-			param = strtok_r(NULL, " ", &session->save_pointer);
+			// second parameter, mix bus number +1 bit orded with mute busses pointer);
 			if(param != NULL){
 				bus = atol(param);
 				bus = (bus & 0xff00001f);

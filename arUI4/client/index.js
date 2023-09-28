@@ -56,6 +56,7 @@ var stashList;
 var itemProps = false;
 var flatPlist = false;
 var curDrag = null;
+var stSaveSetTimer = null;
 var catListCache = new watchableValue(false);
 var locListCache = new watchableValue(false);
 var artListCache = new watchableValue(false);
@@ -786,6 +787,13 @@ function locMenuRefresh(value){
 		let inner = "<option value='' onClick='getLocList()'>Reload List</option>";
 		for(let i=0; i < value.length; i++)
 			inner += "<option value='"+value[i].Name+"' data-id='"+value[i].id+"'>"+value[i].Name+"</option>";
+		element.innerHTML = inner;
+	}
+	element = document.getElementById("stConfDbLoc");
+	if(element && value){
+		let inner = "";
+		for(let i=0; i < value.length; i++)
+			inner += "<option value='"+value[i].id+"' data-id='"+value[i].id+"'>"+value[i].id+" "+value[i].Name+"</option>";
 		element.innerHTML = inner;
 	}
 }
@@ -7413,6 +7421,42 @@ async function stParsePortList(data){
 	return chList; // array (channels) of array (connections) of objects. object = {device: "devName", port: "portName"}
 }
 
+async function stParseConnectionList(data){
+	let ourName;
+	let lines = data.split("\n");
+	let List = [];
+	for(let n = 1; n < (lines.length); n++){
+		let stat = lines[n].split("\t");
+		if(stat.length != 2)
+			continue;
+		let ports = stat[1].split(">");
+		if(ports.length != 2)
+			continue;
+		let fields = ports[0].split(":");
+		let srcDev = fields[0];
+		let srcPort = fields[1];
+		fields = ports[1].split(":");
+		let destDev = fields[0];
+		let destPort = fields[1];
+		if(srcDev && srcDev.length && srcPort && srcPort.length && destDev && destDev.length && destPort && destPort.length)
+			List.push({origStr: stat[1], isConn: stat[0], srcDev: srcDev, srcPort: srcPort, destDev: destDev, destPort: destPort});
+	}
+	// sort list
+	List.sort(function(a, b){
+		let result = a.srcDev.localeCompare(b.srcDev);
+		if(!result){
+			result = a.srcPort.localeCompare(b.srcPort);
+			if(!result){
+				result = a.destDev.localeCompare(b.destDev);
+				if(!result)
+					result = a.destPort.localeCompare(b.destPort);
+			}
+		}
+		return result}
+	);
+	return List; //  array of (connections) objects. object = {isConn: bool, srcDev: "srcDevName", srcPort: "srcPortName", destDev: "destDevName", destPort: "destPortName"}
+}
+
 async function stGetSourceList(){
 	let resp;
 	let studio = studioName.getValue();
@@ -7499,10 +7543,10 @@ function stPortsAddPort(evt){
 	let el = table.parentNode.parentNode.parentNode.parentNode.parentNode.parentNode;
 	row = table.insertRow(row.rowIndex);
 	let cell = row.insertCell(-1);
-	let devsel = stCreateDevSel(el.userDevList);
+	let devsel = stCreateDevSel(el.userDevList, null, stPortsDevChange);
 	cell.appendChild(devsel);
 	cell = row.insertCell(-1);
-	cell.appendChild(stCreatePortSel(el.userDevList, devsel.value));
+	cell.appendChild(stCreatePortSel(el.userDevList, devsel.value, null, stPortsPortChange));
 	cell = row.insertCell(-1);
 	cell.width = '18px';
 	cell.innerHTML = `<button class="editbutton" onclick="stPortsDelPort(event)">-</button>`;
@@ -7525,7 +7569,7 @@ function stPortsDevChange(evt){
 	let el = table.parentNode;
 	let cell = row.childNodes[1];
 	cell.removeChild(cell.firstElementChild);
-	cell.appendChild(stCreatePortSel(el.userDevList, devName));
+	cell.appendChild(stCreatePortSel(el.userDevList, devName, null, stPortsPortChange));
 	stPortsControlValue(el);
 }
 
@@ -7534,7 +7578,32 @@ function stPortsPortChange(evt){
 	stPortsControlValue(el);
 }
 
-function stCreateDevSel(devList, selected){
+function stConnsSrcDevChange(evt){
+	let devName = evt.target.value;
+	let row = evt.target.parentNode.parentNode;
+	let el = row.parentNode.parentNode.parentNode;
+	let cell = evt.target.parentNode;
+	cell.removeChild(cell.lastChild);
+	cell.appendChild(stCreatePortSel(el.userSrcDevList, devName, null, stConnsPortChange));
+	stConnsControlValue(row);
+}
+
+function stConnsDestDevChange(evt){
+	let devName = evt.target.value;
+	let row = evt.target.parentNode.parentNode;
+	let el = row.parentNode.parentNode.parentNode;
+	let cell = evt.target.parentNode;
+	cell.removeChild(cell.lastChild);
+	cell.appendChild(stCreatePortSel(el.userDestDevList, devName, null, stConnsPortChange));
+	stConnsControlValue(row);
+}
+
+function stConnsPortChange(evt){
+	let row = evt.target.parentNode.parentNode;
+	stConnsControlValue(row);
+}
+
+function stCreateDevSel(devList, selected, change){
 	let select = document.createElement('select');
 	for(let i = 0; i < devList.length; i++){
 		let entry = devList[i];
@@ -7545,11 +7614,11 @@ function stCreateDevSel(devList, selected){
 			opt.selected = true;
 		select.appendChild(opt);
 	}
-	select.addEventListener("change", stPortsDevChange, false);
+	select.addEventListener("change", change, false);
 	return select;
 }
 
-function stCreatePortSel(devList, devName, selected){
+function stCreatePortSel(devList, devName, selected, change){
 	let select = document.createElement('select');
 	let dev = findPropObjInArray(devList, "name", devName);
 	if(dev){
@@ -7564,7 +7633,7 @@ function stCreatePortSel(devList, devName, selected){
 			select.appendChild(opt);
 		}
 	}
-	select.addEventListener("change", stPortsPortChange, false);
+	select.addEventListener("change", change, false);
 	return select;
 }
 
@@ -7590,7 +7659,7 @@ async function stRenderPortsControl(el, devList, portList, settable, fixedChan){
 	tr.appendChild(theader);
 	theader = document.createElement("th");
 	theader.className = "tselcell";
-	theader.innerHTML = "Device & Source";
+	theader.innerHTML = "Device & Port";
 	tr.appendChild(theader);
 	// create channel rows
 	let chanCnt = 0;
@@ -7613,7 +7682,7 @@ async function stRenderPortsControl(el, devList, portList, settable, fixedChan){
 		let devtable = document.createElement("table");
 		devtable.className = "tableleftj";
 		devtable.style = "table-layout: auto;";
-		let portCnt = 1;
+		let portCnt = 0;
 		if(con)
 			portCnt = con.length;
 		for(let j = 0; j < portCnt; j++){
@@ -7623,12 +7692,12 @@ async function stRenderPortsControl(el, devList, portList, settable, fixedChan){
 			if(con)
 				entry = con[j];
 			if(settable){
-				let dmenu = stCreateDevSel(devList, entry.device);
+				let dmenu = stCreateDevSel(devList, entry.device, stPortsDevChange);
 				dcell.appendChild(dmenu);
 				if(!entry.device)
 					entry.device = dmenu.value;
 				dcell = dtrow.insertCell(-1);
-				dcell.appendChild(stCreatePortSel(devList, entry.device, entry.port));
+				dcell.appendChild(stCreatePortSel(devList, entry.device, entry.port, stPortsPortChange));
 			}else{
 				dcell.innerHTML = entry.device;
 				dcell = dtrow.insertCell(-1);
@@ -7687,7 +7756,200 @@ function stPortsControlValue(el){
 			}
 		}
 	}
+	if(pStr.length < rows.length)
+		pStr = "";
 	el.userPortList = pStr;	// save the port list for which this control is based on
+}
+
+function stConnsControlValue(el){
+	let srcCell = el.childNodes[1];
+	let destCell = el.childNodes[2];
+	let cStr = "";
+	cStr += srcCell.childNodes[0].value + ":" + srcCell.childNodes[1].value;
+	cStr += ">";
+	cStr += destCell.childNodes[0].value + ":" + destCell.childNodes[1].value;
+	el.userPortList = cStr;	// save the port list for which this row is based on
+	let update = el.childNodes[3].childNodes[1].firstChild;
+	if(el.userPortList != el.userOrigValue){
+		// enable apply button
+		update.style.display = "inline";
+	}else{
+		// disable apply button
+		update.style.display = "none";
+	}
+}
+
+async function stRenderJConControl(el, srcDevList, destDevList, connList){
+	el.userSrcDevList = srcDevList;
+	el.userDestDevList = destDevList;
+	el.style.overflowY = "auto";
+	if(connList){
+		el.userConnList = connList;
+		connList = await stParseConnectionList(connList);
+	}else
+		connList = [];
+	// Create a table element
+	let table = document.createElement("table");
+	table.className = "tableleftj";
+	// Create table row tr element of a table
+	let tr = table.insertRow(-1);
+	// Create the table header th elements
+	let theader = document.createElement("th");
+	theader.className = "tselcell";
+	theader.innerHTML = "Con.";
+	theader.width = "30px";
+	tr.appendChild(theader);
+	theader = document.createElement("th");
+	theader.className = "tselcell";
+	theader.innerHTML = "Source";
+	tr.appendChild(theader);
+	theader = document.createElement("th");
+	theader.className = "tselcell";
+	theader.innerHTML = "Destination";
+	tr.appendChild(theader);
+	theader = document.createElement("th");
+	theader.className = "tselcell";
+	theader.innerHTML = `<button class="editbutton" onclick="stJackConnAdd(event)">+</button>`;
+	theader.width = "50px";
+	tr.appendChild(theader);
+	// create channel rows
+	let cnt = connList.length;
+	// use connList to build channels
+	for(let i = 0; i < cnt; i++){
+		let con;
+		if(connList)
+			con = connList[i];
+		tr = table.insertRow(-1);
+		tr.userOrigValue = con.origStr;
+		let cell = tr.insertCell(-1);
+		if(con.isConn)
+			cell.innerHTML = `Y`;
+		else
+			cell.innerHTML = `N`;
+		cell = tr.insertCell(-1);
+		let dmenu = stCreateDevSel(srcDevList, con.srcDev, stConnsSrcDevChange);
+		cell.appendChild(dmenu);
+		if(!con.srcDev)
+			con.srcDev = dmenu.value;
+		cell.appendChild(stCreatePortSel(srcDevList, con.srcDev, con.srcPort, stConnsPortChange));
+
+		cell = tr.insertCell(-1);
+		dmenu = stCreateDevSel(destDevList, con.destDev, stConnsDestDevChange);
+		cell.appendChild(dmenu);
+		if(!con.destDev)
+			con.destDev = dmenu.value;
+		cell.appendChild(stCreatePortSel(destDevList, con.destDev, con.destPort, stConnsPortChange));
+		
+		cell = tr.insertCell(-1);
+		cell.innerHTML = `<span style='float: left;'><button class="editbutton" onclick="stJackConnRemove(event)">-</button></span><span style='float: right;'><button class="editbutton" style="display: none;" onclick="stJackConnUpdate(event)">Apply</button></span>`;
+		stConnsControlValue(tr);
+	}
+	el.appendChild(table);
+}
+
+async function stJackConnAdd(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let tr = evt.target.parentNode.parentNode;
+	let table = tr.parentNode.parentNode;
+	let el = table.parentNode;
+	let srcDevList = el.userSrcDevList;
+	let destDevList = el.userDestDevList;
+	
+	tr = table.insertRow(-1);
+	tr.userOrigValue = "";
+	let cell = tr.insertCell(-1);
+	cell.innerHTML = " ";
+	
+	cell = tr.insertCell(-1);
+	let dmenu = stCreateDevSel(srcDevList, null, stConnsSrcDevChange);
+	cell.appendChild(dmenu);
+	cell.appendChild(stCreatePortSel(srcDevList, dmenu.value, null, stConnsPortChange));
+	
+	cell = tr.insertCell(-1);
+	dmenu = stCreateDevSel(destDevList, null, stConnsDestDevChange);
+	cell.appendChild(dmenu);
+	cell.appendChild(stCreatePortSel(destDevList, dmenu.value, null, stConnsPortChange));
+	
+	cell = tr.insertCell(-1);
+	cell.innerHTML = `<span style='float: left;'><button class="editbutton" onclick="stJackConnRemove(event)">-</button></span><span style='float: right;'><button class="editbutton" style="display: inline;" onclick="stJackConnUpdate(event)">Apply</button></span>`;
+	stConnsControlValue(tr);
+}
+
+async function stJackConnRemove(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+
+	let row = evt.target.parentNode.parentNode.parentNode;
+	let table = row.parentNode.parentNode;
+	if(row.userOrigValue && row.userOrigValue.length){
+		let studio = studioName.getValue();
+		if(studio.length){
+			let resp = await fetchContent("studio/"+studio+"?cmd=jackdisc%20"+row.userOrigValue);
+			if(resp instanceof Response){
+				if(resp.ok)
+					row.remove();
+				else
+					alert("Error deleting studio jack audio connection");
+			}
+		}
+	}else
+		row.remove();
+}
+
+async function stJackConnUpdate(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+
+	let row = evt.target.parentNode.parentNode.parentNode;
+	let table = row.parentNode.parentNode;
+	let studio = studioName.getValue();
+	if(studio.length){
+		if(row.userOrigValue && row.userOrigValue.length){
+			let resp = await fetchContent("studio/"+studio+"?cmd=jackdisc%20"+row.userOrigValue);
+			if(resp instanceof Response){
+				if(!resp.ok){
+					alert("Error deleting studio jack audio connection");
+					return;
+				}
+			}else{
+				alert("Error deleting studio jack audio connection");
+				return;
+			}
+		}
+		let resp = await fetchContent("studio/"+studio+"?cmd=jackconn%20"+row.userPortList);
+		if(resp instanceof Response){
+			if(!resp.ok){
+				alert("Error creating studio jack audio connection");
+				return;
+			}
+		}else{
+			alert("Error creating studio jack audio connection");
+			return;
+		}
+		row.userOrigValue = row.userPortList;
+		stConnsControlValue(row);
+	}
+}
+
+async function refreshStAdminRouts(){
+	let studio = studioName.getValue();
+	if(studio.length){
+		let resp = await fetchContent("studio/"+studio+"?cmd=jconlist&raw=1");
+		if(resp instanceof Response){
+			if(resp.ok){
+				let text = await resp.text();
+				let el = document.getElementById("stConfJackConns");
+				el.innerHTML = "";
+				let srcDevList = await stGetSourceList();
+				let destDevList = await stGetDestinationList();
+				stRenderJConControl(el, srcDevList, destDevList, text);
+			}else{
+				alert("Error getting studio jack audio connection list");
+				return;
+			}
+		}
+	}
 }
 
 async function stRefreshRecTemplateList(evt){
@@ -7730,6 +7992,866 @@ function stNewRecSelection(evt){
 		fetchContent("studio/"+studio+"?cmd=newrec "+id);
 }
 
+async function stConfset(key, value){
+	let studio = studioName.getValue();
+	if(studio.length){
+		// save the pipeline property
+		let resp = await fetchContent("studio/"+studio+"?cmd=set%20"+key+"%20"+value);
+		if(resp instanceof Response){
+			if(resp.ok){
+				let text = await resp.text();
+				if(text.search("OK") != 0){
+					alert("Error setting "+key+" setting");
+					return;
+				}
+			}else{
+				alert("Error setting "+key+" setting");
+				return;
+			}
+		}
+	}
+	// set timmer to trigger saveset command
+	if(stSaveSetTimer)
+		clearInterval(stSaveSetTimer);
+	stSaveSetTimer = setTimeout(function(studio){
+			stSaveSetTimer = null;
+			console.log("saveset");
+			fetchContent("studio/"+studio+"?cmd=saveset");
+		}, 6000, studio);
+}
+
+function refreshStAdminAuto(){
+	let settings = studioStateCache.meta[0];
+	let el;
+	let val;
+	if(settings){
+		if(parseInt(settings["auto_startup"])){
+			el = document.getElementById("stConfAutoStart1");
+			el.checked = true;
+		}else{
+			el = document.getElementById("stConfAutoStart0");
+			el.checked = true;
+		}
+		val = parseInt(settings["auto_live_flags"]);
+		el = document.getElementById("stConfAutoLive1");
+		if(val & 0x01)
+			el.checked = true;
+		else
+			el.checked = false;
+		el = document.getElementById("stConfAutoLive2");
+		if(val & 0x02)
+			el.checked = true;
+		else
+			el.checked = false;
+		el = document.getElementById("stConfAutoLive4");
+		if(val & 0x04)
+			el.checked = true;
+		else
+			el.checked = false;
+		el = document.getElementById("stConfAutoLive8");
+		if(val & 0x08)
+			el.checked = true;
+		else
+			el.checked = false;
+		el = document.getElementById("stConfAutoLiveTO");
+		val = parseInt(settings["auto_live_timeout"]);
+		val = val / 60;
+		if(!val || (val < 1))
+			val = 1;
+		el.value = val;
+		el = document.getElementById("stConfAutoFillCount");
+		val = parseInt(settings["auto_thresh"]);
+		if(!val)
+			val = 1;
+		el.value = val;
+		el = document.getElementById("stConfAutoSegTime");
+		val = parseInt(settings["def_segout"]);
+		if(!val)
+			val = 0;
+		el.value = val;
+		
+		el = document.getElementById("stConfAutoSegLevel");
+		val = parseFloat(settings["def_seglevel"]);
+		if(val)
+			val = Math.round(20.0 * Math.log10(val));
+		else
+			val = "";
+		el.value = val;
+	}else{
+		el = document.getElementById("stConfAutoStart0");
+		el.checked = true;
+		el = document.getElementById("stConfAutoLive1");
+		el.checked = false;
+		el = document.getElementById("stConfAutoLive2");
+		el.checked = false;
+		el = document.getElementById("stConfAutoLive4");
+		el.checked = false;
+		el = document.getElementById("stConfAutoLive8");
+		el.checked = false;
+		el = document.getElementById("stConfAutoLiveTO");
+		el.value = 30;
+		el = document.getElementById("stConfAutoFillCount");
+		el.value = 8;
+		el = document.getElementById("stConfAutoSegTime");
+		el.value = 6;
+		el = document.getElementById("stConfAutoSegLevel");
+		el.value = "";
+	}
+}
+
+async function stConfLiveChange(evt){
+	let sl = document.getElementById("stConfAutoLive");
+	let els = sl.querySelectorAll('input[type=checkbox]:checked');
+	if(sl){
+		let value = 0;
+		for(let i=0; i<els.length; i++)
+			value = value + parseInt(els[i].name);
+		await stConfset("auto_live_flags", value);
+	}
+}
+
+async function stConfAutoChange(evt){
+	if(evt.originalTarget.value)
+		await stConfset("auto_startup", "1");
+	else
+		await stConfset("auto_startup", "0");
+}
+
+async function stConfLiveTOChange(evt){
+	let el = document.getElementById("stConfAutoLiveTO");
+	let toSec = parseInt(el.value) * 60;
+	await stConfset("auto_live_timeout", toSec);
+}
+
+async function stConfAutoFillCountChange(evt){
+	let val = parseInt(evt.originalTarget.value);
+	await stConfset("auto_thresh", val);
+}
+
+async function stConfAutoSegTimeChange(evt){
+	let val = parseInt(evt.originalTarget.value);
+	await stConfset("def_segout", val);
+}
+
+async function stConfAutoSegLevelChange(evt){
+	let el = document.getElementById("stConfAutoSegLevel");
+	let val = parseFloat(el.value);
+	if(val){
+		if(val > 0.0)
+			val = -val;
+		val = Math.pow(10, (val / 20.0));	// dB to linear
+	}else
+		val = 0.0;
+	await stConfset("def_seglevel", val);
+}
+
+function refreshStAdminMixer(){
+	let settings = studioStateCache.meta[0];
+	if(settings){
+		let bus = parseFloat(settings["def_bus"]);
+		let el = document.getElementById("stConfMixDefBus");
+		el.innerHTML = "";
+		el.appendChild(document.createTextNode("Default Player Bus Assignment"));
+		el.appendChild(document.createElement("br"));
+		for(let b=0; b<studioStateCache.buscnt; b++){
+			// update busses
+			if(b != 1){ // skip cue channel
+				let c = document.createElement("input");
+				c.id = "stConfMixDefBus"+b;
+				let l = document.createElement('label');
+				l.htmlFor = c.id;
+				c.setAttribute("type", "checkbox");
+				c.setAttribute("data-bus", b);
+				switch(b){
+					case 0:
+						l.appendChild(document.createTextNode("Monitor"));
+						break;
+					case 2:
+						l.appendChild(document.createTextNode("Main"));
+						break;
+					case 3:
+						l.appendChild(document.createTextNode("Alternate"));
+						break;
+					default:
+						l.appendChild(document.createTextNode("Bus " + b));
+						break;
+				}
+				el.appendChild(c);
+				el.appendChild(l);
+				el.appendChild(document.createElement("br"));
+				// update bus values
+				if(bus !== false){
+					if(c){
+						if((1 << b) & bus)
+							c.checked = true;
+						else
+							c.checked = false;
+					}
+				}
+			}
+		}
+		
+		el = document.getElementById("stConfMixRecDir");
+		el.value = settings["def_record_dir"];
+		
+		bus = parseFloat(settings["sys_silence_bus"]);
+		el = document.getElementById("stConfMixSilenceBus");
+		el.innerHTML = "";
+		el.appendChild(document.createTextNode("Silence Detection Monitor Bus"));
+		el.appendChild(document.createElement("br"));
+		for(let b=0; b<studioStateCache.buscnt; b++){
+			// update busses
+			if(b != 1){ // skip cue channel
+				let c = document.createElement("input");
+				c.id = "stConfMixSilenceBus"+b;
+				let l = document.createElement('label');
+				l.htmlFor = c.id;
+				c.setAttribute("type", "radio");
+				c.setAttribute("name", "stConfMixSilenceBus");
+				c.setAttribute("data-bus", b);
+				switch(b){
+					case 0:
+						l.appendChild(document.createTextNode("Monitor"));
+						break;
+					case 2:
+						l.appendChild(document.createTextNode("Main"));
+						break;
+					case 3:
+						l.appendChild(document.createTextNode("Alternate"));
+						break;
+					default:
+						l.appendChild(document.createTextNode("Bus " + b));
+						break;
+				}
+				el.appendChild(c);
+				el.appendChild(l);
+				el.appendChild(document.createElement("br"));
+				// update bus values
+				if(bus !== false){
+					if(c){
+						if(b == bus)
+							c.checked = true;
+						else
+							c.checked = false;
+					}
+				}
+			}
+		}
+		
+		el = document.getElementById("stConfMixSilenceLevel");
+		val = parseFloat(settings["sys_silence_thresh"]);
+		if(val)
+			val = Math.round(20.0 * Math.log10(val));
+		else
+			val = "";
+		el.value = val;
+		
+		el = document.getElementById("stConfMixSilenceTO");
+		val = parseInt(settings["sys_silence_timeout"]);
+		if(!val || (val < 0))
+			val = 0;
+		el.value = val;
+	}else{
+		let el = document.getElementById("stConfMixDefBus");
+		el.innerHTML = "";
+		el.appendChild(document.createTextNode("Default Player Bus Assignment"));
+		el.appendChild(document.createElement("br"));
+		for(let b=0; b<studioStateCache.buscnt; b++){
+			// update busses
+			if(b != 1){ // skip cue channel
+				let c = document.createElement("input");
+				c.id = "stConfMixDefBus"+b;
+				let l = document.createElement('label');
+				l.htmlFor = c.id;
+				c.setAttribute("type", "checkbox");
+				c.setAttribute("data-bus", b);
+				c.checked = false;	// not selected
+				switch(b){
+					case 0:
+						l.appendChild(document.createTextNode("Monitor"));
+						break;
+					case 2:
+						l.appendChild(document.createTextNode("Main"));
+						break;
+					case 3:
+						l.appendChild(document.createTextNode("Alternate"));
+						break;
+					default:
+						l.appendChild(document.createTextNode("Bus " + b));
+						break;
+				}
+				el.appendChild(c);
+				el.appendChild(l);
+				el.appendChild(document.createElement("br"));
+			}
+		}
+		
+		el = document.getElementById("stConfMixRecDir");
+		el.value = "";
+		
+		bus = parseFloat(settings["sys_silence_bus"]);
+		el = document.getElementById("stConfMixSilenceBus");
+		el.innerHTML = "";
+		el.appendChild(document.createTextNode("Silence Detection Monitor Bus"));
+		el.appendChild(document.createElement("br"));
+		for(let b=0; b<studioStateCache.buscnt; b++){
+			// update busses
+			if(b != 1){ // skip cue channel
+				let c = document.createElement("input");
+				c.id = "stConfMixSilenceBus"+b;
+				let l = document.createElement('label');
+				l.htmlFor = c.id;
+				c.setAttribute("type", "radio");
+				c.setAttribute("name", "stConfMixSilenceBus");
+				c.setAttribute("data-bus", b);
+				switch(b){
+					case 0:
+						l.appendChild(document.createTextNode("Monitor"));
+						break;
+					case 2:
+						l.appendChild(document.createTextNode("Main"));
+						break;
+					case 3:
+						l.appendChild(document.createTextNode("Alternate"));
+						break;
+					default:
+						l.appendChild(document.createTextNode("Bus " + b));
+						break;
+				}
+				el.appendChild(c);
+				el.appendChild(l);
+				el.appendChild(document.createElement("br"));
+			}
+		}
+		
+		el = document.getElementById("stConfMixSilenceLevel");
+		el.value = "";
+		
+		el = document.getElementById("stConfMixSilenceTO");
+		el.value = 0;
+	}
+}
+
+async function stConfMixDefBusChange(evt){
+	let sl = document.getElementById("stConfMixDefBus");
+	let els = sl.querySelectorAll('input[type=checkbox]:checked');
+	if(sl){
+		let value = 0;
+		for(let i=0; i<els.length; i++)
+			value = value + (1 << parseInt(els[i].getAttribute("data-bus")));
+		await stConfset("def_bus", value);
+	}
+}
+
+async function stConfMixSilenceBusChange(evt){
+	let value = evt.originalTarget.getAttribute("data-bus");
+	await stConfset("sys_silence_bus", value);
+}
+
+async function stConfMixRecDirChange(evt){
+	let el = document.getElementById("stConfMixRecDir");
+	await stConfset("def_record_dir", el.value);
+}
+
+async function stConfMixSilenceLevelChange(evt){
+	let el = document.getElementById("stConfMixSilenceLevel");
+	let val = parseFloat(el.value);
+	if(val){
+		if(val > 0.0)
+			val = -val;
+		val = Math.pow(10, (val / 20.0));	// dB to linear
+	}else
+		val = 0.0;
+	await stConfset("sys_silence_thresh", val);
+}
+
+async function stConfMixSilenceTOChange(evt){
+	let el = document.getElementById("stConfMixSilenceTO");
+	let toSec = parseInt(el.value);
+	await stConfset("sys_silence_timeout", toSec);
+}
+
+function refreshStAdminVoIP(){
+	let settings = studioStateCache.meta[0];
+	if(settings){
+		let bus = parseFloat(settings["sip_bus"]);
+		let el = document.getElementById("stConfSIPBus");
+		el.innerHTML = "";
+		el.appendChild(document.createTextNode("Default SIP Bus Assignment"));
+		el.appendChild(document.createElement("br"));
+		for(let b=0; b<studioStateCache.buscnt; b++){
+			// update busses
+			let c = document.createElement("input");
+			c.id = "stConfSIPDefBus"+b;
+			let l = document.createElement('label');
+			l.htmlFor = c.id;
+			c.setAttribute("type", "checkbox");
+			c.setAttribute("data-bus", b);
+			c.checked = false;	// not selected
+			switch(b){
+				case 0:
+					l.appendChild(document.createTextNode("Monitor"));
+					break;
+				case 1:
+					l.appendChild(document.createTextNode("Cue"));
+					break;
+				case 2:
+					l.appendChild(document.createTextNode("Main"));
+					break;
+				case 3:
+					l.appendChild(document.createTextNode("Alternate"));
+					break;
+				default:
+					l.appendChild(document.createTextNode("Bus " + b));
+					break;
+			}
+			el.appendChild(c);
+			el.appendChild(l);
+			el.appendChild(document.createElement("br"));
+			// update bus values
+			if(bus !== false){
+				if(c){
+					if((1 << b) & bus)
+						c.checked = true;
+					else
+						c.checked = false;
+				}
+			}
+		}
+		el = document.getElementById("stConfSIPVol");
+		val = parseFloat(settings["sip_vol"]);
+		if(val)
+			val = Math.round(20.0 * Math.log10(val));
+		else
+			val = 0.0;
+		el.value = val;
+		
+		el = document.getElementById("stConfSIPFeedVol");
+		val = parseFloat(settings["sip_feed_vol"]);
+		if(val)
+			val = Math.round(20.0 * Math.log10(val));
+		else
+			val = 0.0;
+		el.value = val;
+		
+		el = document.getElementById("stConfSIPCtl");
+		val = parseInt(settings["sip_ctl_port"]);
+		if(!val || (val < 0))
+			val = 0;
+		el.value = val;
+		
+		bus = parseInt(settings["sip_feed_bus"]) & 0x1f;
+		el = document.getElementById("stConfSIPFeedBus");
+		el.innerHTML = "";
+		el.appendChild(document.createTextNode("Feed Bus"));
+		el.appendChild(document.createElement("br"));
+		for(let b=0; b<studioStateCache.buscnt+1; b++){
+			// update busses
+			let c = document.createElement("input");
+			c.id = "SIPFeedBus"+b;
+			l = document.createElement('label');
+			l.htmlFor = c.id;
+			c.setAttribute("type", "radio");
+			c.setAttribute("value", b);
+			c.setAttribute("name", "SIPFeedBus");
+			switch(b){
+				case 0:
+					l.appendChild(document.createTextNode("None"));
+					break;
+				case 1:
+					l.appendChild(document.createTextNode("Monitor"));
+					break;
+				case 2:
+					l.appendChild(document.createTextNode("Cue"));
+					break;
+				case 3:
+					l.appendChild(document.createTextNode("Main"));
+					break;
+				case 4:
+					l.appendChild(document.createTextNode("Alternate"));
+					break;
+				default:
+					l.appendChild(document.createTextNode("Bus " + b));
+					break;
+			}
+			el.appendChild(c);
+			el.appendChild(l);
+			el.appendChild(document.createElement("br"));
+			// update bus values
+			if(bus !== false){
+				if(c){
+					if(b == bus)
+						c.checked = true;
+					else
+						c.checked = false;
+				}
+			}
+		}
+		bus = settings["sip_feed_bus"];
+		if(!bus)
+			bus = 0;
+		bus = BigInt(bus);
+		el = document.getElementById("stConfSIPFeedTB");
+		el.innerHTML = "";
+		el.appendChild(document.createTextNode("Feed Cue on"));
+		el.appendChild(document.createElement("br"));
+		
+		c = document.createElement("input");
+		c.id = "SIPFeedBusb24";
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Cue"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-idx", 1<<24);
+		if((1n << 24n) & bus)
+			c.checked = true;
+		else
+			c.checked = false;
+		el.appendChild(c);
+		el.appendChild(l);
+		el.appendChild(document.createElement("br"));
+		
+		c = document.createElement("input");
+		c.id = "SIP_FeedBusb29";
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Talkback 1"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-idx", 1<<29);
+		if((1n << 29n) & bus)
+			c.checked = true;
+		else
+			c.checked = false;
+		el.appendChild(c);
+		el.appendChild(l);
+		el.appendChild(document.createElement("br"));
+		
+		c = document.createElement("input");
+		c.id = "SIPFeedBusb30";
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Talkback 2"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-idx", 1<<30);
+		if((1n << 30n) & bus)
+			c.checked = true;
+		else
+			c.checked = false;
+		el.appendChild(c);
+		el.appendChild(l);
+		el.appendChild(document.createElement("br"));
+		
+		c = document.createElement("input");
+		c.id = "SIPFeedBusb31";
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Talkback 3"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-idx", 1n<<31n);
+		if((1n << 31n) & bus)
+			c.checked = true;
+		else
+			c.checked = false;
+		el.appendChild(c);
+		el.appendChild(l);
+		el.appendChild(document.createElement("br"));
+	}else{
+		let el = document.getElementById("stConfSIPBus");
+		el.innerHTML = "";
+		el.appendChild(document.createTextNode("Default SIP Bus Assignment"));
+		el.appendChild(document.createElement("br"));
+		for(let b=0; b<studioStateCache.buscnt; b++){
+			// update busses
+			let c = document.createElement("input");
+			c.id = "stConfSIPDefBus"+b;
+			let l = document.createElement('label');
+			l.htmlFor = c.id;
+			c.setAttribute("type", "checkbox");
+			c.setAttribute("data-bus", b);
+			c.checked = false;	// not selected
+			switch(b){
+				case 0:
+					l.appendChild(document.createTextNode("Monitor"));
+					break;
+				case 1:
+					l.appendChild(document.createTextNode("Cue"));
+					break;
+				case 2:
+					l.appendChild(document.createTextNode("Main"));
+					break;
+				case 3:
+					l.appendChild(document.createTextNode("Alternate"));
+					break;
+				default:
+					l.appendChild(document.createTextNode("Bus " + b));
+					break;
+			}
+			el.appendChild(c);
+			el.appendChild(l);
+			el.appendChild(document.createElement("br"));
+		}
+		el = document.getElementById("stConfSIPVol");
+		el.value = 0.0;
+		
+		el = document.getElementById("stConfSIPFeedVol");
+		el.value = 0.0;
+		
+		el = document.getElementById("stConfSIPCtl");
+		el.value = 0;
+		
+		el = document.getElementById("stConfSIPFeedBus");
+		el.innerHTML = "";
+		el.appendChild(document.createTextNode("Feed Bus"));
+		el.appendChild(document.createElement("br"));
+		for(let b=0; b<studioStateCache.buscnt+1; b++){
+			// update busses
+			let c = document.createElement("input");
+			c.id = "SIPFeedBus"+b;
+			l = document.createElement('label');
+			l.htmlFor = c.id;
+			c.setAttribute("type", "radio");
+			c.setAttribute("value", b);
+			c.setAttribute("name", "SIPFeedBus");
+			switch(b){
+				case 0:
+					l.appendChild(document.createTextNode("None"));
+					c.checked = true;
+					break;
+				case 1:
+					l.appendChild(document.createTextNode("Monitor"));
+					break;
+				case 2:
+					l.appendChild(document.createTextNode("Cue"));
+					break;
+				case 3:
+					l.appendChild(document.createTextNode("Main"));
+					break;
+				case 4:
+					l.appendChild(document.createTextNode("Alternate"));
+					break;
+				default:
+					l.appendChild(document.createTextNode("Bus " + b));
+					break;
+			}
+			el.appendChild(c);
+			el.appendChild(l);
+			el.appendChild(document.createElement("br"));
+		}
+		el = document.getElementById("stConfSIPFeedTB");
+		el.innerHTML = "";
+		el.appendChild(document.createTextNode("Feed Cue on"));
+		el.appendChild(document.createElement("br"));
+		
+		c = document.createElement("input");
+		c.id = "SIPFeedBusb24";
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Cue"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-idx", 1<<24);
+		el.appendChild(c);
+		el.appendChild(l);
+		el.appendChild(document.createElement("br"));
+		
+		c = document.createElement("input");
+		c.id = "SIP_FeedBusb29";
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Talkback 1"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-idx", 1<<29);
+		el.appendChild(c);
+		el.appendChild(l);
+		el.appendChild(document.createElement("br"));
+		
+		c = document.createElement("input");
+		c.id = "SIPFeedBusb30";
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Talkback 2"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-idx", 1<<30);
+		el.appendChild(c);
+		el.appendChild(l);
+		el.appendChild(document.createElement("br"));
+		
+		c = document.createElement("input");
+		c.id = "SIPFeedBusb31";
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Talkback 3"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-idx", 1n<<31n);
+		el.appendChild(c);
+		el.appendChild(l);
+		el.appendChild(document.createElement("br"));
+	}
+}
+
+async function stConfSIPBusChange(evt){
+ 	let sl = document.getElementById("stConfSIPBus");
+	let els = sl.querySelectorAll('input[type=checkbox]:checked');
+	if(sl){
+		let value = 0;
+		for(let i=0; i<els.length; i++)
+			value = value + (1 << parseInt(els[i].getAttribute("data-bus")));
+		await stConfset("sip_bus", value);
+	}
+}
+
+async function stConfSIPFeedChange(evt){
+	let bus = document.querySelector('input[name="SIPFeedBus"]:checked').value;
+	bus = BigInt(parseInt(bus));
+	let el = document.getElementById("stConfSIPFeedTB");
+	let buses = el.querySelectorAll("input[type='checkbox']:checked");
+	for(let i = 0; i < buses.length; i++)
+		bus += BigInt(parseInt(buses[i].getAttribute("data-idx")));
+	await stConfset("sip_feed_bus", bus);
+}
+
+async function stConfSIPCtlChange(evt){
+	let el = document.getElementById("stConfSIPCtl");
+	let value = parseInt(el.value);
+	await stConfset("sip_ctl_port", value);
+}
+
+async function stConfSIPVolChange(evt){
+	let el = document.getElementById("stConfSIPVol");
+	let val = parseFloat(el.value);
+	if(val){
+		val = Math.pow(10, (val / 20.0));	// dB to linear
+	}else
+		val = 0.0;
+	await stConfset("sip_vol", val);
+}
+
+async function stConfSIPFeedVolChange(evt){
+	let el = document.getElementById("stConfSIPFeedVol");
+	let val = parseFloat(el.value);
+	if(val){
+		val = Math.pow(10, (val / 20.0));	// dB to linear
+	}else
+		val = 0.0;
+	await stConfset("sip_feed_vol", val);
+}
+
+function refreshStAdminLib(){
+	let settings = studioStateCache.meta[0];
+	let el;
+	if(settings){
+		el = document.getElementById("stConfDbType");
+		el.innerText = settings["db_type"];
+		el = document.getElementById("stConfDbName");
+		el.innerText = settings["db_name"];
+		el = document.getElementById("stConfDbHost");
+		el.value = settings["db_server"];
+		el = document.getElementById("stConfDbPort");
+		el.value = settings["db_port"];
+		el = document.getElementById("stConfDbMark");
+		if(parseInt(settings["db_mark_missing"]))
+			el.checked = true;
+		else
+			el.checked = false;
+		el = document.getElementById("stConfDbLoc");
+		el.value = parseInt(settings["db_loc"]);
+	}else{
+		el = document.getElementById("stConfDbType");
+		el.innerText = "Not Set";
+		el = document.getElementById("stConfDbName");
+		el.innerText = "Not Set";
+		el = document.getElementById("stConfDbHost");
+		el.value = "Not Set";
+		el = document.getElementById("stConfDbPort");
+		el.value = "";
+		el = document.getElementById("stConfDbMark");
+		el.checked = false;
+		el = document.getElementById("stConfDbLoc");
+		el.value = 0;
+	}
+}
+
+async function stConfDbCopy(event){
+	// get library configuration settings
+	let obj = {};
+	let resp = await fetchContent("getconf/library");
+	if(resp){
+		if(resp.ok){
+			elements = await resp.json();
+			for(let i = 0 ; i < elements.length ; i++){
+				let item = elements[i];
+				obj[item.id] = item.value;
+			}
+		}else{
+			alert("Got an error fetching library settings from server.\n"+resp.statusText);
+			return;
+		}
+	}else{
+		alert("Failed to fetch library settings from the server.");
+		return;
+	}
+	
+	// save to arServer settings
+	let el = document.getElementById("stConfDbLoc");
+	await stConfset("db_loc", el.value);
+	el = document.getElementById("stConfDbName");
+	el.innerText = obj["database"];
+	await stConfset("db_name", obj["database"]);
+	await stConfset("db_prefix", obj["prefix"]);
+	await stConfset("db_pw", obj["password"]);
+	el = document.getElementById("stConfDbHost");
+	el.value = obj["host"];
+	await stConfset("db_server", obj["host"]);
+	el = document.getElementById("stConfDbType");
+	el.innerText = obj["type"];
+	await stConfset("db_type", obj["type"]);
+	await stConfset("db_user", obj["user"]);
+	el = document.getElementById("stConfDbPort");
+	el.innerText = obj["port"];
+	await stConfset("db_port", obj["port"]);
+}
+
+async function stConfDbApplyHost(event){
+	let el = document.getElementById("stConfDbHost");
+	let value = el.value;
+	await stConfset("db_port", value);
+}
+
+async function stConfDbApplyPort(event){
+	let el = document.getElementById("stConfDbPort");
+	await stConfset("db_server", el.value);
+}
+
+async function stConfDbLocChange(event){
+	let el = document.getElementById("stConfDbLoc");
+	await stConfset("db_loc", el.value);
+}
+
+async function stConfDbMarkChange(event){
+	let el = document.getElementById("stConfDbMark");
+	let value = 0;
+	if(el.checked)
+		value = 1;
+	await stConfset("db_mark_missing", value);
+}
+
+async function getInputGroupsMM(studio, name){
+	let resp = await fetchContent("studio/"+studio+"?cmd=getmm%20"+name+"&raw=1");
+	if(resp){
+		if(resp.ok){
+			let data = await resp.text();
+			let lines = data.split("\n");
+			for(let n = 1; n < lines.length; n++){
+				let fields = lines[n].split("\t");
+				let bus = fields[0];
+				let vol = fields[1];
+				let ports = fields[2];
+				return {mmvol: vol, mmbus: bus, mmports: ports};
+			}
+		}
+	}
+	return false;
+}
+
 async function refreshInputGroups(){
 	let studio = studioName.getValue();
 	let el = document.getElementById("stInGrpList");
@@ -7746,8 +8868,14 @@ async function refreshInputGroups(){
 					let bus = fields[1];
 					let ctl = fields[2];
 					let ports = fields[3];
-					if(name.length)
+					if(name.length){
+						let mm = await getInputGroupsMM(studio, name);
+						if(mm){
+							list.push({url: "input:///"+name, Name: name, Bus: bus, Controls: ctl, Ports: ports, ...mm});
+							continue;
+						}
 						list.push({url: "input:///"+name, Name: name, Bus: bus, Controls: ctl, Ports: ports});
+					}
 				}
 				studioStateCache.live = list;
 				// update server settings panel here, of any
@@ -7766,7 +8894,7 @@ async function refreshInputGroups(){
 
 function refreshStAdminInputs(list){
 	let el = document.getElementById("stInConfList");
-	let colMap = {url: false, Name: "Name", Bus: false, Controls: false, Ports: false};
+	let colMap = {url: false, Name: "Name", Bus: false, Controls: false, Ports: false, mmports: false, mmvol: false, mmbus: false};
 	genPopulateTableFromArray(list, el, colMap, selectStAdminInputItem);
 	
 	el = document.getElementById("stConfInSettings");
@@ -7804,7 +8932,7 @@ async function stConfInDelete(evt){
 }
 
 async function stConfInSave(evt){
-	let el = evt.target.parentElement.parentElement;
+	let el = document.getElementById("stConfInMain");
 	let buses = el.querySelectorAll("input[type='checkbox']:checked");
 	let bus = BigInt(0);
 	for(let i = 0; i < buses.length; i++)
@@ -7838,8 +8966,38 @@ async function stConfInSave(evt){
 				resp = await fetchContent("studio/"+studio+"?cmd=delin "+oldname);
 		}
 		if(resp && resp.ok){
+			// feed settings
+			pel = document.getElementById("stConfInFeedPorts");
+			stPortsControlValue(pel);
+			ports = pel.userPortList;
+			el = document.getElementById("stConfInFeedBus");
+			bus = document.querySelector('input[name="inFeedBus"]:checked').value;
+			bus = BigInt(parseInt(bus));
+			el = document.getElementById("stConfInFeedTB");
+			buses = el.querySelectorAll("input[type='checkbox']:checked");
+			for(let i = 0; i < buses.length; i++)
+				bus += BigInt(parseInt(buses[i].getAttribute("data-idx")));
+			el = document.getElementById("stConfInFeedLevel");
+			let val = parseFloat(el.value);
+			if(val){
+				val = Math.pow(10, (val / 20.0));	// dB to linear
+			}else
+				val = 1.0;
+			obj = {cmd: "setmm "+newname+" "+bus+" "+val+" "+ports, raw: 1};
+			resp = await fetchContent("studio/"+studio, {
+					method: 'POST',
+					body: JSON.stringify(obj),
+					headers: {
+						"Content-Type": "application/json",
+						"Accept": "application/json"
+					}
+				});
+		}
+		if(resp && resp.ok){
 			refreshInputGroups();
 			await fetchContent("studio/"+studio+"?cmd=savein");
+			if(resp && resp.ok)
+				refreshInputGroups();
 		}
 	}
 }
@@ -7860,7 +9018,7 @@ async function selectStAdminInputItem(evt){
 		els[i].className += " active";
 	}else{
 		// create new entry
-		entry = {Name: "NewLiveInput", Bus: "00000d", Controls: 0, Ports:""};
+		entry = {Name: "NewLiveInput", Bus: "00000d", Controls: 0, Ports:"", mmports: "", mmvol: 1.0, mmbus: 0};
 	}
 	let el = document.getElementById("stConfInSettings");
 	// fill in settings for selected
@@ -7923,7 +9081,7 @@ async function selectStAdminInputItem(evt){
 		el.appendChild(document.createElement("br"));
 		c = document.createElement("input");
 		c.id = "LiveInBus"+29;
-		l = document.createElement('label');
+		let l = document.createElement('label');
 		l.htmlFor = c.id;
 		l.appendChild(document.createTextNode("Talkback 1"));
 		c.setAttribute("type", "checkbox");
@@ -8014,6 +9172,136 @@ async function selectStAdminInputItem(evt){
 			c.checked = false;
 		el.appendChild(l);
 		el.appendChild(document.createElement("br"));
+		
+		el = document.getElementById("stConfInFeedPorts");
+		devList = await stGetDestinationList();
+		el.innerHTML = "";
+		stRenderPortsControl(el, devList, entry.mmports, true, studioStateCache.chancnt);
+		
+		bus = parseInt(entry.mmbus) & 0x1f;
+		el = document.getElementById("stConfInFeedBus");
+		el.innerHTML = "";
+		el.appendChild(document.createTextNode("Feed Bus"));
+		el.appendChild(document.createElement("br"));
+		for(let b=0; b<studioStateCache.buscnt+1; b++){
+			// update busses
+			let c = document.createElement("input");
+			c.id = "InFeedBus"+b;
+			l = document.createElement('label');
+			l.htmlFor = c.id;
+			c.setAttribute("type", "radio");
+			c.setAttribute("value", b);
+			c.setAttribute("name", "inFeedBus");
+			switch(b){
+				case 0:
+					l.appendChild(document.createTextNode("None"));
+					break;
+				case 1:
+					l.appendChild(document.createTextNode("Monitor"));
+					break;
+				case 2:
+					l.appendChild(document.createTextNode("Cue"));
+					break;
+				case 3:
+					l.appendChild(document.createTextNode("Main"));
+					break;
+				case 4:
+					l.appendChild(document.createTextNode("Alternate"));
+					break;
+				default:
+					l.appendChild(document.createTextNode("Bus " + b));
+					break;
+			}
+			el.appendChild(c);
+			el.appendChild(l);
+			el.appendChild(document.createElement("br"));
+			// update bus values
+			if(bus !== false){
+				if(c){
+					if(b == bus)
+						c.checked = true;
+					else
+						c.checked = false;
+				}
+			}
+		}
+		
+		bus = entry.mmbus;
+		if(!bus)
+			bus = 0;
+		bus = BigInt(bus);
+		el = document.getElementById("stConfInFeedTB");
+		el.innerHTML = "";
+		el.appendChild(document.createTextNode("Feed Cue on"));
+		el.appendChild(document.createElement("br"));
+		
+		c = document.createElement("input");
+		c.id = "InFeedBusb24";
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Cue"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-idx", 1<<24);
+		if((1n << 24n) & bus)
+			c.checked = true;
+		else
+			c.checked = false;
+		el.appendChild(c);
+		el.appendChild(l);
+		el.appendChild(document.createElement("br"));
+		
+		c = document.createElement("input");
+		c.id = "InFeedBusb29";
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Talkback 1"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-idx", 1<<29);
+		if((1n << 29n) & bus)
+			c.checked = true;
+		else
+			c.checked = false;
+		el.appendChild(c);
+		el.appendChild(l);
+		el.appendChild(document.createElement("br"));
+		
+		c = document.createElement("input");
+		c.id = "InFeedBusb30";
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Talkback 2"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-idx", 1<<30);
+		if((1n << 30n) & bus)
+			c.checked = true;
+		else
+			c.checked = false;
+		el.appendChild(c);
+		el.appendChild(l);
+		el.appendChild(document.createElement("br"));
+		
+		c = document.createElement("input");
+		c.id = "InFeedBusb31";
+		l = document.createElement('label');
+		l.htmlFor = c.id;
+		l.appendChild(document.createTextNode("Talkback 3"));
+		c.setAttribute("type", "checkbox");
+		c.setAttribute("data-idx", 1n<<31n);
+		if((1n << 31n) & bus)
+			c.checked = true;
+		else
+			c.checked = false;
+		el.appendChild(c);
+		el.appendChild(l);
+		el.appendChild(document.createElement("br"));
+		
+		el = document.getElementById("stConfInFeedLevel");
+		val = parseFloat(entry.mmvol);
+		if(val)
+			val = Math.round(20.0 * Math.log10(val));
+		else
+			val = "";
+		el.value = val;
 	}
 }
 
@@ -10283,15 +11571,17 @@ function reloadStudioSection(el, type){
 	}else if(type == "outs"){
 		refreshOutGroups();
 	}else if(type == "mixer"){
-		//!! create HTML, load settings values
+		refreshStAdminMixer();
+	}else if(type == "voip"){
+		refreshStAdminVoIP()
 	}else if(type == "automation"){
-		//!! create HTML, load settings values
+		refreshStAdminAuto();
 	}else if(type == "library"){
-		//!! create HTML, load settings values
+		refreshStAdminLib();
 	}else if(type == "recorders"){
 		refreshRecorderPanel();
 	}else if(type == "jconns"){
-		//!! create HTML, load jconns list
+		refreshStAdminRouts();
 	}
 }
 

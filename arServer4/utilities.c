@@ -793,7 +793,7 @@ inputRecord *getRecordForInput(inputRecord *root, const char *Name){
 			}
 		}
 		prev = current; 
-	} 	
+	}
 	return NULL;
 }
 

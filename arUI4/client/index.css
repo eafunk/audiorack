@@ -54,6 +54,7 @@ html, body {
 
 .tableleftj tr{
 	background: #EEE;
+	vertical-align: top;
 }
 
 .tselrow:hover {
