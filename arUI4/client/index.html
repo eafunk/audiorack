@@ -310,9 +310,21 @@
 								</div>
 								<button class="accordion" onclick="clickAccordType(event, reloadStudioSection, 'delay')">Delay</button>
 								<div class="accpanel">
+									<table>
+										<tr>
+											<td><button id="stDumpBtn" class="stDumpBtn" ontouchstart="stDumpAction();" onmousedown="stDumpAction(); disabled">DUMP</button></td>
+											<td>Enabled delay (sec.): <input id="stDelaySec" type="number" min="4" max="10" value="7"></td>
+										</tr>
+									</table>
+									<div id="stDelayList" class="scroll" style="border: 1px; border-style: solid;">
+										No Outputs
+									</div>
 								</div>
 								<button class="accordion" onclick="clickAccordType(event, reloadStudioSection, 'wall')">Wall</button>
 								<div class="accpanel">
+									
+									
+									
 								</div>
 								<button class="accordion" onclick="clickAccordType(event, reloadStudioSection, 'control')">Control Surface</button>
 								<div class="accpanel">
@@ -320,6 +332,11 @@
 									<select id="ctlsurf" onchange="stContSurfChange(event)">
 										<option val="" selected>NONE</option>
 									</select>
+								</div>
+								<button class="accordion" onclick="clickAccordType(event, reloadStudioSection, 'load')">CPU Load</button>
+								<div class="accpanel">
+									<label for="stCpuLoad">CPU Load %</label>
+									<progress id="stCpuLoad" max="100" value="0"></progress>
 								</div>
 							</div>
 						</div>

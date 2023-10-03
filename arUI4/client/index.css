@@ -696,6 +696,14 @@ button.active {
 	background-color: LightGray;
 }
 
+.stDumpBtn {
+	justify-content: center;
+	align-items: center;
+	height: 60px; 
+	width: 60px; 
+	background-color: Red;
+}
+
 input[type=range] {
 	height: 15px;
 	-webkit-appearance: none;

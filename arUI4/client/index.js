@@ -9383,6 +9383,135 @@ function genOutBusMenuHTML(bus){
 	return html;
 }
  
+async function refreshStudioDelays(outlist, index, delay){
+	let el = document.getElementById("stDelayList");
+	if(outlist){
+		let studio = studioName.getValue();
+		if(studio && studio.length){
+			studioStateCache.outs
+			let resp = await fetchContent("studio/"+studio+"?cmd=getdly&raw=1");
+			if(resp){
+				if(resp.ok){
+					let list = [];
+					let data = await resp.text();
+					let lines = data.split("\n");
+					for(let n = 1; n < lines.length; n++){
+						let fields = lines[n].split("\t");
+						if(fields[0].length){
+							let entry = findPropObjInArray(studioStateCache.outs,"Name", fields[0]);
+							if(entry){
+								entry.Delay = parseFloat(fields[2]);
+								if(entry.Delay)
+									entry.delaySel = 1;
+								else
+									entry.delaySel = 0;
+							}
+						}
+					}
+				}
+			}
+		}
+		// update outlist to include any existing el check box states or non-zero delays
+		let table = el.getElementsByTagName("table");
+		if(table.length){
+			table = table[0]; // should be only one table in el.console.log(table);
+			let rows = table.firstChild.firstChild;
+			for(let i = 1; i < rows.length; i++){
+				let cols = rows[i].childNodes;
+				let name = cols[0].innerText;
+				let entry = findPropObjInArray(studioStateCache.outs,"Name", name);
+				if(entry){
+					if(cols[1].firstChild.checked || parseFloat(cols[2].innerText))
+						entry.delaySel = 1;
+					else
+						entry.delaySel = 1;
+				}
+			} 
+		}
+		// populate new table
+		let colMap = {url: false, Name: "Name", delaySel: "Enabled", Bus: false, Mutes: false, Volume: false, Ports: false, ShowUI: false, Idx: false};
+		let fields = {delaySel: "<input type='checkbox' onchange='stDelayCheckAction(event)' $ifvalchk></input>"};
+		genPopulateTableFromArray(outlist, el, colMap, false, false, false, false, false, fields, false);
+	}else{
+		let entry = findPropObjInArray(studioStateCache.outs,"Idx", index+1);
+		if(entry){
+			entry.Delay = parseFloat(delay);
+			if(delay)
+				entry.delaySel = 1;
+			else
+				entry.delaySel = 0;
+			// update row in table
+			let table = el.getElementsByTagName("table");
+			if(table.length){
+				table = table[0]; // should be only one table in el.console.log(table);
+				let rows = table.firstChild.childNodes;
+				for(let i = 1; i < rows.length; i++){
+					let cols = rows[i].childNodes;
+					let name = cols[0].innerText;
+					if(name == entry.Name){
+						if(delay){
+							cols[1].firstChild.checked = true;
+							cols[2].innerText = delay;
+						}else{
+							cols[1].firstChild.checked = false;
+							cols[2].innerText = 0;
+						}
+						break;
+					}
+				} 
+			}
+		}
+	}
+	// enable/disaqble button based on any delay set
+	el = document.getElementById("stDumpBtn");
+	let i;
+	for(i = 0; i < studioStateCache.outs.length; i++){
+		if(studioStateCache.outs[i].Delay){
+			el.disabled = false;
+			break;
+		}
+	}
+	if(i >= studioStateCache.outs.length)
+		el.disabled = true;
+}
+
+async function stDumpAction(evt){
+	let studio = studioName.getValue();
+	if(studio.length)
+		await fetchContent("studio/"+studio+"?cmd=dump");
+}
+
+async function stDelayCheckAction(evt){
+	let target = evt.target;
+	let name = target.parentNode.parentNode.firstChild.innerText;
+	let delay = 0.0;
+	if(target.checked)
+		delay = document.getElementById("stDelaySec").value;
+	let studio = studioName.getValue();
+	if(studio.length){
+		let resp = await fetchContent("studio/"+studio+"?cmd=setdly "+name+" "+delay);
+		if(!resp || !resp.ok){
+			// switch back if failed
+			if(target.checked)
+				target.checked = false;
+			else
+				target.checked = false;
+		}
+		return;
+	}
+	// enable/disaqble button based on any delay set
+	let el = document.getElementById("stDumpBtn");
+	let i;
+	for(i = 0; i < studioStateCache.outs.length; i++){
+		if(studioStateCache.outs[i].Delay){
+			el.disabled = false;
+			break;
+		}
+	}
+	if(i >= studioStateCache.outs.length)
+		el.disabled = true;
+}
+
 async function refreshOutGroups(){
 	let studio = studioName.getValue();
 	let el = document.getElementById("studioOutList");
@@ -9407,7 +9536,7 @@ async function refreshOutGroups(){
 				}
 				while(list.length < studioStateCache.outcnt){
 					cnt++;
-					list.push({url: false, Idx: cnt, Name: false, Bus: false, Mutes: false, Volume: false, ShowUI: false, Ports: false});
+					list.push({url: false, Idx: cnt, Name: false, Bus: false, Mutes: false, Volume: false, ShowUI: false, Ports: false, Delay:false});
 				}
 				studioStateCache.outs = list;
 				// update server settings panel here, of any
@@ -9425,6 +9554,8 @@ async function refreshOutGroups(){
 						$Bus->genOutBusMenuHTML$
 					<div></div>`;
 				genDragableListFromObjectArray(false, false, show, el, format);
+				// update the studio delay controls
+				refreshStudioDelays(list);
 			}else{
 				alert("Got an error fetching output group list from server.\n"+resp.statusText);
 			}
@@ -9442,7 +9573,7 @@ function stAdminOutNameFormat(val){
 
 function refreshStAdminOuts(list){
 	let el = document.getElementById("stOutConfList");
-	let colMap = {url: false, Idx: " ", Name: "Name", Bus: false, Mutes: false, Volume: false, ShowUI: false, Ports: false};
+	let colMap = {url: false, Idx: " ", Name: "Name", Bus: false, Mutes: false, Volume: false, ShowUI: false, Ports: false, Delay: false};
 	let fields = {Name: stAdminOutNameFormat};
 	genPopulateTableFromArray(list, el, colMap, selectStAdminOutItem, false, false, false, false, fields, false);
 	
@@ -11405,11 +11536,14 @@ function studioHandleNotice(data){
 		case "outdly":			// output delay change, ref=output index, val=delay in seconds, 16 max.
 			val = data.val;	// number
 			ref = data.num;
-			
+			refreshStudioDelays(null, ref, val);
 			break;
-
+			
 		case "cpu":	// System Processor load, val=realtime JACK load in 0.8 format
 			val = data.val;	// number: 255 * (percentage / 100)
+			let el = document.getElementById("stCpuLoad");
+			if(el)
+				el.value = 100.0 * (val / 255.0);
 			break;
 			
 		default:
@@ -11562,8 +11696,6 @@ async function selectControlSurface(entry){
 function reloadStudioSection(el, type){
 	if(type == "control"){
 		updateControlSurface();
-	}else if(type == "delay"){
-		//!! show delay settings
 	}else if(type == "wall"){
 		//!! load wall list
 	}else if(type == "ins"){
