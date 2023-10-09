@@ -2,4 +2,4 @@ setmeta -1 Pipeline appsrc name=audiosrc ! audioconvert ! audioresample ! audio/
 ; use our alt mix bus as a recording source
 setmeta -1 TagBus 4
 setmeta -1 Ports [ourJackName]:mixBus3ch0&[ourJackName]:mixBus3ch1
-
+setmeta -1 MakePL [rec_dir][Name].opus.fpl

@@ -1019,7 +1019,7 @@ app.get('/stadmin', function(request, response){
 									<table class="tableleftj">
 										<tr>
 											<td>
-												BareSip Control Port Number (zero to disable): <input id="stConfSIPCtl" type="text" size="5"><button onclick="stConfSIPCtlChange(event)">Apply</button>
+												BareSip Control Port Number (zero to disable): <input id="stConfSIPCtl" type="text" size="5"><button onclick="stConfSIPCtlChange(event)">Apply</button> <span id="stConfSIPstat"></span> 
 												<div id="stConfSIPBus" class="boxed" onchange="stConfSIPBusChange(event)">
 												</div>
 												Default Volume (dB): <input id="stConfSIPVol" type="text" size="5"><button onclick="stConfSIPVolChange(event)">Apply</button>

@@ -204,7 +204,7 @@ long GetMetaInt(uint32_t uid, const char *key, unsigned char *isEmpty){
 			*isEmpty = 0;
 	}else if(isEmpty)
 			*isEmpty = 1;
-	pthread_rwlock_unlock(&dataLock);			
+	pthread_rwlock_unlock(&dataLock);
 	return result;
 }
 

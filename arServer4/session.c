@@ -5005,7 +5005,7 @@ unsigned char handle_newrec(ctl_session *session){
 	if(newUID = createMetaRecord(NULL, NULL, 0)){
 		time(&ut);
 		localtime_r(&ut, &tm);
-		strftime(buf, sizeof(buf), "Rec%Y-%m-%d_%H%M%S", &tm);
+		strftime(buf, sizeof(buf), "Rec%Y-%m-%d-%H%M%S", &tm);
 		SetMetaData(newUID, "Name", buf);
 		SetMetaData(newUID, "Type", "encoder");
 		SetMetaData(newUID, "Status", "0");

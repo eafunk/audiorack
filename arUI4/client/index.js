@@ -1594,15 +1594,20 @@ function setDragItemEvents(i, dragcb, dropcb){
 						this.parentNode.insertBefore(curDrag, this.nextSibling);
 					else
 						this.parentNode.insertBefore(curDrag, this);
+					for(let it=0; it<items.length; it++){
+						// re-number data-idx
+						items[it].setAttribute("data-idx", it);
+					}
 				}
 			}else{
 				// drop is from some other place
-				let atr = {url: curDrag.getAttribute("data-url"), pnum: curDrag.getAttribute("data-idx")};
+				let atr = {url: curDrag.getAttribute("data-url"), pnum: curDrag.getAttribute("data-pnum")};
 				if(atr && dropcb){
 					let droppedpos = 0;
 					for(let it=0; it<items.length; it++){
 						if(this == items[it])
 							droppedpos = it;
+						items[it].setAttribute("data-idx", i);
 					}
 					dropcb(this, false, droppedpos, atr);
 				}
@@ -6930,13 +6935,6 @@ var studioStateCache = {control: false, meta: {}, queue: [], queueRev: 0, queueS
 var pTemplate;
 var midiAccess;
 
-function debugNow(evt){
-	evt.preventDefault();
-	evt.stopPropagation();
-console.log("studio debug dump:");
-console.log(studioStateCache);
-}
-
 /***** periodic all-studio-timers update tick and sync *****/
 setInterval('updateStudioTimers()', 500);
 setInterval('syncStudioMetalist(studioName.getValue())', 60000);
@@ -7367,16 +7365,16 @@ function stParseAudioList(data){
 		if(name && name.length && chan && chan.length){
 			if(name != lastName){
 				lastName = name;
-				if(dev){
+				if(dev)
 					devList.push(dev);
-				}
 				dev = {name: name, channels: []};
 			}
-			if(dev){
+			if(dev)
 				dev.channels.push(chan);
-			}
 		}
 	}
+	if(dev)
+		devList.push(dev);
 	return devList; // array of dev objects.  dev object = {name: "theName", channels: array-of-port-names}
 }
 
@@ -7856,7 +7854,7 @@ async function stJackConnAdd(evt){
 	let srcDevList = el.userSrcDevList;
 	let destDevList = el.userDestDevList;
 	
-	tr = table.insertRow(-1);
+	tr = table.insertRow(1);
 	tr.userOrigValue = "";
 	let cell = tr.insertCell(-1);
 	cell.innerHTML = " ";
@@ -8713,6 +8711,10 @@ async function stConfSIPCtlChange(evt){
 	let el = document.getElementById("stConfSIPCtl");
 	let value = parseInt(el.value);
 	await stConfset("sip_ctl_port", value);
+	await new Promise(resolve => setTimeout(resolve, 3000)); // 3 sec
+	let studio = studioName.getValue();
+	if(studio)
+		syncStudioStat(studio);
 }
 
 async function stConfSIPVolChange(evt){
@@ -9859,6 +9861,58 @@ async function selectStAdminOutItem(evt){
 	}
 }
 
+async function refreshWallPanel(){
+	let post = {"type":"playlist","match":"WALL%","sortBy":"Label"};
+	let resp = await fetchContent("library/browse", {
+		method: 'POST',
+		body: JSON.stringify(post),
+		headers: {
+			"Content-Type": "application/json",
+			"Accept": "application/json"
+		}
+	});
+	
+	let el = document.getElementById("selwall");
+	if(resp instanceof Response){
+		if(resp.ok){
+			let data = await resp.json();
+			if(el && data){
+				let inner = "";
+				for(let i=0; i < data.length; i++)
+					inner += "<option value='"+data[i].Label+"' data-id='"+data[i].id+"'>"+data[i].Label+"</option>";
+				el.innerHTML = inner;
+			}
+		}
+	}
+	wallMenuChange({target: el});
+}
+
+async function wallMenuChange(evt){
+	let id = evt.target.selectedOptions[0].getAttribute("data-id");
+	let el = document.getElementById("wallList");
+	let props = await itemFetchProps(id);
+	if(props){
+		let plist = flattenPlaylistArray(props.playlist);
+		el.innerHTML = "";
+		for(let i = 0; i < plist.length; i++){
+			let button = document.createElement("button");
+			button.className = "stWallBtn";
+			button.innerText = plist[i].Name;
+			button.setAttribute("data-url", "item:///"+plist[i].ID);
+			button.onclick = wallItemAction;
+			el.appendChild(button);
+		}
+	}
+}
+
+async function wallItemAction(evt){
+	let url = evt.target.getAttribute("data-url");
+	let studio = studioName.getValue();
+	if(studio.length){
+		await fetchContent("studio/"+studio+"?cmd=playnow%20"+url);
+	}
+}
+
 function stTBAction(evt, state, tb){
 	evt.preventDefault();
 	evt.stopPropagation();
@@ -9884,7 +9938,7 @@ async function syncStudioStat(studio){
 				let fields = lines[n].split("=");
 				let key = fields[0];
 				let value = fields[1];
-				if((key == "ListRev")){
+				if(key == "ListRev"){
 					value =  parseInt(value);
 					if(studioStateCache.queueRev != value){
 						// queue (list) has changed... issue list command to handle changes
@@ -9901,14 +9955,14 @@ async function syncStudioStat(studio){
 						el.checked = false;
 						studioStateCache.runStat = 0;
 					}
-				}else if((key == "LogTime")){
+				}else if(key == "LogTime"){
 					value =  parseInt(value);
 					if(studioStateCache.logTime != value){
 						// log time has changed... issue list command to handle changes
 						syncRecentPlays();
 						studioStateCache.logTime = value;
 					}
-				}else if((key == "auto")){
+				}else if(key == "auto"){
 					let idx = value.indexOf(' ');
 					
 					let fill = "Nothing to fill";
@@ -9934,6 +9988,10 @@ async function syncStudioStat(studio){
 						el = document.getElementById("stOff");
 						el.checked = true;
 					}
+				}else if(key == "sipPhone"){
+					let el = document.getElementById("stConfSIPstat");
+					if(el)
+						el.innerText = value;
 				}
 			}
 			if(studioStateCache.control)
@@ -10019,7 +10077,7 @@ function queueItemInfo(evt){
 function playerItemInfo(evt){
 	evt.preventDefault();
 	evt.stopPropagation();
-	let player = evt.target.parentNode.parentElement.getAttribute("data-idx");
+	let player = evt.target.parentNode.parentElement.getAttribute("data-pnum");
 	let ref = refFromPlayerNumber(player);
 	if(ref < 0)
 		return;
@@ -10662,7 +10720,7 @@ async function playerAction(cmd, evt, pNum){
 	if(evt){
 		evt.preventDefault();
 		evt.stopPropagation();
-		player = evt.target.parentNode.parentElement.parentElement.getAttribute("data-idx");
+		player = evt.target.parentNode.parentElement.parentElement.getAttribute("data-pnum");
 	}else
 		player = pNum;
 	let studio = studioName.getValue();
@@ -11289,7 +11347,7 @@ function playerDragAllow(evt){
 function playerDropHandler(evt){
 	evt.preventDefault();
 	let target = evt.target;
-	let pNum = target.getAttribute("data-idx");
+	let pNum = target.getAttribute("data-pnum");
 	let atr = curDrag.getAttribute("data-url");
 	if(atr && atr.length && !target.hasChildNodes()){ // player is empty and drag item url is set
 		let studio = studioName.getValue();
@@ -11328,7 +11386,7 @@ async function syncPlayers(studio){
 				while(count-1 > mixer.childElementCount){
 					// add columns
 					let p = document.createElement("div");
-					p.setAttribute("data-idx", mixer.childElementCount);
+					p.setAttribute("data-pnum", mixer.childElementCount);
 					p.draggable = false;
 					p.className = "player";
 					p.id = "player" + mixer.childElementCount;
@@ -11697,7 +11755,7 @@ function reloadStudioSection(el, type){
 	if(type == "control"){
 		updateControlSurface();
 	}else if(type == "wall"){
-		//!! load wall list
+		refreshWallPanel();
 	}else if(type == "ins"){
 		refreshInputGroups();
 	}else if(type == "outs"){

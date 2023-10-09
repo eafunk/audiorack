@@ -990,7 +990,7 @@ void* handleCtlQueues(void *refCon){
 							}while(item = item->next);
 							gst_send_tag_event(data->asrc, tags);
 							
-							if(data->ascPlayList){
+							if(data->ascPlayList && (data->status & rec_running)){
 								if(ar = cJSON_GetObjectItem(obj, "AR")){
 									if((item = cJSON_GetObjectItem(ar, "ID")) && (item->valueint))
 										logRec.ID = item->valueint;

@@ -213,7 +213,7 @@ footer {
 		"ins"
 		"accord"
 		"admin";
-	grid-template-rows: 150px 150px minmax(600px, auto-fit) 329px minmax(200px, auto-fit) minmax(200px, auto-fit);
+	grid-template-rows: 150px 150px 684px 329px minmax(200px, auto-fit) minmax(200px, auto-fit);
 	height: 100%;
 }
 
@@ -254,6 +254,12 @@ footer {
 			"button fade";
 		grid-template-columns: 68px 1fr;
 		grid-template-rows:  17px 17px 17px 17px 34px;
+	}
+	
+	.stSide {
+		grid-area: accord;
+		background-color: #666;
+		overflow-y: scroll;*/
 	}
 }
 
@@ -614,6 +620,12 @@ button.active {
 	padding: 2px;
 }
 
+.walllist {
+	display: flex;
+	flex-wrap: wrap;
+	flex-direction: row;
+}
+
 /* drag and drop lists */
 .ddlist {
 	list-style: none;
@@ -693,6 +705,14 @@ button.active {
 	align-items: center;
 	height: 40px; 
 	width: 40px; 
+	background-color: LightGray;
+}
+
+.stWallBtn {
+	justify-content: center;
+	align-items: center;
+	height: 40px; 
+	width: 180px; 
 	background-color: LightGray;
 }
 

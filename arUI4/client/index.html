@@ -30,7 +30,19 @@
 			<div id="about" class="tabcontent">
 				<h2>Welcome to AudioRack v4.0.1</h2>
 				<p>Copyright &copy2021-2023; Ethan Funk</p>
-				<p>Radio is fun...</p>
+				<p>This is the Audiorack User Interface Web Application and Node-js Application Server</p>
+				<p>Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
+ documentation files (the "Software"), to deal in the Software without restriction, including without limitation 
+ the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, 
+ and to permit persons to whom the Software is furnished to do so, subject to the following conditions:</p>
+ 
+ <p>The above copyright notice and this permission notice shall be included in all copies or substantial portions 
+ of the Software.</p>
+ <p>THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED 
+ TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL 
+ THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF 
+ CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+ DEALINGS IN THE SOFTWARE.</p>
 			</div>
 			<div id="stash" class="tabcontent">
 				<h2>Local Stash</h2>
@@ -221,7 +233,6 @@
 			</div>
 			<div id="studio" class="tabcontent">
 				<h2>Studio</h2>
-				<button onclick="debugNow(event)">Debug</button>
 				<div id="studiodiv" class="scroll">
 					<div id="studiogrid" class="stGrid">
 						<div id="studioStat" class="stStatus">
@@ -322,9 +333,14 @@
 								</div>
 								<button class="accordion" onclick="clickAccordType(event, reloadStudioSection, 'wall')">Wall</button>
 								<div class="accpanel">
-									
-									
-									
+									<div class="boxed">
+										<label for="selloc">Wall List:</label>
+										<select id="selwall" onchange="wallMenuChange(event)">
+										</select>
+									</div>
+									</select>
+									<div class="walllist" id="wallList" >
+									</div>
 								</div>
 								<button class="accordion" onclick="clickAccordType(event, reloadStudioSection, 'control')">Control Surface</button>
 								<div class="accpanel">
