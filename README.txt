@@ -1,4 +1,4 @@
-Updated Nov. 11, 2019
+Updated Oct. 12, 2023
 
 *** WHAT IS AUDIORACK4? ***
 
@@ -60,6 +60,11 @@ independent of arServer if you wish.  And any jack audio
 source/destrinantion can be routed to/from the arServer mix engine as 
 well.  
 
+The old GUI applications have been replaced with a single web-base GUI.
+This package included a node-js GUI server, which then hosts a javascript
+GUI application to a client web browser. This is how you would usa and
+manage audiorack.
+
 Documentation is nonexistant other than the source code, and the "help" 
 command after you have started arServer4 running and you connect to it's
 TCP control socket and issue the "help" command.  The best starting 
@@ -116,7 +121,8 @@ arServer4, in addition, depends on the following libraries:
 
 libmysqlclient
 
-The User Interface Server requires the following programs to be installed:
+The User Interface Server requires the following programs to be 
+installed:
 
 nodejs	The node.js runtime system, v.12.10 or newer.
 
@@ -143,12 +149,324 @@ in this project.
 
 *** RUNNING ***
 
-First, you must have the jack-audio server (jackd) up and running on the
-computer that will be running arServer. There are many tools help
-with this, ranging from launching jackd from the commandline, to various
-GUI programs.  On a linux system, The UbuntuStudio tools are nice, and
-allow for launch at login, and auto-magic support for more than one audio
-device, with added latency for the extra devices of course.
+First, you must have a MySQL or MariaDB database server running 
+on a machine you have local network access to. Configuration of 
+the database server is beyond the scope of this document.  You 
+will need a database user configure with permission to create a 
+new database, etc.
+
+Second, you must have the jack-audio server (jackd) up and running 
+on the computer that will be running arServer. There are many tools 
+helpwith this, ranging from launching jackd from the commandline, 
+to various GUI programs.  On a linux system, The UbuntuStudio tools 
+are nice, and allow for launch at login, and auto-magic support for 
+more than one audio device, with added latency for the extra devices 
+of course. Recent Linux distributions are now using Pipewire (PW) as 
+a media engine.  PW can provide emulation of a jackaudio server. See 
+details later in this readme file for some help with using PW instead 
+of jack.
+
+Different audiorack compenents can be run on different computers, 
+for example different arStudio instances can run on different 
+machines, with yet another machine running the GUI server to bring 
+control of all the pieces together, as long as all machines can 
+see eachother on a local network. For starters, it will be assumed 
+that everything exept possibly trhe database is running on one 
+machine, the machine which audiorack was installed on.  
+
+The easiest way to get things running once jack and a MySQL 
+database server are running is to use the node-js GUI server 
+that is part of this package.
+
+You can manually run the GUI server from a command line shell 
+with this command:
+/opt/audiorack/bin/keepalive node /option/audiorack/bin/arui/server.js
+
+The same command can be used to create a startup on login application 
+on your particular OS.  For example, on Ubuntu 23.04, the program to 
+configure startup items is called Startup Application Preferences, from 
+which you would create a new startup item and with a name and comment 
+to your liking, with the command set to the above comand.
+
+Then, open http://localhost:3000 in a web browser to access the GUI. 
+Use the following default credentials to log in for the first time:
+default user name: admin
+default password: configure
+
+First task in the GUI is to configure the GUI server to talk to the
+various components by clicking the "Configure" table on the left.
+Click on "Users" bar to expand the Users setting where you should 
+at least change the password for the "admin" user you logged in as, 
+and you can add additional users with various permissions.
+
+Next, expand the HTTP settings bar.  Here you can change the port 
+number that the GUI server responds to web browser http requests on, 
+and set up certificates and the port number for secure  http requests.  
+Note that setting up sanctioned or self-signing web certificates is 
+beyond the scope of this document, but it is recomended you place .pem 
+(key file) and .crt (cert file) files in the .audiorack directory in 
+the user account the GUI server is running in, and set the paths in 
+this configuration accordingly. NOTE: that webmidi for client control 
+surface use and WebRTC require secure http to be configured.
+
+File settings is the next bar to expand and configure.  Here you must 
+set up a "tmpMediaDir" which is accessible from the GUI server and any 
+machines that will be running arStudio.  If diferent that the GUI 
+server machine, a shared network disk must be used, and a means for 
+automounting the shared disk at startup by the various machines must 
+be implemented.  Everything is running on a single machine, you can 
+use/create a directory on a local disk. When the GUI is used to add 
+new media to the system, this is the directory it is uploaded to from 
+the client web browser.
+
+"tmpMediaAgeLimitHrs" determines how long (in hours) files are allowed 
+to be in the tmpMediaDir directory befor being auto-deleted.
+
+"mediaDir" is like the tmpMediaDir, but is perminent storage where 
+media is moved to when added to the library.  The GUI will let a user 
+upload media to the tmpMediaDir, from which items can then be added 
+to the library if done befor the age limit times out.  
+
+To aid in media file orginization, you can create additional mediaDirs 
+to orginize special things.  For example, you can create mediaDir-ads, 
+and mediaDir-ID to place advertisments and station ID in different 
+location than music, etc.
+
+Again, all these directories must be reachable in a multi-computer 
+environment.
+
+Library setting bar is where you configure the database server 
+information.
+type: must be "mysql" currently for MySQL or MariaDB server connection.
+
+host: IP address of the database server, could be localhost if running 
+on the same computer as the GUI server.
+
+port: IP port number to connect to the server.  Leave blank to use 
+MySQL default.
+
+user: user name to connect to the server as.  This must have been 
+configured already on the database server.
+
+password: password associated with the above user name.
+
+database: name of the existing or new (to be created) database for 
+audiorack library storage on the database server.
+
+prefix:  "ar_" is the recomended value
+All database tables will have this prefix added to the table names.  
+This is useful if you only have partial access to a database server 
+and you have to use an existing database name (above).  This prifix 
+will prevent name collitions with other tables that might be used 
+by other applications in a shared database.
+
+Finally, the Studio bar for connecting to studio instances, which 
+hanle audio and automation for a station. The GUI can manage many 
+independent studios as long as they all share a common library 
+and have access to the same media directories.  This can be through 
+multiple arServer instances running on one computer, of different 
+computer for different instances, likely on a shared network.  
+For each instance:
+
+id: Name to use as an identifier in the GUI for this studio.
+
+host: IP address of the machine running this studio instance. 
+Can be "localhost" if the studio instance is/will be running 
+on the same machine as the GUI server.
+
+port: 9550 is the defult, but must be customized if multiple 
+instances are running on the same machines, so each has it's 
+own control port.
+
+run: check if the GUI server should start the instance on the same 
+machine when the GUI server is started. If the studio is running 
+on another machine, the GUI server will not be able to start it. 
+You will need to arrange for arServer to start up on that machine 
+some other way.
+
+startup: command line shell command to start the arServer instance 
+on local machine. "arServer4 -k" will run /opt/audiorack/bin/arServer 
+with the -k option (keep alive) which will auto-restart arServer if 
+is should crash.  You can specify additional options such as -c to 
+start with a custom configuration file if you like. But the 
+"arServer4 -k" value will work for most single studio cases on a 
+single machine. 
+
+minpool: Minimum number of connections to make and hold to the 
+studio's arServercontrol port.  2 is a good number.  If you have a 
+lot of GUI uses accessing this studio at once, you might need to 
+increase this number to keep the GUI from getting sluggish.
+
+maxpool: Maximum number of connections to allow the GUI server to 
+grow it's arServer control port connection pool too.  5 is a good 
+number. This number must be larger than the minpool number. Each 
+arServer supports a maximum of 20 connections without addition 
+configuration, so make to never exceed this.
+
+Clicking the "run" button will cause the run command above to be 
+executed on the machine running the GUI server.  This lets you start 
+a studio's arServer if it isn't running, yet and on the same machine 
+as the GUI server.
+
+*** Post GUI Configuration Tasks ***
+
+Now that the GUI is configured, you will need to initialize the library 
+database if it doesn't already exist.  Go to the Library tab, select the 
+Manage sub-tab. In the Initialize/Update Library Database area on the top, 
+with Current Library (from settings) option selected, click the execute 
+button.  If all is coinfigure properly with your database server, a new 
+empty library will be created, or if a libray already exists, it will 
+be updated to the latest version. No harm is an existing database is
+the latest version.
+
+Next you can create a new location under the Mange Locations area. 
+Generaly each studio/station will have it's own location, for which 
+play logs and automation schedules are independently maintained. 
+When you get a studio configured and running, you will set up the 
+studio to use one of the locations set here.
+
+The Stash tab gives you access to a local (to the computer/web browser your 
+running the GUI client in) working list of items.  This is used for moving 
+things around the GUI.
+
+The File tab is where you get access to the temporary media directory.  Under 
+this tab, you can upload music/items from your computer running the GUI client 
+in a web browser to the temporary media directory.  Once in this idrectory, 
+you can import items into the music library for perminent storage, or for a 
+short period of time (tmpMediaAgeLimitHrs) the items will remain in this 
+director for access/playout by the studios.
+
+Using the Library tab, Browse sub-tab, you can now browse through items added
+to the library, edit item properties, add and edit categories, playlists, etc.
+This included creating scheduling automation rotations, pick tasks, and such
+to build a programming schedule for a station.  Please have a look at the old
+AudioRack 3x users guide for details on how automation work in the previous
+version of audiorack.  The user interface is now different here on version 4
+but the concepts are the same.
+
+You should already have a studio set up in the GUI settings. Now is the time
+to get that studio running (via the GUI settings), and configure it.
+Configuration can be done via the STudio tab of the GUI, and selecting the
+you want to manage by selecting it's name in the sub-tab list (you may 
+have configured more than one). If you are logged into the GUI with as a 
+user with full administrator priveleges (as set up in the GUI setting Users
+panel), then you will see a box of 8 tabs near the bottom.  This is the 
+configuration box.  The Console tab give you access to set command to the 
+studio's arServer control port and see the responses; useful for low level 
+configuration.
+
+The Output tab allows you to configure each of the 5 (default)
+output groups the arServer mixer has. Give each output you desire to use a 
+unique one-word name, set up jack audio routing for where you want the
+output to go (device and ports for each stereo channel), which mixer bus 
+is routed to the output, and what level ducking should be applied when 
+cue or one of three mutes are activated. You likely will want to create 
+Monitor, Cue, Headphones, and Main outputs:
+
+Monitor from the monitor bus going to your studio speakers and fully muting
+on MuteAand ducking apx. 6 to 12 dB on Cue. Cue going to the
+
+Cue from the cue bus going to a set of cue speakers, or maybe you studio 
+monitors fully muting on MuteA as well.
+
+Headphones from the monitor bus going to your headphones with no muting.
+
+Main from the main bus going to some analog output which is your actual 
+broadcast audio potentially to a transmitter, etc.
+
+The LiveInputs tab allows you to configure as many input groups as 
+you like.  Input groups show up under the Live Input tab and can be 
+placed in a mixer input, in the automation queue, etc., to place live
+input from an audio device on the air. Much like outputs, you will name
+and define what audio device sorce and ports will be routed to the 
+arServer mixer when the input is loaded. You can also assign what mixer
+busses this signal will be routed to when playing, and what mute group 
+(if any) will be activated to duck corrisponding output volumes when 
+live.  Each input can also have a mix-minus feed, for implementing
+phone interfaces, talkbacks, etc.
+
+
+Library setting can mostly be filled in by clicking the Copy & Apply 
+from Library Settings button (that would be copy from the GUI settings 
+for the library).  You will need to set a Library location for the
+station location list you created previously. This is the schedule 
+and logs this studio will use for automation.
+
+Mixer settings control behavior of the arServer studio mixer.  Default
+Bus settings select which mixer busses are selected for source (such
+as music players) that do not have bus assignments associated with them. 
+Live Input (as above) do have bus assignments, which are used when 
+a Live Input is loaded rather than the default bus assignments set here.
+Selecting Monitor, Main, and Alternate busses is a good startring point.
+You should also specify a full file path to a directory that will be 
+used to store file recordings that the mixer might make when a user 
+creates a recorder. Finally, there are some settings for silence 
+detection.  Silence Detection can monitor the selected of the mix bus,
+and if the audio level is below the specified threshold for more then 
+the specified time, will trigger two possible actions:
+First timeout will cause a segue of all playing items, forceing the
+next track to play.
+Second timeout with continued silence between will force a total 
+restart of arServer.  If arServer was started with the 0k (keep alive)
+option, it will automatically restart.
+You can customize these actions by creating silence.detect (first) and
+silence.fault (second) files in the .audiorack/triggers directory which 
+would contain a serries of arServer control commands you want to execure
+instead of the above default behaviors.
+
+Automation settings control how the queue, schedule filler and schedule 
+inserter behave. First setting box determines if arServer should start 
+up with automation on, or off.  If off, a user will need to either fill
+the queue with items to play, or will need to start automation before 
+anything will play. On is therefore the recommended setting. Next are
+options for Automation live mode behavior. Live mode is a reduced 
+automation mode intended for use when a live DJ is present (called 
+live-assist in the radio buisiness).  Here you select which full 
+automation mode functions continue to be active in live mode, and which
+functions are turned off when live. You also set a timeout, where the 
+automation mode will go from live back to full-auto mode if a user
+doesn't do anything in the studio for more than this timeout period.
+Finally, queue behavior is set, including the minimum number of items 
+the automation queue filler should always keepin the queue, the default 
+segue overlap time from end of a playing item to the start of the next, 
+and a level base segue holdoff.  The default segue time is used for ietms
+that do not already have a segue time set.  If an item already has a time
+set in it's library properties, that time is used instead.  The level 
+based segue holdoff works with the segue time (either default of set for 
+an item) to keep the segue form happening beyond the segue time until the 
+audio level of the playing item drops below the specified level. Recomended
+settings are 8 minimum queue item, 7 second segue overlap, and -26 dB segue
+holdoff level.
+
+VoIP settings control how arServer integrates with the baresip VoIP client.
+See the later section in this document called OPTIONAL SIP VoIP integartion 
+for details on how to set up baresip to work with arServer.  This panel 
+controls teh arServer side of this integration. The first item sets the 
+control port that arServer uses to connect to baresip to monitor and control
+calles that come into baresip.  Again, see the OPTIONAL SIP VoIP integartion
+section for details.  All the other ists in this settings tab set up specific
+properties for how a caller is connected to the mixer, live the default 
+input levels, mix-minus feed levels, mixer and feed bus assignments, and feed 
+cue and/or talkback behavior.
+
+Wire settings control persisten jack audio connection between various audio
+devices and port to allow you to route audio through processing and such 
+outside of and beyond the Live Inputs and Output settings above. 
+Any connections you make in this list will be persistent: when arServer runs, 
+it will make sure the connections are made if not already present. If a 
+device goes away breaking the connection, arServer will reconnect them when 
+the device comes back. For example, a arServer Output group may have been 
+created to route the main mix bus to two output channels of an audio device
+to feed an air chain. You might want to insert an audio level comprerssor 
+plugin into that path before it goes to the audio devive.  You would need
+run the program that hosts the compressor plugin (such as Carla), and then 
+set the arServer output to route to the two (L&R) inputs of the compressor 
+instead of the audio device.  Then in this Wire list you would add two 
+connections for the left output of the compressor to the desired audio 
+interface channel, and from the right output to another audio interface 
+channel.
+
+*** RUNNING arServer low level details ***
 
 The following command will run arServer4 using default startup 
 configuration found in the /opt/audiorack/support/ directory.
@@ -201,17 +519,33 @@ output properties have been changed from the original version to work
 with jack2.  So please also consult the "help" command results to see 
 the required format in this new version.
 
+If yoiu woulkd like to runn multiple arServer instances on a single machine,
+you can create copies of the .audiorack directory with a unique name for 
+each directory to go with each instance. Edit the ars_prefs.conf file
+in each new directory you created changing all the references to .
+audiorack to be the new directory name you created that contain the 
+particular ars_prefs.conf you are editing. Next, the ars_startup.conf 
+file also in each directory changing the "-p 9550" to something like
+"-p 955x" where x is a unique control port number for each arServer 
+instance.  For example, 9551, 9552, 9553, etc. Also changing all the 
+references to .audiorack to be the new directory name you created that 
+contain the particular ars_prefs.conf you are editing.
+
+When you start the corrisponding arServer instance, add the -c option to
+the shell command and specify the file path to that instance's 
+ars_startup.conf file. This arServer instance will now load the specoified
+config file, with the unique port change. For example:
+
+/opt/audiorack/bin/arServer4 -k -c /home/someuser/studioB/ars_startup.conf
+
+Where someuser if the account you are running the instance from, and studioB 
+is the customized copy of .audiorack directory you created.
+
 You will also need a working MySQL or MariaDB server on your computer
 or on your network with a working MySQL account that can has sufficient
 database priveleges to create and manipulate a database for audiorack's 
 use. You should already be familiar with MySQL enough to have such an 
 account already set up, with a password and such, for audiorack to use.
-
-Again, the old OS X GUI applications can be helpful to you if you have 
-access to an OS X machine.  Keep in mind that all the audio config. 
-panels in the old GUIs will not work properly with the new arServer4 due
-to changes for jack2 uses.  And the database/library, if set up using the
-old GUIs, will need to be "dbinit" updated by arServer4.
 
 *** OPTIONAL SIP VoIP integartion ***
 

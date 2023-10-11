@@ -57,6 +57,7 @@ var itemProps = false;
 var flatPlist = false;
 var curDrag = null;
 var stSaveSetTimer = null;
+var stSaveConTimer = null;
 var catListCache = new watchableValue(false);
 var locListCache = new watchableValue(false);
 var artListCache = new watchableValue(false);
@@ -7874,6 +7875,18 @@ async function stJackConnAdd(evt){
 	stConnsControlValue(tr);
 }
 
+function stTriggerConSaveTimer(){
+	let studio = studioName.getValue();
+	if(studio.length){
+		if(stSaveConTimer)
+			clearInterval(stSaveSIPTimer);
+		stSaveConTimer = setTimeout(function(studio){
+				stSaveConTimer = null;
+				fetchContent("studio/"+studio+"?cmd=savejcons");
+			}, 6000, studio);
+	}
+}
+
 async function stJackConnRemove(evt){
 	evt.preventDefault();
 	evt.stopPropagation();
@@ -7885,9 +7898,10 @@ async function stJackConnRemove(evt){
 		if(studio.length){
 			let resp = await fetchContent("studio/"+studio+"?cmd=jackdisc%20"+row.userOrigValue);
 			if(resp instanceof Response){
-				if(resp.ok)
+				if(resp.ok){
 					row.remove();
-				else
+					stTriggerConSaveTimer();
+				}else
 					alert("Error deleting studio jack audio connection");
 			}
 		}
@@ -7915,6 +7929,7 @@ async function stJackConnUpdate(evt){
 				return;
 			}
 		}
+		stTriggerConSaveTimer();
 		let resp = await fetchContent("studio/"+studio+"?cmd=jackconn%20"+row.userPortList);
 		if(resp instanceof Response){
 			if(!resp.ok){
@@ -8013,7 +8028,6 @@ async function stConfset(key, value){
 		clearInterval(stSaveSetTimer);
 	stSaveSetTimer = setTimeout(function(studio){
 			stSaveSetTimer = null;
-			console.log("saveset");
 			fetchContent("studio/"+studio+"?cmd=saveset");
 		}, 6000, studio);
 }
