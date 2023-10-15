@@ -105,7 +105,7 @@ uint32_t AddItem(int pos, char *URLstr, char *adder, uint32_t adderUID){
 	char *tmp;
 	char buf[32];
 	
-	// create/get metadata for URL	
+	// create/get metadata for URL
 	newID = createMetaRecord(URLstr, NULL, 0);
 	// fill the metadata record
 	GetURLMetaData(newID, URLstr);

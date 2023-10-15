@@ -1588,18 +1588,7 @@ function setDragItemEvents(i, dragcb, dropcb){
 					if(this == items[it])
 						droppedpos = it;
 				}
-				let prevent = false;
-				prevent = dropcb(this, currentpos, droppedpos);
-				if(!prevent){
-					if(currentpos < droppedpos)
-						this.parentNode.insertBefore(curDrag, this.nextSibling);
-					else
-						this.parentNode.insertBefore(curDrag, this);
-					for(let it=0; it<items.length; it++){
-						// re-number data-idx
-						items[it].setAttribute("data-idx", it);
-					}
-				}
+				dropcb(this, currentpos, droppedpos);
 			}else{
 				// drop is from some other place
 				let atr = {url: curDrag.getAttribute("data-url"), pnum: curDrag.getAttribute("data-pnum")};
@@ -1608,7 +1597,6 @@ function setDragItemEvents(i, dragcb, dropcb){
 					for(let it=0; it<items.length; it++){
 						if(this == items[it])
 							droppedpos = it;
-						items[it].setAttribute("data-idx", i);
 					}
 					dropcb(this, false, droppedpos, atr);
 				}
@@ -1745,11 +1733,19 @@ function appendItemToStash(item){
 }
 
 function moveItemInStash(obj, fromIdx, toIdx, param){
-	if(!fromIdx)
-		return;
+	if(fromIdx === false)
+		return; // stash doesn't accept drops from other places
 	stashList.splice(toIdx, 0, stashList.splice(fromIdx, 1)[0]);
 	setStash(stashList);
 	updateStashDuration();
+	let items = obj.parentElement.childNodes;
+	if(fromIdx < toIdx)
+		obj.parentNode.insertBefore(curDrag, obj.nextSibling);
+	else
+		obj.parentNode.insertBefore(curDrag, obj);
+	for(let it=0; it<items.length; it++)
+		// re-number data-idx
+		items[it].setAttribute("data-idx", it);
 }
 
 function stashItemInfo(evt){
@@ -3503,7 +3499,15 @@ function plDelItems(evt){
 }
 
 function plMoveItem(obj, fromIdx, toIdx){
+	
+	if(fromIdx === false)
+		return; // pl doesn't accept drops from other places
 	flatPlist.splice(toIdx, 0, flatPlist.splice(fromIdx, 1)[0]);
+	let items = obj.parentElement.childNodes;
+	if(fromIdx < toIdx)
+		obj.parentNode.insertBefore(curDrag, obj.nextSibling);
+	else
+		obj.parentNode.insertBefore(curDrag, obj);
 	updatePLDuration();
 }
 
@@ -10288,7 +10292,7 @@ async function breakToQueue(evt){
 
 function moveItemInQueue(obj, fromIdx, toIdx, param){
 	// check to prevent moving of playing items
-	if(!fromIdx && param){
+	if((fromIdx === false) && param){
 		let val = param.pnum;
 		if(!val || !val.length){
 			// no player number, try url
@@ -10315,7 +10319,6 @@ function moveItemInQueue(obj, fromIdx, toIdx, param){
 			fetchContent("studio/"+studio+"?cmd=move "+fromIdx+" "+toIdx);
 		}
 	}
-	return true; // prevent local drop... wait from server to update queue
 }
 
 function queueMetaFromIdx(index){
@@ -12086,6 +12089,11 @@ async function startupContent(){
 	}
 }
 
+document.onclick = function(event){
+	if(!document.getElementById("infopane").contains(event.target))
+		closeInfo(event);
+};
+        
 window.onload = function(){
 	locName.registerCallback(locMenuTrack);
 	locName.registerCallback(refreshLogsLocationDep);

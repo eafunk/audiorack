@@ -455,7 +455,11 @@ outside of and beyond the Live Inputs and Output settings above.
 Any connections you make in this list will be persistent: when arServer runs, 
 it will make sure the connections are made if not already present. If a 
 device goes away breaking the connection, arServer will reconnect them when 
-the device comes back. For example, a arServer Output group may have been 
+the device comes back. If a connection is removed from this list, arServer 
+will disconnect the devices and ports that were specified and remove the 
+connection from it's Spersistent connection list.
+
+Example of use: a arServer Output group may have been 
 created to route the main mix bus to two output channels of an audio device
 to feed an air chain. You might want to insert an audio level comprerssor 
 plugin into that path before it goes to the audio devive.  You would need
