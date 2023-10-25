@@ -5565,9 +5565,9 @@ function loadConfigTypeTable(el, type){
 						<button class="editbutton" onclick="updateConf(event, '`+type+`')">Update</button>
 						<button class="editbutton" onclick="delConf(event, '`+type+`')">-</button>`;
 		haction = `<button class="editbutton" onclick="newConf(event, '`+type+`')">+</button>`;
-		fields = {id: "<input type='text' size='8' name='id' value='$val'/>", 
+		fields = {id: "<input type='text' size=10' name='id' value='$val'/>", 
 					host: "<input type='text' name='host' value='$val'></input>",
-					port: "<input type='text' size='2' name='port' value='$val'></input>",
+					port: "<input type='text' size='4' name='port' value='$val'></input>",
 					run: "<input type='text' name='run' value='$val'></input>",
 					startup: "<input type='checkbox' name='startup' $ifvalchk></input>",
 					minpool: "<input type='number' min='1' max='8' name='minpool' value='$val'></input>",
@@ -7825,7 +7825,7 @@ async function stRenderJConControl(el, srcDevList, destDevList, connList){
 		tr = table.insertRow(-1);
 		tr.userOrigValue = con.origStr;
 		let cell = tr.insertCell(-1);
-		if(con.isConn)
+		if(con.isConn && con.isConn(con.isConn))
 			cell.innerHTML = `Y`;
 		else
 			cell.innerHTML = `N`;
@@ -12090,8 +12090,10 @@ async function startupContent(){
 }
 
 document.onclick = function(event){
-	if(!document.getElementById("infopane").contains(event.target))
-		closeInfo(event);
+	if(!document.getElementById("infopane").contains(event.target)){
+		if(event.target.parentNode)
+			closeInfo(event);
+	}
 };
         
 window.onload = function(){

@@ -205,9 +205,9 @@ function checkPwdHash(salt, clearpw, hashedpw){
 
 function listControlDirFilesFunc(request, response){
 	if(request.session.loggedin == true){
-		fs.readdir("client/control", function(err, files){
+		fs.readdir(__dirname+"/client/control", function(err, files){
 			if(err){
-				console.log("Error getting control surface directory listing.");
+				console.log("Error getting control surface directory listing: ", err);
 				response.status(500);
 				response.end();
 			}else{
