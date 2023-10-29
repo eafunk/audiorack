@@ -298,6 +298,7 @@ void *sipSessionWatcher(void *refCon){
 			}
 		}else{
 			// no connection... try to make one if baresipCtl is set
+			sipStatus = 0;
 			if(baresipPort && strlen(baresipPort)){
 				struct timeval tv;
 				int sock;

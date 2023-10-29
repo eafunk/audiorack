@@ -3467,7 +3467,8 @@ unsigned char handle_jackconn(ctl_session *session){
 		if(src = str_NthField(session->save_pointer, ">", 0)){
 			if(dest = str_NthField(session->save_pointer, ">", 1)){
 				pthread_mutex_lock(&mixEngine->jackMutex);
-				if(!jack_connect(mixEngine->client, src, dest)){
+				int res = jack_connect(mixEngine->client, src, dest);
+				if(!res || (res == EEXIST)){
 					pthread_mutex_unlock(&mixEngine->jackMutex);
 					pthread_rwlock_wrlock(&connLock);
 					setValuesForConn((connRecord *)&connList, src, dest);

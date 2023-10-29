@@ -7457,7 +7457,7 @@ async function stParseConnectionList(data){
 		}
 		return result}
 	);
-	return List; //  array of (connections) objects. object = {isConn: bool, srcDev: "srcDevName", srcPort: "srcPortName", destDev: "destDevName", destPort: "destPortName"}
+	return List; //  array of (connections) objects. object = {isConn: "Y" or "N", srcDev: "srcDevName", srcPort: "srcPortName", destDev: "destDevName", destPort: "destPortName"}
 }
 
 async function stGetSourceList(){
@@ -7825,7 +7825,7 @@ async function stRenderJConControl(el, srcDevList, destDevList, connList){
 		tr = table.insertRow(-1);
 		tr.userOrigValue = con.origStr;
 		let cell = tr.insertCell(-1);
-		if(con.isConn && con.isConn(con.isConn))
+		if(con.isConn && parseInt(con.isConn))
 			cell.innerHTML = `Y`;
 		else
 			cell.innerHTML = `N`;
@@ -8387,7 +8387,10 @@ async function stConfMixSilenceTOChange(evt){
 	await stConfset("sys_silence_timeout", toSec);
 }
 
-function refreshStAdminVoIP(){
+async function refreshStAdminVoIP(){
+	let studio = studioName.getValue();
+	if(studio)
+		await syncStudioStat(studio);
 	let settings = studioStateCache.meta[0];
 	if(settings){
 		let bus = parseFloat(settings["sip_bus"]);
@@ -8826,7 +8829,10 @@ async function stConfDbCopy(event){
 	await stConfset("db_type", obj["type"]);
 	await stConfset("db_user", obj["user"]);
 	el = document.getElementById("stConfDbPort");
-	el.innerText = obj["port"];
+	if(obj["port"])
+		el.innerText = obj["port"];
+	else
+		el.innerText = "";
 	await stConfset("db_port", obj["port"]);
 }
 
@@ -10815,12 +10821,12 @@ function updatePlayerUI(p){
 			}else{
 				play.style.background = "LightGray";
 				stop.style.background = "Yellow";
-				unload.style.display = "default";
+				unload.style.display = "block";
 			}
 		}else{
 			play.style.display = "none";
 			stop.style.display = "none";
-			unload.style.display = "default";
+			unload.style.display = "block";
 		}
 	}
 	updatePlayerFaderUI(p.vol, p.pNum);
