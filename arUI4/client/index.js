@@ -1578,8 +1578,8 @@ function setDragItemEvents(i, dragcb, dropcb){
 		evt.preventDefault();
 		let target = evt.target.parentNode;
 		let items = target.getElementsByTagName("li");
-		if(dropcb){
-			if((this != curDrag) && (this.parentNode === curDrag.parentNode)){
+		if(dropcb && (this != curDrag)){
+			if(this.parentNode === curDrag.parentNode){
 				// move in list
 				let currentpos = 0, droppedpos = 0;
 				for(let it=0; it<items.length; it++){

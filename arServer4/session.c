@@ -3462,28 +3462,25 @@ unsigned char handle_savejcons(ctl_session *session){
 
 unsigned char handle_jackconn(ctl_session *session){
 	char *src, *dest;
+	int res;
 
 	if(session->save_pointer && strlen(session->save_pointer)){
 		if(src = str_NthField(session->save_pointer, ">", 0)){
 			if(dest = str_NthField(session->save_pointer, ">", 1)){
 				pthread_mutex_lock(&mixEngine->jackMutex);
-				int res = jack_connect(mixEngine->client, src, dest);
+				res = jack_connect(mixEngine->client, src, dest);
+				pthread_mutex_unlock(&mixEngine->jackMutex);
+				pthread_rwlock_wrlock(&connLock);
+				setValuesForConn((connRecord *)&connList, src, dest);
+				pthread_rwlock_unlock(&connLock);
+				free(dest);
+				free(src);
 				if(!res || (res == EEXIST)){
-					pthread_mutex_unlock(&mixEngine->jackMutex);
-					pthread_rwlock_wrlock(&connLock);
-					setValuesForConn((connRecord *)&connList, src, dest);
-					pthread_rwlock_unlock(&connLock);
-					free(dest);
-					free(src);
 					return rOK;	
 				}else{
-					pthread_mutex_unlock(&mixEngine->jackMutex);
-					free(dest);
-					free(src);
-					session->errMSG = "Connection failed.\n";
+					session->errMSG = "Connection added to persistent list despite connection failure.\n";
 					return rError;
 				}
-				free(dest);
 			}
 			free(src);
 		}
