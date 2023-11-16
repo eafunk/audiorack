@@ -11636,7 +11636,7 @@ function studioHandleNotice(data){
 async function updateControlSurface(){
 	if(!midiAccess){
 		if(navigator.requestMIDIAccess){
-			midiAccess = await navigator.requestMIDIAccess({sysex: true});
+			midiAccess = await navigator.requestMIDIAccess({sysex: false});
 			if(midiAccess)
 				midiAccess.onstatechange = updateControlSurface; // call this function when midi devices change
 		}
@@ -11657,7 +11657,8 @@ async function updateControlSurface(){
 					output = output.value;
 					if((output.name === input.name) && (output.manufacturer === input.manufacturer)){
 						// found matching output.  See if we have a js module for this device
-						let devname = input.manufacturer + "_" + input.name;
+//						let devname = input.manufacturer + "_" + input.name;
+						let devname = input.name;	// pipewire doesn't capture the manufacturer, just use name for matching
 						for(let i = 0; i < csmodules.length; i++){
 							if(devname.startsWith(csmodules[i])){
 								let entry = {name: devname, module: csmodules[i]+".mjs", input: input, output: output};
