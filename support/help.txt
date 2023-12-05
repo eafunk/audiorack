@@ -77,9 +77,6 @@ Send a modbus/TCP coil off command to the modbus interface at the specified IP-a
 modbuspoll period IP-address UnitID InputAddress config_file
 Creates a non-expiring task that runs in the background (see task functions) to pool the specified modbus device's digital input.  When the polling discovers that the input has changes state, the specified configuration file (found in the directory specified in the system setting file_trigger_dir) with either .on or .off appended to the file name to representing the input's new state is executed. Period is an decimal integer indicating the polling period in seconds. IP-address of the device to poll must be in numeric, not named, on port 502. UnitID is one byte hex (usually 01), InputAddress is two byte hex.
 
-iaxstream 
-Starts a tcp<->udp tunnel on the controlling terminal with udp destination set to the local computer on the iax port. This command is intended to allow iax telephone usage by a remote ARStudio client. Control WILL NOT return to arserver on the connection used to issue this command.  If you plan to use this function, you should open a new connection to arserver just for this purpose.
-
 vuon
 vuoff
 turns on or off notification vu meters reporting for a client after notification has been enabled.
@@ -369,9 +366,6 @@ Updates Name, Artist, Album, Comment, Owner, Source properties in the program lo
 logsync
 Program logs have been added/changed by the client directly through the database...
 This command will send a notice to all clients to sync to the new log entry.
-
-(x)setstat [pNum integer] [status integer]
-sets the specified player number status integer: bit flags b0-loading, b1-standby, b2-playing, b3-hasPlayed, b4-finished reading file, b5-logged, b6-waiting, b7-position has changes
 
 logrotate
 Causes the current arserver log to be renamed with .old appended to the end, replacing any previous file with that name and then closes the log file causeing a new log file to start.

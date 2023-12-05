@@ -7034,7 +7034,7 @@ async function setLibUsingStudio(){
 	}
 }
 
-function studioChangeCallback(value){
+async function studioChangeCallback(value){
 	// clear existing VU meters
 	let busvu = document.getElementById('studioOutsVU');
 	while(busvu.firstChild)
@@ -7049,11 +7049,11 @@ function studioChangeCallback(value){
 	eventTypeReg("vu_"+value, studioVuUpdate);
 	busmeters = [];
 	studioStateCache = {meta: {}, queueRev: -1, queueSec: 0.0, queueDur: 0.0, logTime: 0, logs: [], live: [], ins: [], outs: [], encoders: [], runStat: 0, autoStat: 0, chancnt: 0, buscnt: 0, outcnt: 0};
-	getServerInfo(value);
-	syncStudioMetalist(value);
-	syncStudioStat(value);
-	syncPlayers(value);
-	refreshOutGroups();
+	await getServerInfo(value);
+	await syncStudioMetalist(value);
+	await syncStudioStat(value);
+	await syncPlayers(value);
+	await refreshOutGroups();
 	updateControlSurface();
 }
 
@@ -9455,7 +9455,7 @@ async function refreshStudioDelays(outlist, index, delay){
 			} 
 		}
 		// populate new table
-		let colMap = {url: false, Name: "Name", delaySel: "Enabled", Bus: false, Mutes: false, Volume: false, Ports: false, ShowUI: false, Idx: false};
+		let colMap = {url: false, Name: "Name", delaySel: "Enable", Bus: false, Mutes: false, Volume: false, Ports: false, ShowUI: false, Idx: false};
 		let fields = {delaySel: "<input type='checkbox' onchange='stDelayCheckAction(event)' $ifvalchk></input>"};
 		genPopulateTableFromArray(outlist, el, colMap, false, false, false, false, false, fields, false);
 	}else{
@@ -11747,15 +11747,16 @@ async function stConsSend(){
 async function selectControlSurface(entry){
 	// load module
 	if(entry){
+		let Module = await import('/control/'+entry.module);
 		if(entry.name != studioStateCache.midiName){
-			let Module = await import('/control/'+entry.module);
 			if(Module){
 				setStorageMidiControl(entry.name);
 				studioStateCache.midiName = entry.name;
 				studioStateCache.control = Module;
 				Module.init(entry.input, entry.output);
 			}
-		}
+		}else
+			Module.init();	// already selected, just refresh controls to new studio
 	}else{
 		if(studioStateCache.midiName !== false){
 			studioStateCache.midiName = false;

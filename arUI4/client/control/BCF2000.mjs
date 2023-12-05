@@ -55,9 +55,11 @@ function selectVpotMode(mode){
 }
 
 function initialize(inport, outport){
-	midiout = outport;
-	midiin = inport;
-	midiin.onmidimessage = onMIDIRecv;
+	if(inport && outport){
+		midiout = outport;
+		midiin = inport;
+		midiin.onmidimessage = onMIDIRecv;
+	}
 	playersUpdate();
 	showAutoStat();
 	selectVpotMode(0);

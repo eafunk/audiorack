@@ -199,7 +199,7 @@ void *sipSessionWatcher(void *refCon){
 		if(sip_ctl_sock > -1){
 			// connection open -- this is the only thread that reads from sip_ctl_sock, so no mutex is needed
 			len = recv(sip_ctl_sock, block, sizeof(block)-1, 0);
-			if(len < 0){
+			if(len <= 0){
 				if(errno != EAGAIN){
 					// connection failure, not a time out
 					close(sip_ctl_sock);
