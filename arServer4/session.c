@@ -4405,7 +4405,7 @@ unsigned char handle_waitseg(ctl_session *session){
 			pthread_cond_wait(&lastsegSemaphore, &lastsegMutex );
 			next = queueGetNextSegPos(NULL);
 			pos = aLong;
-			if(!getQueuePos(&pos) || ((unsigned)next > pos)){
+			if(!getQueuePos(&pos) || ((unsigned)next >= pos)){
 				// break out of wait loop
 				break;
 			}
@@ -4424,7 +4424,7 @@ unsigned char handle_segnow(ctl_session *session){
 
 	queueGetNextSegPos(&thisPlayer);
 	if(checkPnumber(thisPlayer)){
-		instance = &mixEngine->ins[thisPlayer];	
+		instance = &mixEngine->ins[thisPlayer];
 		if(instance->status & status_standby){
 			instance->fadePos = instance->pos;
 			return rOK;
@@ -4467,7 +4467,7 @@ unsigned char handle_fadeprior(ctl_session *session){
 				// don't fade this one, but keep going back and fade earlier items in players
 				while(--i >= 0){
 					if(rec = (queueRecord *)getNthNode((LinkedListEntry *)&queueList, i+1)){
-						status = getQueueRecStatus(rec, &instance);		
+						status = getQueueRecStatus(rec, &instance);
 						if(instance && instance->managed && ((status & status_playing) != 0) && ((status & status_cueing) == 0)){
 							// currently playing and not in cue... fade it!
 							instance->segNext = 0;

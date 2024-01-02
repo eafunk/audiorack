@@ -1735,17 +1735,39 @@ function appendItemToStash(item){
 function moveItemInStash(obj, fromIdx, toIdx, param){
 	if(fromIdx === false)
 		return; // stash doesn't accept drops from other places
+	let items = obj.parentElement.childNodes;
+	if(fromIdx < toIdx){
+		obj.parentNode.insertBefore(curDrag, obj.nextSibling);
+	}else{
+		obj.parentNode.insertBefore(curDrag, obj);
+	}
 	stashList.splice(toIdx, 0, stashList.splice(fromIdx, 1)[0]);
 	setStash(stashList);
 	updateStashDuration();
-	let items = obj.parentElement.childNodes;
-	if(fromIdx < toIdx)
-		obj.parentNode.insertBefore(curDrag, obj.nextSibling);
-	else
-		obj.parentNode.insertBefore(curDrag, obj);
 	for(let it=0; it<items.length; it++)
 		// re-number data-idx
 		items[it].setAttribute("data-idx", it);
+}
+
+function stashDeleteSelected(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let list = document.getElementById("stashlist");
+	let els = list.querySelectorAll('input[type=checkbox]:checked');
+	if(els && els.length){
+		for(let i=0; i<els.length; i++){
+			let item = els[i].parentElement.parentElement;
+			let idx = item.getAttribute("data-idx");
+			stashList.splice(idx, 1);
+			list.removeChild(item);
+			items = list.childNodes;
+			for(let it=0; it<items.length; it++)
+				// re-number data-idx
+				items[it].setAttribute("data-idx", it);
+		}
+		setStash(stashList);
+		updateStashDuration();
+	}
 }
 
 function stashItemInfo(evt){
@@ -1782,23 +1804,6 @@ function stashSelectAll(evt){
 	if(els){
 		for(let i=0; i<els.length; i++)
 			els[i].checked = true;
-		updateStashDuration();
-	}
-}
-
-function stashDeleteSelected(evt){
-	evt.preventDefault();
-	evt.stopPropagation();
-	let list = document.getElementById("stashlist");
-	let els = list.querySelectorAll('input[type=checkbox]:checked');
-	if(els){
-		for(let i=0; i<els.length; i++){
-			let item = els[i].parentElement.parentElement;
-			let idx = item.getAttribute("data-idx");
-			stashList.splice(idx, 1);
-			list.removeChild(item);
-		}
-		setStash(stashList);
 		updateStashDuration();
 	}
 }
@@ -7883,7 +7888,7 @@ function stTriggerConSaveTimer(){
 	let studio = studioName.getValue();
 	if(studio.length){
 		if(stSaveConTimer)
-			clearInterval(stSaveSIPTimer);
+			clearInterval(stSaveConTimer);
 		stSaveConTimer = setTimeout(function(studio){
 				stSaveConTimer = null;
 				fetchContent("studio/"+studio+"?cmd=savejcons");

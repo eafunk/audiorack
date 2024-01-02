@@ -63,7 +63,6 @@ function onMIDIRecv(message){
 	let zone;
 	let sw;
 	let iVal;
-	let ch;
 	let fVal;
 	let data = message.data;
 	if((data.length == 18) && (data[0] === 0xf0) && (data[5] === 0x01)){
@@ -90,12 +89,12 @@ function onMIDIRecv(message){
 			zone = sw & 0x07;
 			if(((sw & 0xf8) == 0x00) && (iVal > 0)){
 				// start/stop button
-				if(studioStateCache.ins[(ch + (bank * pCount))].status & 0x04){
+				if(studioStateCache.ins[(zone + (bank * pCount))].status & 0x04){
 					// play -> stop
-					playerAction("stop", false, ch + (bank * pCount));
+					playerAction("stop", false, zone + (bank * pCount));
 				}else{
 					// stopped -> play
-					playerAction("play", false, ch + (bank * pCount));
+					playerAction("play", false, zone + (bank * pCount));
 				}
 			}else if(((sw & 0xf8) == 0x08) && (iVal > 0)){
 				//cue button
