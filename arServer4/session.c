@@ -4094,6 +4094,9 @@ unsigned char handle_delete(ctl_session *session){
 				session->errMSG = "Specified UID is not in queue list.\n";
 				return rError;
 			}
+char logstr[64];
+snprintf(logstr, sizeof logstr, "[debug] session:handle_delete-UID removed from Q; %x.", aLong);
+serverLogMakeEntry(logstr);
 			session->lastUID = aLong;
 			return rOK;
 		}

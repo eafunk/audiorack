@@ -421,6 +421,7 @@ int process(jack_nframes_t nframes, void *arg){
 				activeBus = activeBus | 0x00000002 | (busbits & 0x0f000000);
 				inchrec->status = inchrec->status | status_talkback;
 				busbits = 2;
+				vol = 1.0;	// ignore fader when in Talkback mode
 			}
 		}else{
 			if(inchrec->status & status_talkback)
@@ -471,7 +472,7 @@ int process(jack_nframes_t nframes, void *arg){
 			// otherwise, use the specified mix bus number + 1 for the feed source
 			inchrec->tmpFeedBus = 0x0000001f & inchrec->feedBus;
 		
-		curSegLevel = 0;
+		curSegLevel = 0.0;
 		for(c=0; c<ccount; c++){ 	// channel c of input number i
 			/* clear mixminus/feed outputs - we are using these buffers for
 			 * temporary volume/balance scaled input sample storage */
@@ -502,7 +503,7 @@ int process(jack_nframes_t nframes, void *arg){
 			/* VU Block calculations */
 			vu = &(inchrec->VUmeters[c]);
 			// VU avarage over 10,000 samples - aprox 10 Hz @ sample rate = 96,000
-			avr = ( 1 - (0.0001 * nframes)) * vu->avr + 0.0001 * avr;
+			avr = ( 1.0 - (0.0001 * nframes)) * vu->avr + 0.0001 * avr;
 			if(avr > 100.0) 
 				avr = 100.0;
 			vu->avr = avr;
@@ -511,7 +512,7 @@ int process(jack_nframes_t nframes, void *arg){
 				curSegLevel = avr;
 
 			// VU peak fall time constatnt is 50,000 samples - aprox 2 Hz @ sample rate = 96,000
-			vu->peak = vu->peak * ( 1 - (0.00002 * nframes));
+			vu->peak = vu->peak * ( 1.0 - (0.00002 * nframes));
 			if(pk > 100.0)
 				pk = 100.0;
 			if(pk > vu->peak)

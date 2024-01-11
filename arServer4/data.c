@@ -536,7 +536,7 @@ unsigned char releaseQueueRecord(queueRecord *root, queueRecord *rec, unsigned c
 		free(rec);
 		return 1;
 	}
-	return 0;	
+	return 0;
 }
 
 unsigned char releaseQueueEntry(uint32_t uid){
@@ -552,7 +552,7 @@ unsigned char releaseQueueEntry(uint32_t uid){
 			data.reference = 0;
 			data.senderID = getSenderID();
 			data.value.iVal = 0;
-			notifyMakeEntry(nType_status, &data, sizeof(data));	
+			notifyMakeEntry(nType_status, &data, sizeof(data));
 		}else
 			rec = NULL;
 	}

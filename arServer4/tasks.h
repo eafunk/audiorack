@@ -24,7 +24,7 @@
 #include <time.h>
 #include "utilities.h"
 
-struct __attribute__((packed)) modbusData {	
+struct __attribute__((packed)) modbusData {
 	uint16_t			transID;
 	uint16_t			protoID;
 	unsigned char		pading;
@@ -34,7 +34,7 @@ struct __attribute__((packed)) modbusData {
 	unsigned char		data[254];
 };
 
-struct modbusPollRec{	
+struct modbusPollRec{
 	int					sock;
 	int					period;
 	unsigned char		unitID;

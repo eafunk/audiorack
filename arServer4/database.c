@@ -1936,7 +1936,6 @@ void folderPick(taskRecord *parent){
 	rerun = GetMetaInt(parent->UID, "Rerun", NULL);
 	date = GetMetaInt(parent->UID, "Date", NULL);
 	segout = GetMetaFloat(parent->UID, "def_segout", NULL);
-
 	pick = traverseFolderListing(&dir, prefix, mod, nomod, seq, rerun, first, rand, date);
 	free(dir);
 	free(prefix);

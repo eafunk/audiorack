@@ -288,6 +288,7 @@ void loadConfigFromTask(void *refIn){
 	session.lastAID = 0;
 	session.lastPlayer = parent->player;
 	session.lastUID = parent->UID;
+	parent->UID = 0; // prevents removing trigger file load tasks from removing the associated item when done.
 	if(strlen(parent->name) > 0)
 		loadConfiguration(&session, parent->name);
 }

@@ -275,15 +275,20 @@ uint32_t SplitItem(uint32_t parent, char *URLstr, unsigned char last){
 			if(atof(tmp = GetMetaData(parent, "Volume", 0)) != 0.0)
 				SetMetaData(newID, "Volume", tmp);
 			free(tmp);
-			SetMetaData(newID, "def_segout", (tmp = GetMetaData(parent, "def_segout", 0)));
+			if(atof(tmp = GetMetaData(parent, "def_segout", 0)) != 0.0)
+				SetMetaData(newID, "def_segout", tmp);
 			free(tmp);
-			SetMetaData(newID, "def_seglevel", (tmp = GetMetaData(parent, "def_seglevel", 0)));
+			if(atof(tmp = GetMetaData(parent, "def_seglevel", 0)) != 0.0)
+				SetMetaData(newID, "def_seglevel", tmp);
 			free(tmp);
-			SetMetaData(newID, "def_bus", (tmp = GetMetaData(parent, "def_bus", 0)));
+			if(atof(tmp = GetMetaData(parent, "def_bus", 0)) != 0.0)
+				SetMetaData(newID, "def_bus", tmp);
 			free(tmp);
-			SetMetaData(newID, "TargetTime", (tmp = GetMetaData(parent, "TargetTime", 0)));
+			if(atof(tmp = GetMetaData(parent, "TargetTime", 0)) != 0.0)
+				SetMetaData(newID, "TargetTime", tmp);
 			free(tmp);
-			SetMetaData(newID, "FillTime", (tmp = GetMetaData(parent, "FillTime", 0)));
+			if(atof(tmp = GetMetaData(parent, "TargetTime", 0)) != 0.0)
+				SetMetaData(newID, "FillTime", tmp);
 			free(tmp);
 			
 			// inheritance of TRUE if TRUE in parent
@@ -308,7 +313,7 @@ uint32_t SplitItem(uint32_t parent, char *URLstr, unsigned char last){
 			// and parent loss of duration to child and segout is cleared
 			if(last){
 				SetMetaData(parent, "Duration", "0.0");
-				SetMetaData(parent, "SegOut", "0.0");			
+				SetMetaData(parent, "SegOut", "0.0");
 			}else{
 				pdur = GetMetaFloat(parent, "Duration", NULL);
 				idur = GetMetaFloat(newID, "Duration", NULL);
@@ -393,7 +398,7 @@ int LoadItem(int pos, queueRecord *qrec){
 	}
 
 	if(qrec->status & status_running){
-		// it's a task or play list that is running... do nothing and don't delete it
+		// it's a task or playlist that is running... do nothing and don't delete it
 		return -3;  //don't delete
 	}
 	if(qrec->player){
@@ -431,14 +436,13 @@ int LoadItem(int pos, queueRecord *qrec){
 				instance->managed = 1;
 				instance->status =  instance->status | status_deleteWhenDone;
 				// new rev number since the list changed
-				plRev++;    
+				plRev++;
 				// send out notifications
 				notifyData	data;
 				data.reference = 0;
 				data.senderID = getSenderID();
 				data.value.iVal = 0;
 				notifyMakeEntry(nType_status, &data, sizeof(data));
-				
 				free(tmp);
 				return i;
 			}else{
@@ -468,7 +472,7 @@ void UnloadItem(int pos, queueRecord *qrec){
 	uint32_t c, cmax;
 	inChannel *instance;
 	jack_port_t **port;
-	
+
 	if(!qrec){
 		// use index to find record
 		if(pos < 0)
@@ -571,15 +575,17 @@ void setSegTimes(inChannel *thisp, inChannel *nextp, int nextNum){
 	
 	// set seg level
 	thisp->levelSeg = GetMetaFloat(thisp->UID, "def_seglevel", NULL);
-	if(thisp->levelSeg == 0.0)
+	if(thisp->levelSeg == 0.0){
 		thisp->levelSeg = GetMetaFloat(0, "def_seglevel", NULL);
+	}
 	//get segout time and duration of the source item
 	segoutT = GetMetaFloat(thisp->UID, "SegOut", NULL);
-	if(segoutT)
-		// disable level segue if a specific segOut was set
-		thisp->levelSeg = 0.0;
 	if(segoutT < 0.0) 
 		segoutT = 0.0;
+	if(segoutT){
+		// disable level segue if a specific segOut was set
+		thisp->levelSeg = 0.0;
+	}
 	dur = GetMetaFloat(thisp->UID, "Duration", NULL);
 	if(dur){
 		if(segoutT == 0.0){
@@ -597,10 +603,10 @@ void setSegTimes(inChannel *thisp, inChannel *nextp, int nextNum){
 		segoutT = dur;
 	//get segin time of the next item
 	seginT = GetMetaFloat(nextp->UID, "SegIn", NULL);
-	if(seginT)
+	if(seginT){
 		// disable level segue if a specific segIn was set
 		thisp->levelSeg = 0.0;
-	
+	}
 	// adjust segout time to account for the segin time of the next item
 	segoutT = segoutT - seginT;
 	if(segoutT < 0.0) 
@@ -705,7 +711,7 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 						instance->status = status_waiting;
 					}else if(result == -2){
 						// can't load it... delete
-						releaseQueueRecord((queueRecord	*)&queueList, instance, 0);
+						releaseQueueRecord((queueRecord*)&queueList, instance, 0);
 						free(tmp);
 						return;
 					} 
@@ -725,7 +731,7 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 	if(status & status_standby){
 		if(status & status_hasPlayed){
 			dur = GetMetaFloat(instance->UID, "Duration", NULL);
-			if((status & status_finished) || (dur <= 0)){
+			if((status & status_finished) || (thisIn && (thisIn->sourceType == sourceTypeCanRepos) && (dur <= 0))){
 				if((status & status_playing) == 0){
 					// has played but is now either finished or has zero duration and has been stoped
 					releaseQueueRecord((queueRecord	*)&queueList, instance, 0);
@@ -761,7 +767,7 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 			}
 		}
 	}
-			
+	
 	NextListItem(status, instance, &nextp, sbtime, remtime, isPlaying);
 
 	type = GetMetaData(instance->UID, "Type", 0);

@@ -38,8 +38,8 @@
 
 /* program wide globals */
 unsigned int maxSessions = 25;
-const char *versionStr="4.0.6";
-const char *versionCR="2004-2023  Ethan Funk";
+const char *versionStr="4.0.7";
+const char *versionCR="2004-2024  Ethan Funk";
 mixEngineRecPtr mixEngine;
 unsigned char run;
 unsigned char quit;

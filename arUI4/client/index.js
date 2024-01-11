@@ -9565,6 +9565,7 @@ async function refreshOutGroups(){
 							show.push(entry);
 					}
 				}
+				// make empty slots
 				while(list.length < studioStateCache.outcnt){
 					cnt++;
 					list.push({url: false, Idx: cnt, Name: false, Bus: false, Mutes: false, Volume: false, ShowUI: false, Ports: false, Delay:false});
@@ -10517,6 +10518,7 @@ function updateQueueLogDisplay(logOnly){
 				let ref = li.getAttribute("data-idx");
 				let meta = studioStateCache.meta[ref];
 				if(meta && (meta.logID == entry.logID))
+					// hide items that are currently in the Queue
 					logID = 0;
 			}
 		}

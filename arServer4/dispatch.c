@@ -501,7 +501,7 @@ void *jackChangeWatcher(void *refCon){
 							updateOutputConnections(mixEngine, orec, 0, NULL, name);
 							orec++;
 						}
-						pthread_rwlock_unlock(&mixEngine->outGrpLock);							
+						pthread_rwlock_unlock(&mixEngine->outGrpLock);
 					}			
 				}
 			}
@@ -561,9 +561,6 @@ void *playerChangeWatcher(void *refCon){
 								port++;
 							}
 							pthread_mutex_unlock(&mixEngine->jackMutex);
-//char logstr[64];
-//snprintf(logstr, sizeof logstr, "[debug] -:player done, jack discon; Player %d.", i);
-//serverLogMakeEntry(logstr);
 						}
 					}
 					data.senderID = 0;
@@ -631,6 +628,7 @@ void *playerChangeWatcher(void *refCon){
 					/* handle start player */
 					if(instance->UID){
 						if(!(instance->busses & 2L)){
+							unsigned char relog = 0;
 							// NOT in cue... proceed with logging the item play
 							if(instance->sourceType != sourceTypeCanRepos){
 								// Live items should be logged whenever played.
@@ -640,7 +638,7 @@ void *playerChangeWatcher(void *refCon){
 								// this is a live item, we clear the logID, if 
 								// any, so it can be relogged.
 								SetMetaData(instance->UID, "logID", "0");
-								instance->status = instance->status & ~status_logged;
+								relog = 1;
 							}
 							
 							pthread_mutex_lock( &lastsegMutex);
@@ -648,7 +646,7 @@ void *playerChangeWatcher(void *refCon){
 							pthread_mutex_unlock( &lastsegMutex);
 							
 							// create program log entry
-							if((curStatus & status_logged) == 0){
+							if(relog || (curStatus & status_logged) == 0){
 								instance->status = instance->status | status_logged;
 								programLogUIDEntry(instance->UID, 0, (instance->busses & 0xFF));
 							}
@@ -688,6 +686,7 @@ void *playerChangeWatcher(void *refCon){
 								pthread_mutex_unlock(&mixEngine->jackMutex);
 								// clear loaded flag
 								changed = changed & ~change_loaded;
+//!
 //char logstr[64];
 //snprintf(logstr, sizeof logstr, "[debug] -:no longer in queue; Player %d.", i);
 //serverLogMakeEntry(logstr);
@@ -731,9 +730,6 @@ void *playerChangeWatcher(void *refCon){
 		
 						data.value.iVal = htonl(curStatus);
 						notifyMakeEntry(nType_pstat, &data, sizeof(data));
-//char logstr[64];
-//snprintf(logstr, sizeof logstr, "[debug] -:player loaded; Player %d.", i);
-//serverLogMakeEntry(logstr);
 					}
 				}
 				if(changed & change_unloaded){
@@ -790,6 +786,7 @@ void *playerChangeWatcher(void *refCon){
 								i = 0;
 								while(portName = str_NthField(chanList, "+", i)){
 									if(strlen(portName)){
+//! Maybe crash caused here?
 										pthread_mutex_lock(&mixEngine->jackMutex);
 										jack_disconnect(mixEngine->client, jack_port_name(*port), portName);
 										pthread_mutex_unlock(&mixEngine->jackMutex);
@@ -803,9 +800,6 @@ void *playerChangeWatcher(void *refCon){
 						}
 						free(mmList);
 					}
-//char logstr[64];
-//snprintf(logstr, sizeof logstr, "[debug] -:player unloaded; Player %d.", i);
-//serverLogMakeEntry(logstr);
 				}
 				if((changed & change_type) && (instance->UID)){
 					uint32_t cVal;
@@ -869,9 +863,6 @@ void *playerChangeWatcher(void *refCon){
 			if((curStatus == status_empty) && instance->UID){
 				releaseMetaRecord(instance->UID);
 				instance->UID = 0;
-//char logstr[64];
-//snprintf(logstr, sizeof logstr, "[debug] -:leftover UID cleared; Player %d.", i);
-//serverLogMakeEntry(logstr);
 			}
 			/* Likewise, if a player staus is not remove or loading, but 
 			 * it's UID is zero, then an external connection was made, 
@@ -880,9 +871,6 @@ void *playerChangeWatcher(void *refCon){
 				const char** conList;
 				char *url, *name;
 				unsigned int c;
-//char logstr[64];
-//snprintf(logstr, sizeof logstr, "[debug] -:new jack connection; Player %d.", i);
-//serverLogMakeEntry(logstr);
 				url = NULL;
 				name = NULL;
 				str_setstr(&url, "");
@@ -960,10 +948,10 @@ void *playerChangeWatcher(void *refCon){
 					str_setstr(&triggerFile, triggerDir);	
 					if(state){
 						str_appendstr(&triggerFile, "cue.start");
-						createTaskItem(triggerFile, loadConfigFromTask, NULL, instance->UID, 0, 0, 0);
+						createTaskItem(triggerFile, loadConfigFromTask, NULL, 0, 0, 0, 0);
 					}else{
 						str_appendstr(&triggerFile, "cue.stop");
-						createTaskItem(triggerFile, loadConfigFromTask, NULL, instance->UID, 0, 0, 0);
+						createTaskItem(triggerFile, loadConfigFromTask, NULL, 0, 0, 0, 0);
 					}
 					free(triggerFile);
 					triggerFile = NULL;
@@ -975,10 +963,10 @@ void *playerChangeWatcher(void *refCon){
 					str_setstr(&triggerFile, triggerDir);	
 					if(state){
 						str_appendstr(&triggerFile, "muteA.start");
-						createTaskItem(triggerFile, loadConfigFromTask, NULL, instance->UID, 0, 0, 0);
+						createTaskItem(triggerFile, loadConfigFromTask, NULL, 0, 0, 0, 0);
 					}else{
 						str_appendstr(&triggerFile, "muteA.stop");
-						createTaskItem(triggerFile, loadConfigFromTask, NULL, instance->UID, 0, 0, 0);
+						createTaskItem(triggerFile, loadConfigFromTask, NULL, 0, 0, 0, 0);
 					}
 					free(triggerFile);
 					triggerFile = NULL;
@@ -990,10 +978,10 @@ void *playerChangeWatcher(void *refCon){
 					str_setstr(&triggerFile, triggerDir);	
 					if(state){
 						str_appendstr(&triggerFile, "muteB.start");
-						createTaskItem(triggerFile, loadConfigFromTask, NULL, instance->UID, 0, 0, 0);
+						createTaskItem(triggerFile, loadConfigFromTask, NULL, 0, 0, 0, 0);
 					}else{
 						str_appendstr(&triggerFile, "muteB.stop");
-						createTaskItem(triggerFile, loadConfigFromTask, NULL, instance->UID, 0, 0, 0);
+						createTaskItem(triggerFile, loadConfigFromTask, NULL, 0, 0, 0, 0);
 					}
 					free(triggerFile);
 					triggerFile = NULL;
@@ -1005,10 +993,10 @@ void *playerChangeWatcher(void *refCon){
 					str_setstr(&triggerFile, triggerDir);	
 					if(state){
 						str_appendstr(&triggerFile, "muteC.start");
-						createTaskItem(triggerFile, loadConfigFromTask, NULL, instance->UID, 0, 0, 0);
+						createTaskItem(triggerFile, loadConfigFromTask, NULL, 0, 0, 0, 0);
 					}else{
 						str_appendstr(&triggerFile, "muteC.stop");
-						createTaskItem(triggerFile, loadConfigFromTask, NULL, instance->UID, 0, 0, 0);
+						createTaskItem(triggerFile, loadConfigFromTask, NULL, 0, 0, 0, 0);
 					}
 					free(triggerFile);
 					triggerFile = NULL;
@@ -1020,10 +1008,10 @@ void *playerChangeWatcher(void *refCon){
 					str_setstr(&triggerFile, triggerDir);	
 					if(state){
 						str_appendstr(&triggerFile, "talkback1.start");
-						createTaskItem(triggerFile, loadConfigFromTask, NULL, instance->UID, 0, 0, 0);
+						createTaskItem(triggerFile, loadConfigFromTask, NULL, 0, 0, 0, 0);
 					}else{
 						str_appendstr(&triggerFile, "talkback1.stop");
-						createTaskItem(triggerFile, loadConfigFromTask, NULL, instance->UID, 0, 0, 0);
+						createTaskItem(triggerFile, loadConfigFromTask, NULL, 0, 0, 0, 0);
 					}
 					free(triggerFile);
 					triggerFile = NULL;
@@ -1035,10 +1023,10 @@ void *playerChangeWatcher(void *refCon){
 					str_setstr(&triggerFile, triggerDir);	
 					if(state){
 						str_appendstr(&triggerFile, "talkback2.start");
-						createTaskItem(triggerFile, loadConfigFromTask, NULL, instance->UID, 0, 0, 0);
+						createTaskItem(triggerFile, loadConfigFromTask, NULL, 0, 0, 0, 0);
 					}else{
 						str_appendstr(&triggerFile, "talkback2.stop");
-						createTaskItem(triggerFile, loadConfigFromTask, NULL, instance->UID, 0, 0, 0);
+						createTaskItem(triggerFile, loadConfigFromTask, NULL, 0, 0, 0, 0);
 					}
 					free(triggerFile);
 					triggerFile = NULL;
@@ -1050,10 +1038,10 @@ void *playerChangeWatcher(void *refCon){
 					str_setstr(&triggerFile, triggerDir);	
 					if(state){
 						str_appendstr(&triggerFile, "talkback3.start");
-						createTaskItem(triggerFile, loadConfigFromTask, NULL, instance->UID, 0, 0, 0);
+						createTaskItem(triggerFile, loadConfigFromTask, NULL, 0, 0, 0, 0);
 					}else{
 						str_appendstr(&triggerFile, "talkback3.stop");
-						createTaskItem(triggerFile, loadConfigFromTask, NULL, instance->UID, 0, 0, 0);
+						createTaskItem(triggerFile, loadConfigFromTask, NULL, 0, 0, 0, 0);
 					}
 					free(triggerFile);
 					triggerFile = NULL;

@@ -304,7 +304,7 @@ function onMIDIRecv(message){
 				}
 				let studio = studioName.getValue();
 				if(studio.length){
-					volIgn[zone] = 2; // ignore vol callbacks for 2 ticks
+					volIgn[zone] = 8; // ignore vol callbacks for 8 ticks
 					fetchContent("studio/"+studio+"?cmd=vol "+(zone + (bank * pCount))+" "+fVal);
 				}
 			}

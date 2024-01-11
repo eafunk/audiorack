@@ -547,7 +547,7 @@ void plsPLGetProperties(FILE *fp, uint32_t UID)
 		if(path = strchr(tmp, '/')){
 			path = uriDecode(path);
 		}else{
-			path = uriDecode(tmp);			
+			path = uriDecode(tmp);
 		}
 		free(tmp);
 		tmp = basename(path);
@@ -1755,7 +1755,7 @@ uint32_t LoadDBItemPlayer(int *pNum, const char *url_str, uint32_t UID){
 			// resolved back into the same URL... done with the metadata record... delete
 			releaseMetaRecord(localUID);
 			free(tmp);
-			return 0;	
+			return 0;
 		}
 		// re-enter the load player cycle with the newly resoved URL
 		if(LoadPlayer(pNum, tmp, localUID, 1)){
@@ -1792,7 +1792,7 @@ uint32_t LoadPlayer(int *pNum, const char *url_str, uint32_t UID, unsigned char 
 		return 0;
 	
 	if((*pNum >= 0) && (!checkPnumber(*pNum)))
-        return 0;
+		return 0;
 	if(type = str_NthField(url_str, ":", 0)){
 		// make lower case
 		for(idx = 0; idx < strlen(type); idx++)
@@ -1842,7 +1842,7 @@ uint32_t LoadPlayer(int *pNum, const char *url_str, uint32_t UID, unsigned char 
 		else if(!strcmp(type, "gst"))
 			result = LoadGSTPlayer(*pNum, url_str, UID);
 		else if(!strcmp(type, "item"))
-			result = LoadDBItemPlayer(pNum, url_str, UID);
+			result = LoadDBItemPlayer(pNum, url_str, UID); // note: passing pNum as pointer here
 		else
 			result = LoadURLPlayer(*pNum, url_str, UID);
 		
@@ -1909,7 +1909,7 @@ uint32_t LoadPlayer(int *pNum, const char *url_str, uint32_t UID, unsigned char 
 					}
 					port++;
 				}
-			}	
+			}
 		}else
  			instance->status = status_empty;
 		
@@ -1998,7 +1998,7 @@ void dbPLOpen(uint32_t UID){
 					targetTime = atoll(tmp = GetMetaData(UID, "TargetTime", 0));
 					free(tmp);
 				}
-					
+				
 				if(targetTime){
 					// if a target time was set, set for this child item too
 					tmp = istr(targetTime);
@@ -2295,7 +2295,7 @@ void filePLOpen(uint32_t UID){
 	if(path = strchr(tmp, '/')){
 		path = uriDecode(path);
 	}else{
-		path = uriDecode(tmp);			
+		path = uriDecode(tmp);
 	}
 	free(tmp);
 
