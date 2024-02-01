@@ -606,8 +606,7 @@ unsigned char getQueuePos(uint32_t *ref){
 		pthread_rwlock_rdlock(&queueLock);
 		if(rec = findNode((LinkedListEntry *)&queueList, *ref, ref, NULL)){ 
 			pthread_rwlock_unlock(&queueLock);
-			(*ref)++;
-			// on return, *ref = index of found record
+			// on return, *ref = index+1 of found record
 			return 1;
 		}
 		pthread_rwlock_unlock(&queueLock);

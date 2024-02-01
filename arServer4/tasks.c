@@ -44,7 +44,8 @@ void taskCleanUp(void *pass){
 	rec->finished = 1;
 	if(rec->UID){
 		releaseMetaRecord(rec->UID);
-		releaseQueueEntry(rec->UID);
+		if(rec->delUID)
+			releaseQueueEntry(rec->UID);
 	}
 	pthread_rwlock_wrlock(&taskLock);
 	// the function below will also free task name and userData, if set.
@@ -64,20 +65,24 @@ void *taskCallProcInThread(void *inRefCon){
 
 	pthread_cleanup_push((void (*)(void *))taskCleanUp, (void *)rec);
 
-	// set running flag if found in playlist
-	pthread_rwlock_wrlock(&queueLock);
-	if(qnode = (queueRecord *)findNode((LinkedListEntry *)&queueList, rec->UID, NULL, NULL))
-		qnode->status = qnode->status | status_running;
-	pthread_rwlock_unlock(&queueLock);
-
+	if(rec->UID && rec->delUID){
+		// set running flag if found in playlist
+		pthread_rwlock_wrlock(&queueLock);
+		if(qnode = (queueRecord *)findNode((LinkedListEntry *)&queueList, rec->UID, NULL, NULL))
+			qnode->status = qnode->status | status_running;
+		pthread_rwlock_unlock(&queueLock);
+	}
+	
 	// call the requester function/procedure
 	(*rec->Proc)(rec);
 
-	// clear running flag, and remove, if found in playlist
-	pthread_rwlock_wrlock(&queueLock);
-	if(qnode = (queueRecord *)findNode((LinkedListEntry *)&queueList, rec->UID, NULL, NULL))
-		qnode->status = qnode->status & ~status_running;
-	pthread_rwlock_unlock(&queueLock);
+	if(rec->UID && rec->delUID){
+		// clear running flag, and remove, if found in playlist
+		pthread_rwlock_wrlock(&queueLock);
+		if(qnode = (queueRecord *)findNode((LinkedListEntry *)&queueList, rec->UID, NULL, NULL))
+			qnode->status = qnode->status & ~status_running;
+		pthread_rwlock_unlock(&queueLock);
+	}
 
 	pthread_cleanup_pop(1);
 	return NULL;
@@ -279,7 +284,7 @@ void WaitPID(void *refIn){
 void loadConfigFromTask(void *refIn){
 	//  How to call this function:
 	//	createTaskItem(filePath, loadConfigFromTask, NULL, uid, pNum, 0L, false); // no timeout
-
+	uint32_t locUID;
 	ctl_session session;
 	taskRecord *parent = (taskRecord *)refIn;
 
@@ -288,9 +293,12 @@ void loadConfigFromTask(void *refIn){
 	session.lastAID = 0;
 	session.lastPlayer = parent->player;
 	session.lastUID = parent->UID;
-	parent->UID = 0; // prevents removing trigger file load tasks from removing the associated item when done.
+// locUID = parent->UID;
+//	parent->UID = 0; // prevents removing trigger file load tasks from removing the associated item when done.
 	if(strlen(parent->name) > 0)
 		loadConfiguration(&session, parent->name);
+//	if(locUID)
+//		releaseMetaRecord(locUID);
 }
 
 void modbusTrigger(unsigned char state, char *conf){

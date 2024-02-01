@@ -381,7 +381,7 @@ fail:
 	return 0;
 }
 
-int LoadItem(int pos, queueRecord *qrec){    
+int LoadItem(int pos, queueRecord *qrec){
 	// assumes queueLock is alread write locked!
 	uint32_t UID, result;
 	inChannel *instance;
@@ -390,22 +390,28 @@ int LoadItem(int pos, queueRecord *qrec){
 
 	if(!qrec){
 		// use index to find record
-		if(pos < 0)
+		if(pos < 1)
 			return -2;
 		qrec = (queueRecord *)getNthNode((LinkedListEntry *)&queueList, pos);
+		
+/* char debugtxt[128];
+snprintf(debugtxt, sizeof debugtxt, "[debug] automate:LoadItem - pos=%d, stat=%d, player+1=%d, UID=%08x", pos, qrec->status, qrec->player, qrec->UID);
+serverLogMakeEntry(debugtxt); */
+
 		if(!qrec)
 			return -2; // missing delete
 	}
-
-	if(qrec->status & status_running){
-		// it's a task or playlist that is running... do nothing and don't delete it
-		return -3;  //don't delete
-	}
+	
 	if(qrec->player){
 		// already in a player!
 		return (-4 - (qrec->player-1));  //don't delete
 	}
-    
+	
+	if(qrec->status & status_running){
+		// it's a task or playlist that is running... do nothing and don't delete it
+		return -3;  //don't delete
+	}
+	
 	if(!qrec->UID)
 		// No meta Data to base load on...
 		return -2;  //delete
@@ -656,7 +662,7 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 			data.reference = 0;
 			data.senderID = getSenderID();
 			data.value.iVal = 0;
-			notifyMakeEntry(nType_status, &data, sizeof(data));	
+			notifyMakeEntry(nType_status, &data, sizeof(data));
 			free(tmp);
 			return;
 		}
@@ -676,7 +682,7 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 			if(checkPnumber(next->player-1)){
 				status = getQueueRecStatus(next, &nextIn);
 				if((nextIn && nextIn->managed) && (status & status_playing) && ((nextIn->busses & 2L) == 0)){
-					// next item IS playing, and IS NOT in cue... and it WAS NOT  put there manually - delete this item
+					// next item IS playing, and IS NOT in cue... and it WAS NOT put there manually - delete this item
 					releaseQueueRecord((queueRecord	*)&queueList, instance, 0);
 					return;
 				}
@@ -734,7 +740,7 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 			if((status & status_finished) || (thisIn && (thisIn->sourceType == sourceTypeCanRepos) && (dur <= 0))){
 				if((status & status_playing) == 0){
 					// has played but is now either finished or has zero duration and has been stoped
-					releaseQueueRecord((queueRecord	*)&queueList, instance, 0);
+					releaseQueueRecord((queueRecord *)&queueList, instance, 0);
 					*firstp = -1;
 					return;
 				}else{

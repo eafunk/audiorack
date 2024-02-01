@@ -1576,10 +1576,13 @@ function setDragItemEvents(i, dragcb, dropcb){
 
 	i.addEventListener("drop", function(evt){
 		evt.preventDefault();
-		let target = evt.target.parentNode;
+		let target = evt.target;
+		while(target && (target.tagName != "UL")){
+			target = target.parentNode;
+		}
 		let items = target.getElementsByTagName("li");
 		if(dropcb && (this != curDrag)){
-			if(this.parentNode === curDrag.parentNode){
+			if(target === curDrag.parentNode){
 				// move in list
 				let currentpos = 0, droppedpos = 0;
 				for(let it=0; it<items.length; it++){
@@ -5270,6 +5273,17 @@ async function showItem(props, canEdit, noShow){
 				el = document.getElementById("showinfobtn");
 				if(el)
 					el.style.display = "none";
+			}else{
+				//! THIS NEEDS A LOT OF WORK: an audio input
+				itemProps = props;
+				itemProps.canEdit = canEdit;
+				if(noShow)
+					return;
+				showPropItem(el, da);
+				el.style.width = infoWidth;
+				el = document.getElementById("showinfobtn");
+				if(el)
+					el.style.display = "none";
 			}
 		}
 	}else if(props.tmpfile){
@@ -7206,6 +7220,7 @@ async function refreshRecorderPanel(){
 	<div id="stRecTemplateList"></div>
 </div>`;
 				appendDragableItem(false, false, null, -1, el, format);
+				stRefreshRecTemplateList();
 			}else{
 				alert("Got an error fetching recorder list from server.\n"+resp.statusText);
 			}
@@ -7975,8 +7990,10 @@ async function refreshStAdminRouts(){
 }
 
 async function stRefreshRecTemplateList(evt){
-	evt.preventDefault();
-	evt.stopPropagation();
+	if(evt){
+		evt.preventDefault();
+		evt.stopPropagation();
+	}
 	let resp;
 	let studio = studioName.getValue();
 	if(studio.length){
@@ -9957,6 +9974,11 @@ function stTBAction(evt, state, tb){
 		}
 	}
 }
+//!
+async function debugSyncStudio(){
+	studioStateCache.queueRev = 0; // force reload
+	syncStudioStat(studioName.getValue());
+}
 
 async function syncStudioStat(studio){
 	let resp = await fetchContent("studio/"+studio+"?cmd=stat&raw=1");
@@ -9972,6 +9994,8 @@ async function syncStudioStat(studio){
 					value =  parseInt(value);
 					if(studioStateCache.queueRev != value){
 						// queue (list) has changed... issue list command to handle changes
+//!
+console.log("listrev="+value);
 						syncQueue(studioName.getValue());
 						studioStateCache.queueRev = value;
 					}
@@ -11592,6 +11616,8 @@ function studioHandleNotice(data){
 			break;
 		case "status":			// over-all status change, no ref, no val.  Use "stat" command to get status
 			// no ref or value: Change in ListRev, LogTime, automation status trigger this notice. Does not include sip registoration.
+//!
+console.log("notify: status");
 			syncStudioStat(studioName.getValue());
 			break;
 		case "metachg":		// metadata content change, ref=UID number, no val. Use "dumpmeta" command to get new content

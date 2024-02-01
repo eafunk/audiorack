@@ -518,7 +518,7 @@ LinkedListEntry	*findNode(LinkedListEntry *fromNode, uint32_t id, uint32_t *inde
 		}
 		prev = current; 
 	} 
-    return NULL; 
+	return NULL; 
 }
 
 inline LinkedListEntry *getNextNode(LinkedListEntry *fromNode){

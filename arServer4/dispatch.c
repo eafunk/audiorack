@@ -686,10 +686,6 @@ void *playerChangeWatcher(void *refCon){
 								pthread_mutex_unlock(&mixEngine->jackMutex);
 								// clear loaded flag
 								changed = changed & ~change_loaded;
-//!
-//char logstr[64];
-//snprintf(logstr, sizeof logstr, "[debug] -:no longer in queue; Player %d.", i);
-//serverLogMakeEntry(logstr);
 							}
 						}
 						if(changed & change_loaded){
@@ -786,7 +782,6 @@ void *playerChangeWatcher(void *refCon){
 								i = 0;
 								while(portName = str_NthField(chanList, "+", i)){
 									if(strlen(portName)){
-//! Maybe crash caused here?
 										pthread_mutex_lock(&mixEngine->jackMutex);
 										jack_disconnect(mixEngine->client, jack_port_name(*port), portName);
 										pthread_mutex_unlock(&mixEngine->jackMutex);

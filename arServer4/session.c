@@ -3791,16 +3791,19 @@ unsigned char handle_playnow(ctl_session *session){
 		if(aLong){
 			// Hex value. Treat as UID
 			session->lastUID = aLong;
-	 	
 			if(!getQueuePos(&aLong)){
 				session->errMSG = "Specified UID is not in play list.\n";
 				return rError;
 			}
 			sInt = (int)aLong;
+			pthread_rwlock_wrlock(&queueLock);
 			sInt = LoadItem(sInt, NULL);
-			if(sInt < -3)
+			pthread_rwlock_unlock(&queueLock);
+
+			if(sInt < -3){
 				// already in a player.  returned value is -4 - PlayerNumber
 				sInt = -sInt - 4;
+			}
 			if(sInt < 0){
 				session->errMSG = "Item can not be loaded into a play right now.\n";
 				return rError;
@@ -4094,9 +4097,6 @@ unsigned char handle_delete(ctl_session *session){
 				session->errMSG = "Specified UID is not in queue list.\n";
 				return rError;
 			}
-char logstr[64];
-snprintf(logstr, sizeof logstr, "[debug] session:handle_delete-UID removed from Q; %x.", aLong);
-serverLogMakeEntry(logstr);
 			session->lastUID = aLong;
 			return rOK;
 		}
@@ -4152,7 +4152,7 @@ unsigned char handle_move(ctl_session *session){
 				if(!findNode((LinkedListEntry *)&queueList, aLong, &aInt, NULL)){
 					pthread_rwlock_unlock(&queueLock);
 					session->errMSG = "Move from UID or index not in play list.\n";
-					return rError;				
+					return rError;
 				}
 				aInt--;
 			}
@@ -4226,7 +4226,7 @@ unsigned char handle_uadd(ctl_session *session){
 			}
 			pthread_rwlock_unlock(&queueLock);
 
-			if(aLong == 0)			
+			if(aLong == 0)
 				// not already in the list... add it
 				aLong = AddItem(aInt, session->save_pointer, "", 0);
 			if(aLong){
