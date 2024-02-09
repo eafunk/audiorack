@@ -53,6 +53,7 @@ var browseTypeList = false;
 var filesPath = false;
 var filesList;
 var stashList;
+var lastInfoPane = false;
 var itemProps = false;
 var flatPlist = false;
 var curDrag = null;
@@ -563,7 +564,7 @@ function selectAccordType(evt, cb, param){
 	/* Toggle between adding and removing the "active" class,
 	to highlight the button that controls the panel */
 	if(target.classList.contains("active"))	// already selected
-		return;
+		return true;
 	target.classList.add("active");
 	/* start showing the active panel */
 	let panel = target.nextElementSibling;
@@ -582,6 +583,7 @@ function selectAccordType(evt, cb, param){
 		}
 	}
 	cb(panel, param);
+	true;
 }
 
 function selectTabType(evt, cb, param){
@@ -3893,7 +3895,7 @@ var histdateVal = "";
 async function reloadItemSection(el, type){
 	if(type == "general"){
 		let inner = "<form id='genitemform'>";
-		if(itemProps.ID || ((itemProps.Type !== "file") && (itemProps.Type !== "playlist")))
+		if(itemProps.ID)
 			inner += "ID: "+itemProps.ID+"<br>";
 		inner += "Name: <input type='text' size='45' name='Name'";
 		inner += " value='"+quoteattr(itemProps.Name)+"'";
@@ -3901,7 +3903,7 @@ async function reloadItemSection(el, type){
 			inner += "></input><br>";
 		else
 			inner += " readonly></input><br>";
-			
+		
 		inner += "Duration: <input type='text' size='10' name='Duration'";
 		inner += " value='"+timeFormat(itemProps.Duration)+"'";
 		
@@ -3909,7 +3911,7 @@ async function reloadItemSection(el, type){
 			inner += "></input><br>";
 		else
 			inner += " readonly></input><br>";
-		if(itemProps.ID || ((itemProps.Type !== "file") && (itemProps.Type !== "playlist"))){
+		if(itemProps.ID /*|| ((itemProps.Type !== "file") && (itemProps.Type !== "playlist"))*/){
 			inner += "Tag: <input type='text' size='45' name='Tag'";
 			if(itemProps.Tag)
 				inner += " value='"+quoteattr(itemProps.Tag)+"'";
@@ -3932,6 +3934,13 @@ async function reloadItemSection(el, type){
 			if(itemProps.Script)
 				inner += quoteattr(itemProps.Script);
 			inner += "</textarea>";
+		}else{
+			inner += "Type: <input type='text' size='10' name='Type'";
+			inner += " value='"+itemProps.Type+"'></input><br>";
+			if(itemProps.URL){
+				inner += "URL: <textarea name='URL' rows='4' cols='50' wrap='soft'>"
+				inner += quoteattr(itemProps.URL)+"</textarea>";
+			}
 		}
 		if(itemProps.canEdit)
 			inner += "<p><button id='savegenbut' name='submit' onclick='saveItemGeneral(event)'>Save General Properties</button></p>";
@@ -4242,7 +4251,7 @@ async function reloadItemSection(el, type){
 			}
 		}else{
 			inner += `>Category Pick</option>
-						<option value='Path'>Directory Pick</option>
+						<option value='Directory'>Directory Pick</option>
 						<option value='Query'`;
 		}
 		inner += `>Custom Query Pick</option>
@@ -4358,7 +4367,14 @@ async function reloadItemSection(el, type){
 			inner += "<p><button id='saveinstbut' name='submit' onclick='saveItemInstance(event)'>Apply Instance Properties</button></p>";
 			el.innerHTML = inner + "</form>";
 		}
+	}else{
+		// some other type... input, gst, URL, jack
+		let inner = "Hello";
+		el.innerHTML = inner;
+		return;
 	}
+	// save element selection.
+	lastInfoPane = type;
 }
 
 function flattenPlaylistArray(playlist){
@@ -4396,7 +4412,7 @@ async function itemLoadTaskDiv(evt){
 			obj[prop] = val;
 		}
 	}
-	inner = "";
+	let inner = "";
 	if(sub === "Category"){
 		let catid = obj.Category;
 		let catname = await getNameForCat(catid);
@@ -4600,7 +4616,6 @@ async function itemLoadTaskDiv(evt){
 		else
 			inner += ` readonly></input> hours`;
 		inner += `</ol>`;
-
 		el.innerHTML = inner;
 	}else if(sub === "Command"){
 		let command = obj.Command;
@@ -4611,6 +4626,7 @@ async function itemLoadTaskDiv(evt){
 			inner += "></input><p>";
 		else
 			inner += " readonly></input><p>";
+		el.innerHTML = inner;
 	}else if(sub === "Open"){
 		let openpath = obj.Path;
 		inner += "<br>Open in new session:<br><input type='text' size='49' id='taskopen'";
@@ -4620,8 +4636,6 @@ async function itemLoadTaskDiv(evt){
 			inner += "></input><p>";
 		else
 			inner += " readonly></input><p>";
-			
-			
 		el.innerHTML = inner;
 	}else if(sub === "Execute"){
 		let command = obj.Command;
@@ -4982,7 +4996,7 @@ async function showPropItem(panel, container){
 	}else
 		inner += " readonly></input>";
 	inner += "</form>";
-	inner += `<button class="accordion" id="metabut" onclick="selectAccordType(event, reloadItemSection, 'custom')">Custom</button>
+	inner += `<button class="accordion" id="metabut" name='custom' onclick="selectAccordType(event, reloadItemSection, 'custom')">Custom</button>
 	<div class="accpanel">
 	</div>`;
 	if(itemProps.canEdit){
@@ -5007,39 +5021,72 @@ async function showPropItem(panel, container){
 		refreshItemReassign();
 }
 
+async function showPlayerItem(panel, container){
+	let inner = "<center id='itemName'>"+quoteattr(itemProps.Name)+"</center><br>";
+	inner += `<button class="accordion" id='genbut' name='general' onclick="selectAccordType(event, reloadItemSection, 'general')">General</button>
+	<div class="accpanel">
+	</div>`;
+	if(itemProps.UID){
+		inner += `<button class="accordion" id="instbut" name='instance' onclick="selectAccordType(event, reloadItemSection, 'instance')">Instance Logging</button>
+		<div class="accpanel">
+		</div>`;
+	}
+	inner += `<p><button onclick='itemSendToStash(event)'>Item to Stash</button><button onclick='itemSendToQueue(event)'>Item to Queue</button>`;
+	container.innerHTML = inner;
+	panel.style.width = infoWidth;
+	let el = document.getElementById("showinfobtn");
+	if(el)
+		el.style.display = "none";
+
+	if(lastInfoPane){
+		let els = container.getElementsByClassName("accordion");
+		let el = els.namedItem(lastInfoPane);
+		if(el)
+			selectAccordType({target: el}, reloadItemSection, lastInfoPane);
+		else
+			lastInfoPane = false;
+	}
+	if(!lastInfoPane){
+		let genbut = document.getElementById("genbut");
+		selectAccordType({target: genbut}, reloadItemSection, 'general');
+	}
+}
+
 async function showTocItem(panel, container){
 	let inner = "<center id='itemName'>"+quoteattr(itemProps.Name)+"</center><br>";
 	if(itemProps.ID && (itemProps.Type === "file"))
 		inner += "<audio controls id='itemcueplayer' width='100%'><source id='itemcuesource' src='library/download/"+itemProps.ID+"''>Your browser does not support the audio tag.</audio>";
 
-	inner += `<button class="accordion" id="genbut" onclick="selectAccordType(event, reloadItemSection, 'general')">General</button>
+	inner += `<button class="accordion" id="genbut" name='general' onclick="selectAccordType(event, reloadItemSection, 'general')">General</button>
 	<div class="accpanel">
 	</div>`;
-	inner += `<button class="accordion" onclick="selectAccordType(event, reloadItemSection, '`
+	inner += `<button class="accordion" name='`;
+	inner += itemProps.Type;
+	inner += `' onclick="selectAccordType(event, reloadItemSection, '`;
 	inner += itemProps.Type+`')">`;
 	inner += itemProps.Type;
 	inner += `</button>
 	<div class="accpanel">
 	</div>`;
 	if(itemProps.ID || ((itemProps.Type !== "file") && (itemProps.Type !== "playlist"))){
-		inner += `<button class="accordion" onclick="selectAccordType(event, reloadItemSection, 'categories')">Categories</button>
+		inner += `<button class="accordion" name='categories' onclick="selectAccordType(event, reloadItemSection, 'categories')">Categories</button>
 		<div class="accpanel">
 		</div>
-		<button class="accordion" onclick="selectAccordType(event, reloadItemSection, 'schedule')">Schedule</button>
+		<button class="accordion" name='schedule' onclick="selectAccordType(event, reloadItemSection, 'schedule')">Schedule</button>
 		<div id="itemSchedPanel" class="accpanel">
 		</div>
-		<button class="accordion" onclick="selectAccordType(event, reloadItemSection, 'history')">History</button>
+		<button class="accordion" name='history' onclick="selectAccordType(event, reloadItemSection, 'history')">History</button>
 		<div id="itemHistPanel" class="accpanel">
 		</div>
-		<button class="accordion" onclick="selectAccordType(event, reloadItemSection, 'custom')">Custom</button>
+		<button class="accordion" name='custom' onclick="selectAccordType(event, reloadItemSection, 'custom')">Custom</button>
 		<div class="accpanel">
 		</div>
-		<button class="accordion" onclick="selectAccordType(event, reloadItemSection, 'rest')">Rest</button>
+		<button class="accordion" name='rest' onclick="selectAccordType(event, reloadItemSection, 'rest')">Rest</button>
 		<div class="accpanel">
 		</div>`;
 	}
 	if(itemProps.UID){
-		inner += `<button class="accordion" id="instbut" onclick="selectAccordType(event, reloadItemSection, 'instance')">Instance Logging</button>
+		inner += `<button class="accordion" id="instbut" name='instance' onclick="selectAccordType(event, reloadItemSection, 'instance')">Instance Logging</button>
 		<div class="accpanel">
 		</div>`;
 	}
@@ -5074,8 +5121,19 @@ async function showTocItem(panel, container){
 	let el = document.getElementById("showinfobtn");
 	if(el)
 		el.style.display = "none";
-	let genbut = document.getElementById("genbut");
-	selectAccordType({target: genbut}, reloadItemSection, 'general')
+
+	if(lastInfoPane){
+		let els = container.getElementsByClassName("accordion");
+		let el = els.namedItem(lastInfoPane);
+		if(el)
+			selectAccordType({target: el}, reloadItemSection, lastInfoPane);
+		else
+			lastInfoPane = false;
+	}
+	if(!lastInfoPane){
+		let genbut = document.getElementById("genbut");
+		selectAccordType({target: genbut}, reloadItemSection, 'general');
+	}
 }
 
 async function itemFetchProps(id){
@@ -5213,14 +5271,16 @@ async function showItem(props, canEdit, noShow){
 		if(noShow)
 			return;
 		showEncoderItem(el, da);
-	}else if(props.qtype){
+	}else if(props.qtype || props.Type){
 		let type = props.qtype;
+		if(!type || !type.length)
+			type = props.Type
 		// use the properties already passed in props
 		let el = document.getElementById("infopane");
 		let da = document.getElementById("infodata");
 		if(props.id){
 			// edit existing artist, album, or category
-			let meta = await itemPropsMeta(props.id, props.qtype);
+			let meta = await itemPropsMeta(props.id, type);
 			if(!meta)
 				meta = [];
 			data = {ID:props.id, Name: props.Label, Type: props.qtype, meta: meta};
@@ -5274,12 +5334,12 @@ async function showItem(props, canEdit, noShow){
 				if(el)
 					el.style.display = "none";
 			}else{
-				//! THIS NEEDS A LOT OF WORK: an audio input
+				//  an audio input, jack input, or gstreamer player 
 				itemProps = props;
-				itemProps.canEdit = canEdit;
+				itemProps.canEdit = false;
 				if(noShow)
 					return;
-				showPropItem(el, da);
+				showPlayerItem(el, da);
 				el.style.width = infoWidth;
 				el = document.getElementById("showinfobtn");
 				if(el)
@@ -7130,7 +7190,7 @@ function studioSegNow(evt){
 	}
 	let studio = studioName.getValue();
 	if(studio.length)
-		fetchContent("studio/"+studio+"?cmd=segnow");
+		fetchContent("studio/"+studio+"?cmd=segnow&rt=1");
 }
 
 function studioAutoMode(evt, type){
@@ -7140,7 +7200,7 @@ function studioAutoMode(evt, type){
 	}
 	let studio = studioName.getValue();
 	if(studio.length)
-		fetchContent("studio/"+studio+"?cmd=auto"+type);
+		fetchContent("studio/"+studio+"?cmd=auto"+type+"&rt=1");
 }
 
 function studioRunStop(evt){
@@ -7157,9 +7217,9 @@ function studioRunStop(evt){
 	let studio = studioName.getValue();
 	if(studio.length){
 		if(evt.target.checked)
-			fetchContent("studio/"+studio+"?cmd=halt");
+			fetchContent("studio/"+studio+"?cmd=halt&rt=1");
 		else
-			fetchContent("studio/"+studio+"?cmd=run");
+			fetchContent("studio/"+studio+"?cmd=run&rt=1");
 	}
 }
 
@@ -7327,7 +7387,7 @@ function stEncoderVolAction(evt){
 			if(studio.length){
 				val = faderToLin(val);
 				let hexStr =  ("00000000" + uid.toString(16)).substr(-8);
-				fetchContent("studio/"+studio+"?cmd=recgain "+hexStr+" "+val);
+				fetchContent("studio/"+studio+"?cmd=recgain "+hexStr+" "+val+"&rt=1");
 			}
 		}
 	}
@@ -7365,9 +7425,9 @@ async function stEncoderAction(type, evt){
 				if(studio.length){
 					let hexStr =  ("00000000" + uid.toString(16)).substr(-8);
 					if(type == "run"){
-						fetchContent("studio/"+studio+"?cmd=startrec "+hexStr);
+						fetchContent("studio/"+studio+"?cmd=startrec "+hexStr+"&rt=1");
 					}else if(type == "stop"){
-						fetchContent("studio/"+studio+"?cmd=stoprec "+hexStr);
+						fetchContent("studio/"+studio+"?cmd=stoprec "+hexStr+"&rt=1");
 					}else if(type == "unload"){
 						await fetchContent("studio/"+studio+"?cmd=closerec "+hexStr);
 						refreshRecorderPanel();
@@ -9361,7 +9421,7 @@ function stOutVolAction(evt){
 	if(studio.length){
 		// make val scalar
 		val = faderToLin(val);
-		fetchContent("studio/"+studio+"?cmd=outvol "+output+" "+val);
+		fetchContent("studio/"+studio+"?cmd=outvol "+output+" "+val+"&rt=1");
 	}
 }
 
@@ -9526,7 +9586,7 @@ async function refreshStudioDelays(outlist, index, delay){
 async function stDumpAction(evt){
 	let studio = studioName.getValue();
 	if(studio.length)
-		await fetchContent("studio/"+studio+"?cmd=dump");
+		await fetchContent("studio/"+studio+"?cmd=dump&rt=1");
 }
 
 async function stDelayCheckAction(evt){
@@ -9967,10 +10027,10 @@ function stTBAction(evt, state, tb){
 	if(studio.length){
 		if(state){
 			evt.target.style.backgroundColor = "Red";
-			fetchContent("studio/"+studio+"?cmd=tbon "+tb);
+			fetchContent("studio/"+studio+"?cmd=tbon "+tb+"&rt=1");
 		}else{
 			evt.target.style.backgroundColor = "LightGray";
-			fetchContent("studio/"+studio+"?cmd=tboff "+tb);
+			fetchContent("studio/"+studio+"?cmd=tboff "+tb+"&rt=1");
 		}
 	}
 }
@@ -10258,12 +10318,10 @@ async function appendItemsToQueue(data){
 					let hexStr =  ("00000000" + ref.toString(16)).substr(-8);
 					for(let n=0; n<data.length; n++){
 						let url = "";
-						if(data[n].ID){
+						if(data[n].ID)
 							url = "item:///"+data[n].ID;
-						}else if((data[n].Type === "file") || (data[n].Type === "stop")){
-							if(data[n].URL && data[n].URL.length)
-								url = data[n].URL;
-						}
+						else if(data[n].URL && data[n].URL.length)
+							url = data[n].URL;
 						if(url.length){
 							await fetchContent("studio/"+studio+"?cmd=add%20"+hexStr+"%20"+url);
 						}
@@ -10277,7 +10335,7 @@ async function appendItemsToQueue(data){
 			let url = "";
 			if(data[n].ID){
 				url = "item:///"+data[n].ID;
-			}else if(((data[n].Type === "file") || (data[n].Type === "stop")) && data[n].URL && data[n].URL.length){
+			}else if(data[n].URL && data[n].URL.length){
 				url = data[n].URL;
 			}
 			if(url.length){
@@ -10694,7 +10752,7 @@ async function playerFaderAction(obj, pNum){
 	if(studio.length){
 		// make val scalar
 		val = faderToLin(val);
-		fetchContent("studio/"+studio+"?cmd=vol "+player+" "+val);
+		fetchContent("studio/"+studio+"?cmd=vol "+player+" "+val+"&rt=1");
 	}
 }
 
@@ -10718,7 +10776,7 @@ async function playerBalanceAction(obj, pNum){
 			val = 1.0;
 		if(val < -1.0)
 			val = -1.0;
-		fetchContent("studio/"+studio+"?cmd=bal "+player+" "+val);
+		fetchContent("studio/"+studio+"?cmd=bal "+player+" "+val+"&rt=1");
 	} 
 }
 
@@ -10759,7 +10817,7 @@ async function playerPosAction(obj, pNum){
 					if(studio.length){
 						p.pos = scaled.toString();
 						playerTimeUpdate(player);
-						fetchContent("studio/"+studio+"?cmd=pos "+player+" "+scaled);
+						fetchContent("studio/"+studio+"?cmd=pos "+player+" "+scaled+"&rt=1");
 					}
 				}
 			}
@@ -10767,7 +10825,7 @@ async function playerPosAction(obj, pNum){
 	}
 }
 
-async function playerAction(cmd, evt, pNum){
+async function playerAction(cmd, evt, pNum, rt){
 	// evt is the event from the button press, or if
 	// evt is false, pNum is the player number to stop
 	let player;
@@ -10778,8 +10836,12 @@ async function playerAction(cmd, evt, pNum){
 	}else
 		player = pNum;
 	let studio = studioName.getValue();
-	if(studio.length)
-		fetchContent("studio/"+studio+"?cmd="+cmd+" "+player);
+	if(studio.length){
+		if(rt)
+			fetchContent("studio/"+studio+"?cmd="+cmd+" "+player+"&rt=1");
+		else
+			fetchContent("studio/"+studio+"?cmd="+cmd+" "+player);
+	}
 }
 
 function updatePlayerFaderUI(val, pNum){
@@ -11293,7 +11355,7 @@ async function playerFeedVolAction(obj, pNum){
 	if(studio.length){
 		// make val scalar
 		val = faderToLin(val);
-		fetchContent("studio/"+studio+"?cmd=mmvol "+player+" "+val);
+		fetchContent("studio/"+studio+"?cmd=mmvol "+player+" "+val+"&rt=1");
 		let el = document.getElementById("pFeedSep"+player);
 		el.innerText = "Feed " + linToDBtext(val);
 	}

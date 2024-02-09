@@ -2082,7 +2082,10 @@ function deleteID(request, response, params, dirs){
 																			removeSubtype(connection, type, ID, response);	// remove from library anyway.
 																		}else{
 																			console.log("File for item #"+ID+" has been deleted at "+fullpath);
-																			removeSubtype(connection, type, ID, response);	// remove from library.
+																			// try to remove a .fpl file too, if it exists
+																			fs.unlink(fullpath+".fpl", (err) => {
+																				removeSubtype(connection, type, ID, response);	// remove from library regardless for fpl deletion.
+																			});
 																		}
 																	});
 																}else{
@@ -3856,10 +3859,11 @@ async function importFileIntoLibrary(fpath, params, fullpath){
 					if(!fullpath){ // only copy file if not using full path and instead using temp dir relative path.
 						newPath = await mkMediaDirs(params.mdir);
 						if(newPath.length){
+							let newDir = newPath;
 							fpath = tmpDir+fpath;
-							newPath = await copyFileToDir(fpath, newPath);
+							newPath = await copyFileToDir(fpath, newDir);
 							// attempt to copy an associated fileplaylist as well, if it exists.
-							await copyFileToDir(fpath+".fpl", newPath);
+							await copyFileToDir(fpath+".fpl", newDir);
 						}
 						if(newPath.length == 0){
 							// copy failed!

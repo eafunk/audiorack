@@ -229,7 +229,8 @@ function handleNotifyDataRX(name, data){
 			// look for start of new packet (null byte)
 			let idx = poollist[name].nfybuf.indexOf(0);
 			if(idx == -1){
-				// no start delimiter found yet
+				// no start delimiter found yet, toss buffer data
+				poollist[name].nfybuf = null;
 				break;
 			}else{
 				// found start of new packet
@@ -446,25 +447,32 @@ function commandResponse(request, response, params, dirs){
 	// check for valid studio name
 	let st_pool = poollist[st_name];
 	if(st_pool){
-		let resourcePromise = st_pool.acquire();
-		resourcePromise.then(function(client){
-			sendCommand(client, params.cmd).then((result) => {
-				if(result){
-					if(!params.raw)
-						result = result.replace(/\n/g, "<br>");	// convert \n to \r\n format
-					response.status(201);
-					response.send(result);
-					response.end();
-				}else{
-					response.status(500);
-					response.end("studio connection session failure.");
-				}
-				st_pool.release(client);
+		if(params.rt){
+			// real-time command (example "vol"), response ignored.  Use the nfSocket (notify socket)
+			st_pool.nfSocket.write(params.cmd+'\n');
+			response.status(201);
+			response.end();
+		}else{
+			let resourcePromise = st_pool.acquire();
+			resourcePromise.then(function(client){
+				sendCommand(client, params.cmd).then((result) => {
+					if(result){
+						if(!params.raw)
+							result = result.replace(/\n/g, "<br>");	// convert \n to \r\n format
+						response.status(201);
+						response.send(result);
+						response.end();
+					}else{
+						response.status(500);
+						response.end("studio connection session failure.");
+					}
+					st_pool.release(client);
+				});
+			}).catch(function(err){
+				response.status(500);
+				response.end("failed to get studio connection from pool");
 			});
-		}).catch(function(err){
-			response.status(500);
-			response.end("failed to get studio connection from pool");
-		});
+		}
 	}else{
 		response.status(400);
 		response.end("Invalid studio name");
@@ -497,10 +505,12 @@ module.exports = {
 		}
 		let dirs = request.path.split('/');
 		if(dirs[2] && dirs[2].length){
-			commandResponse(request, response, params, dirs);	// /studioName?cmd=value1[&raw=1]
+			commandResponse(request, response, params, dirs);	// /studioName?cmd=value1[&raw=1][&rt=1]
 																				// raw, if set and true, will not convert \n to <br> for result viewing in a browser.
 																				// cmd can be a list, all executed in sequence on a single connection/session.
-																				// only the last response is retunred
+																				// only the last response is retunred.
+																				// If rt, this is a realtime (no delay) request.  No response is returned, and only a single
+																				// command (line) can be issued.
 		}else{
 			response.status(400);
 			response.end("Missing studio name");

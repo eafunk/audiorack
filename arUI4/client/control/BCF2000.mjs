@@ -88,10 +88,10 @@ function onMIDIRecv(message){
 					// start/stop button
 					if(studioStateCache.ins[(ch + (bank * pCount))].status & 0x04){
 						// play -> stop
-						playerAction("stop", false, ch + (bank * pCount));
+						playerAction("stop", false, ch + (bank * pCount), 1);
 					}else{
 						// stopped -> play
-						playerAction("play", false, ch + (bank * pCount));
+						playerAction("play", false, ch + (bank * pCount), 1);
 					}
 				}else if((sw == 3) && (iVal > 0)){
 					//cue button
@@ -105,7 +105,7 @@ function onMIDIRecv(message){
 						else
 							bus = bus | 2;
 						let hexStr =  ("00000000" + bus.toString(16)).substr(-8);
-						fetchContent("studio/"+studio+"?cmd=bus "+(ch + (bank * pCount))+" "+hexStr);
+						fetchContent("studio/"+studio+"?cmd=bus "+(ch + (bank * pCount))+" "+hexStr+"&rt=1");
 					}
 				}else if(sw == 7){
 					//vPot button
@@ -113,15 +113,15 @@ function onMIDIRecv(message){
 						// zero position
 						let studio = studioName.getValue();
 						if(studio.length)
-							fetchContent("studio/"+studio+"?cmd=pos "+(ch + (bank * pCount))+" 0.0");
+							fetchContent("studio/"+studio+"?cmd=pos "+(ch + (bank * pCount))+" 0.0&rt=1");
 					}else if(vPotMode == 1){
 						// center pan
 						let studio = studioName.getValue();
 						if(studio.length)
-							fetchContent("studio/"+studio+"?cmd=bal "+(ch + (bank * pCount))+" 0.0");
+							fetchContent("studio/"+studio+"?cmd=bal "+(ch + (bank * pCount))+" 0.0&rt=1");
 					}else if(vPotMode == 2){
 						// unload player
-						playerAction("unload", false, ch + (bank * pCount));
+						playerAction("unload", false, ch + (bank * pCount), 1);
 					}
 				}
 			}else if(zone == 10){
@@ -166,32 +166,32 @@ function onMIDIRecv(message){
 					let studio = studioName.getValue();
 					if(studio.length){
 						if(studioStateCache.autoStat > 0)
-							fetchContent("studio/"+studio+"?cmd=autooff");
+							fetchContent("studio/"+studio+"?cmd=autooff&rt=1");
 						else
-							fetchContent("studio/"+studio+"?cmd=autoon");
+							fetchContent("studio/"+studio+"?cmd=autoon&rt=1");
 					}
 				}else if((sw == 2) && (iVal > 0)){
 					let studio = studioName.getValue();
 					if(studio.length){
 						if(studioStateCache.autoStat == 1)
-							fetchContent("studio/"+studio+"?cmd=autoon");
+							fetchContent("studio/"+studio+"?cmd=autoon&rt=1");
 						else
-							fetchContent("studio/"+studio+"?cmd=autolive");
+							fetchContent("studio/"+studio+"?cmd=autolive&rt=1");
 					}
 				}else if((sw == 3) && (iVal > 0)){
 					// playlist run/stop
 					let studio = studioName.getValue();
 					if(studio.length){
 						if(studioStateCache.runStat)
-							fetchContent("studio/"+studio+"?cmd=halt");
+							fetchContent("studio/"+studio+"?cmd=halt&rt=1");
 						else
-							fetchContent("studio/"+studio+"?cmd=run");
+							fetchContent("studio/"+studio+"?cmd=run&rt=1");
 					}
 				}else if((sw == 4) && (iVal > 0)){
 					// seg now button
 					let studio = studioName.getValue();
 					if(studio.length)
-						fetchContent("studio/"+studio+"?cmd=segnow");
+						fetchContent("studio/"+studio+"?cmd=segnow&rt=1");
 				}
 			}
 		}else if((data.length == 3) && ((data[1] & 0xf0) == 0x40)){
@@ -223,7 +223,7 @@ function onMIDIRecv(message){
 							iVal = dur;
 						let studio = studioName.getValue();
 						if(studio.length){
-							fetchContent("studio/"+studio+"?cmd=pos "+(zone + (bank * pCount))+" "+iVal);
+							fetchContent("studio/"+studio+"?cmd=pos "+(zone + (bank * pCount))+" "+iVal+"&rt=1");
 							studioStateCache.ins[zone + (bank * pCount)].pos = iVal;
 						}
 					}
@@ -238,7 +238,7 @@ function onMIDIRecv(message){
 						bal = -1.0;
 					let studio = studioName.getValue();
 					if(studio.length){
-						fetchContent("studio/"+studio+"?cmd=bal "+(zone + (bank * pCount))+" "+bal);
+						fetchContent("studio/"+studio+"?cmd=bal "+(zone + (bank * pCount))+" "+bal+"&rt=1");
 						studioStateCache.ins[zone + (bank * pCount)].bal = bal;
 					}
 				}
@@ -264,7 +264,7 @@ function onMIDIRecv(message){
 				let studio = studioName.getValue();
 				if(studio.length){
 					volIgn[zone] = 8; // ignore vol callbacks for 8 ticks
-					fetchContent("studio/"+studio+"?cmd=vol "+(zone + (bank * pCount))+" "+fVal);
+					fetchContent("studio/"+studio+"?cmd=vol "+(zone + (bank * pCount))+" "+fVal+"&rt=1");
 				}
 			}
 		}

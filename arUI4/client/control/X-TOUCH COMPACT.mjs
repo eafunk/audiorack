@@ -91,10 +91,10 @@ function onMIDIRecv(message){
 				// start/stop button
 				if(studioStateCache.ins[(zone + (bank * pCount))].status & 0x04){
 					// play -> stop
-					playerAction("stop", false, zone + (bank * pCount));
+					playerAction("stop", false, zone + (bank * pCount), 1);
 				}else{
 					// stopped -> play
-					playerAction("play", false, zone + (bank * pCount));
+					playerAction("play", false, zone + (bank * pCount), 1);
 				}
 			}else if(((sw & 0xf8) == 0x08) && (iVal > 0)){
 				//cue button
@@ -108,7 +108,7 @@ function onMIDIRecv(message){
 					else
 						bus = bus | 2;
 					let hexStr =  ("00000000" + bus.toString(16)).substr(-8);
-					fetchContent("studio/"+studio+"?cmd=bus "+(zone + (bank * pCount))+" "+hexStr);
+					fetchContent("studio/"+studio+"?cmd=bus "+(zone + (bank * pCount))+" "+hexStr+"&rt=1");
 				}
 			}if(((sw & 0xf8) == 0x18) && (iVal > 0)){
 				//main button
@@ -122,7 +122,7 @@ function onMIDIRecv(message){
 					else
 						bus = bus | 4;
 					let hexStr =  ("00000000" + bus.toString(16)).substr(-8);
-					fetchContent("studio/"+studio+"?cmd=bus "+(zone + (bank * pCount))+" "+hexStr);
+					fetchContent("studio/"+studio+"?cmd=bus "+(zone + (bank * pCount))+" "+hexStr+"&rt=1");
 				}
 			}else if(((sw & 0xf8) == 0x10) && (iVal > 0)){
 				//alt button
@@ -136,7 +136,7 @@ function onMIDIRecv(message){
 					else
 						bus = bus | 8;
 					let hexStr =  ("00000000" + bus.toString(16)).substr(-8);
-					fetchContent("studio/"+studio+"?cmd=bus "+(zone + (bank * pCount))+" "+hexStr);
+					fetchContent("studio/"+studio+"?cmd=bus "+(zone + (bank * pCount))+" "+hexStr+"&rt=1");
 				}
 			}else if((sw == 0x54) && (iVal > 0)){
 				// Bank < Button
@@ -166,46 +166,46 @@ function onMIDIRecv(message){
 					// zero position
 					let studio = studioName.getValue();
 					if(studio.length)
-						fetchContent("studio/"+studio+"?cmd=pos "+(zone + (bank * pCount))+" 0.0");
+						fetchContent("studio/"+studio+"?cmd=pos "+(zone + (bank * pCount))+" 0.0&rt=1");
 				}else if(vPotMode == 1){
 					// center pan
 					let studio = studioName.getValue();
 					if(studio.length)
-						fetchContent("studio/"+studio+"?cmd=bal "+(zone + (bank * pCount))+" 0.0");
+						fetchContent("studio/"+studio+"?cmd=bal "+(zone + (bank * pCount))+" 0.0&rt=1");
 				}else if(vPotMode == 2){
 					// unload player
-					playerAction("unload", false, zone + (bank * pCount));
+					playerAction("unload", false, zone + (bank * pCount), 1);
 				}
 			}else if((sw == 0x5b) && (iVal > 0)){
 				// Auto-on
 				let studio = studioName.getValue();
 				if(studio.length)
-					fetchContent("studio/"+studio+"?cmd=autoon");
+					fetchContent("studio/"+studio+"?cmd=autoon&rt=1");
 			}else if((sw == 0x56) && (iVal > 0)){
 				// Auto-live
 				let studio = studioName.getValue();
 				if(studio.length)
-					fetchContent("studio/"+studio+"?cmd=autolive");
+					fetchContent("studio/"+studio+"?cmd=autolive&rt=1");
 			}else if((sw == 0x5d) && (iVal > 0)){
 				// auto-off
 				let studio = studioName.getValue();
 				if(studio.length)
-					fetchContent("studio/"+studio+"?cmd=autooff");
+					fetchContent("studio/"+studio+"?cmd=autooff&rt=1");
 			}else if((sw == 0x5c) && (iVal > 0)){
 				// Queue run
 				let studio = studioName.getValue();
 				if(studio.length)
-					fetchContent("studio/"+studio+"?cmd=run");
+					fetchContent("studio/"+studio+"?cmd=run&rt=1");
 			}else if((sw == 0x5f) && (iVal > 0)){
 				// Queue stop
 				let studio = studioName.getValue();
 				if(studio.length)
-					fetchContent("studio/"+studio+"?cmd=halt");
+					fetchContent("studio/"+studio+"?cmd=halt&rt=1");
 			}else if((sw == 0x5e) && (iVal > 0)){
 				// seg now
 				let studio = studioName.getValue();
 				if(studio.length)
-					fetchContent("studio/"+studio+"?cmd=segnow");
+					fetchContent("studio/"+studio+"?cmd=segnow&rt=1");
 			}else if((sw == 0x28) && (iVal > 0))
 				// Position vPot mode select
 				selectVpotMode(0); 
@@ -220,22 +220,22 @@ function onMIDIRecv(message){
 				// Monitor down 0.5 dB
 				let studio = studioName.getValue();
 				if(studio.length)
-					fetchContent("studio/"+studio+"?cmd=outvol Monitor d0.89125");
+					fetchContent("studio/"+studio+"?cmd=outvol Monitor d0.89125&rt=1");
 			}else if((sw == 0x2f) && (iVal > 0)){
 				// Monitor up 0.5dB
 				let studio = studioName.getValue();
 				if(studio.length)
-					fetchContent("studio/"+studio+"?cmd=outvol Monitor d1.12202");
+					fetchContent("studio/"+studio+"?cmd=outvol Monitor d1.12202&rt=1");
 			}else if((sw == 0x30) && (iVal > 0)){
 				// Phones down 0.5dB
 				let studio = studioName.getValue();
 				if(studio.length)
-					fetchContent("studio/"+studio+"?cmd=outvol Phones d0.89125");
+					fetchContent("studio/"+studio+"?cmd=outvol Phones d0.89125&rt=1");
 			}else if((sw == 0x31) && (iVal > 0)){
 				// Phones up 0.5 dB
 				let studio = studioName.getValue();
 				if(studio.length)
-					fetchContent("studio/"+studio+"?cmd=outvol Phones d1.12202");
+					fetchContent("studio/"+studio+"?cmd=outvol Phones d1.12202&rt=1");
 			}
 		}else if((data[0] == 0xb0) && ((data[1] & 0xf8) == 0x10)){
 			// vPot message
@@ -263,7 +263,7 @@ function onMIDIRecv(message){
 						iVal = dur;
 					let studio = studioName.getValue();
 					if(studio.length){
-						fetchContent("studio/"+studio+"?cmd=pos "+(zone + (bank * pCount))+" "+iVal);
+						fetchContent("studio/"+studio+"?cmd=pos "+(zone + (bank * pCount))+" "+iVal+"&rt=1");
 						studioStateCache.ins[zone + (bank * pCount)].pos = iVal;
 					}
 				}
@@ -278,7 +278,7 @@ function onMIDIRecv(message){
 					bal = -1.0;
 				let studio = studioName.getValue();
 				if(studio.length){
-					fetchContent("studio/"+studio+"?cmd=bal "+(zone + (bank * pCount))+" "+bal);
+					fetchContent("studio/"+studio+"?cmd=bal "+(zone + (bank * pCount))+" "+bal+"&rt=1");
 					studioStateCache.ins[zone + (bank * pCount)].bal = bal;
 				}
 			}
@@ -291,21 +291,21 @@ function onMIDIRecv(message){
 					midiout.send(data);
 				iVal = data[2] & 0x7f;
 				iVal = iVal << 7;
-				iVal = iVal + (data[1]  & 0x7f);
+				iVal = iVal + (data[1] & 0x7f);
 				if(iVal > 0){
-					fVal = (1.5 / 16383.0) * iVal;
-					fVal = Math.pow(fVal, 4);
+					fVal = (1.28 / 16383.0) * iVal;
+					fVal = Math.pow(fVal, 8);
 					if(fVal <= 0.00001)
 						fVal = 0.0;
-					if(fVal > 5.1)
-						fVal = 5.1;
+					if(fVal > 6.8)
+						fVal = 6.8;
 				}else{
 					fVal = 0.0;
 				}
 				let studio = studioName.getValue();
 				if(studio.length){
 					volIgn[zone] = 8; // ignore vol callbacks for 8 ticks
-					fetchContent("studio/"+studio+"?cmd=vol "+(zone + (bank * pCount))+" "+fVal);
+					fetchContent("studio/"+studio+"?cmd=vol "+(zone + (bank * pCount))+" "+fVal+"&rt=1");
 				}
 			}
 		}
@@ -543,11 +543,11 @@ function showPVol(val, ref, force){
 		if(!force && volIgn[i]){
 			return;	// ignore updates on this fader
 		}
-		val = Math.pow(val, 0.25);
+		val = Math.pow(val, 0.125);
 		if(val <= 0.0){
 			val = 0;
 		}else{
-			val = val * (16383.0 / 1.5);
+			val = val * (16383.0 / 1.28);
 			val = Math.round(val);
 			if(val > 16383)
 				val = 16383;

@@ -85,10 +85,10 @@ function onMIDIRecv(message){
 			// start/stop button
 			if(studioStateCache.ins[(ch + (bank * pCount))].status & 0x04){
 				// play -> stop
-				playerAction("stop", false, ch + (bank * pCount));
+				playerAction("stop", false, ch + (bank * pCount), 1);
 			}else{
 				// stopped -> play
-				playerAction("play", false, ch + (bank * pCount));
+				playerAction("play", false, ch + (bank * pCount), 1);
 			}
 		}else if(((sw & 0xf8) == 0x20) && (iVal > 0)){
 			//cue button
@@ -102,7 +102,7 @@ function onMIDIRecv(message){
 				else
 					bus = bus | 2;
 				let hexStr =  ("00000000" + bus.toString(16)).substr(-8);
-				fetchContent("studio/"+studio+"?cmd=bus "+(zone + (bank * pCount))+" "+hexStr);
+				fetchContent("studio/"+studio+"?cmd=bus "+(zone + (bank * pCount))+" "+hexStr+"&rt=1");
 			}
 		}else if((sw == 0x54) && (iVal > 0)){
 			// Bank < Button
@@ -130,32 +130,32 @@ function onMIDIRecv(message){
 			// Auto-on
 			let studio = studioName.getValue();
 			if(studio.length)
-				fetchContent("studio/"+studio+"?cmd=autoon");
+				fetchContent("studio/"+studio+"?cmd=autoon&rt=1");
 		}else if((sw == 0x58) && (iVal > 0)){
 			// Auto-live
 			let studio = studioName.getValue();
 			if(studio.length)
-				fetchContent("studio/"+studio+"?cmd=autolive");
+				fetchContent("studio/"+studio+"?cmd=autolive&rt=1");
 		}else if((sw == 0x5B) && (iVal > 0)){
 			// auto-off
 			let studio = studioName.getValue();
 			if(studio.length)
-				fetchContent("studio/"+studio+"?cmd=autooff");
+				fetchContent("studio/"+studio+"?cmd=autooff&rt=1");
 		}else if((sw == 0x5D) && (iVal > 0)){
 			// Queue run
 			let studio = studioName.getValue();
 			if(studio.length)
-				fetchContent("studio/"+studio+"?cmd=run");
+				fetchContent("studio/"+studio+"?cmd=run&rt=1");
 		}else if((sw == 0x5E) && (iVal > 0)){
 			// Queue stop
 			let studio = studioName.getValue();
 			if(studio.length)
-				fetchContent("studio/"+studio+"?cmd=halt");
+				fetchContent("studio/"+studio+"?cmd=halt&rt=1");
 		}else if((sw == 0x5F) && (iVal > 0)){
 			// seg now
 			let studio = studioName.getValue();
 			if(studio.length)
-				fetchContent("studio/"+studio+"?cmd=segnow");
+				fetchContent("studio/"+studio+"?cmd=segnow&rt=1");
 		}
 	}else if((data.length == 3) && (data[0] == 0xb0) && ((data[1] & 0xf8) == 0x10)){
 		// vPot message
@@ -183,7 +183,7 @@ function onMIDIRecv(message){
 					iVal = dur;
 				let studio = studioName.getValue();
 				if(studio.length){
-					fetchContent("studio/"+studio+"?cmd=pos "+(zone + (bank * pCount))+" "+iVal);
+					fetchContent("studio/"+studio+"?cmd=pos "+(zone + (bank * pCount))+" "+iVal+"&rt=1");
 					studioStateCache.ins[zone + (bank * pCount)].pos = iVal;
 				}
 			}
@@ -197,7 +197,7 @@ function onMIDIRecv(message){
 				iVal = 0.0;
 			let studio = studioName.getValue();
 			if(studio.length)
-				fetchContent("studio/"+studio+"?cmd=vol "+zone+" d"+iVal);
+				fetchContent("studio/"+studio+"?cmd=vol "+zone+" d"+iVal+"&rt=1");
 		}
 	}else if((data.length == 3) && (data[0] == 0xE8) && (data[1] == 0x00)){
 		// monitor fader message
@@ -210,7 +210,7 @@ function onMIDIRecv(message){
 		}
 		let studio = studioName.getValue();
 		if(studio.length)
-			fetchContent("studio/"+studio+"?cmd=outvol Monitor "+iVal);
+			fetchContent("studio/"+studio+"?cmd=outvol Monitor "+iVal+"&rt=1");
 	}
 }
 
