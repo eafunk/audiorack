@@ -1184,6 +1184,8 @@ function genPopulateSchedTable(insert, fill, el, cellClick){
 } 
 
 function genPopulateTableFromArray(list, el, colMap, rowClick, headClick, sortVar, actions, haction, fieldTypes, colWidth, showCount){
+	if(!el)
+		return;
 	if(!list && !haction){
 		el.innerHTML = "";
 		return;
@@ -7024,26 +7026,13 @@ setInterval('updateStudioTimers()', 500);
 setInterval('syncStudioMetalist(studioName.getValue())', 60000);
 
 function updateStudioTimers(){
-	let sec = studioStateCache.queueSec;
-	sec = sec - 0.5;
-	if(sec < 0.0)
-		sec = 0.0;
-	studioStateCache.queueSec = sec;
-	let el = document.getElementById("stQNext");
-	el.innerText = timeFormat(sec, 1);
-	
-	sec = studioStateCache.queueDur;
-	sec = sec - 0.5;
-	if(sec < 0.0)
-		sec = 0.0;
-	studioStateCache.queueDur = sec;
-	el = document.getElementById("stQDur");
-	el.innerText = timeFormat(sec, 1) + " total";
 	let ins = studioStateCache.ins;
+	let isPlaying = false;
 	if(ins && ins.length){
 		for(n=0; n<ins.length; n++){
 			let p = studioStateCache.ins[n];
 			if(p && (parseInt(p.status) & 0x4)){
+				isPlaying = true;
 				let pos = parseFloat(p.pos);
 				pos = pos + 0.5;
 				p.pos = pos.toString();
@@ -7051,6 +7040,25 @@ function updateStudioTimers(){
 			playerTimeUpdate(n);
 		}
 	}
+	
+	let sec = studioStateCache.queueSec;
+	if(isPlaying)
+		sec = sec - 0.5;
+	if(sec < 0.0)
+		sec = 0.0;
+	studioStateCache.queueSec = sec;
+	let el = document.getElementById("stQNext");
+	el.innerText = timeFormat(sec, 1);
+	
+	sec = studioStateCache.queueDur;
+	if(isPlaying)
+		sec = sec - 0.5;
+	if(sec < 0.0)
+		sec = 0.0;
+	studioStateCache.queueDur = sec;
+	el = document.getElementById("stQDur");
+	el.innerText = timeFormat(sec, 1) + " total";
+
 	let enc = studioStateCache.encoders;
 	if(enc && enc.length){
 		for(n=0; n<enc.length; n++){
@@ -9682,12 +9690,14 @@ function stAdminOutNameFormat(val){
 
 function refreshStAdminOuts(list){
 	let el = document.getElementById("stOutConfList");
-	let colMap = {url: false, Idx: " ", Name: "Name", Bus: false, Mutes: false, Volume: false, ShowUI: false, Ports: false, Delay: false};
-	let fields = {Name: stAdminOutNameFormat};
-	genPopulateTableFromArray(list, el, colMap, selectStAdminOutItem, false, false, false, false, fields, false);
-	
-	el = document.getElementById("stConfOutSettings");
-	el.style.display = "none";
+	if(el){
+		let colMap = {url: false, Idx: " ", Name: "Name", Bus: false, Mutes: false, Volume: false, ShowUI: false, Ports: false, Delay: false};
+		let fields = {Name: stAdminOutNameFormat};
+		genPopulateTableFromArray(list, el, colMap, selectStAdminOutItem, false, false, false, false, fields, false);
+		
+		el = document.getElementById("stConfOutSettings");
+		el.style.display = "none";
+	}
 }
 
 function stConfOutNew(evt){
@@ -10056,7 +10066,7 @@ async function syncStudioStat(studio){
 						// queue (list) has changed... issue list command to handle changes
 //!
 console.log("listrev="+value);
-						syncQueue(studioName.getValue());
+						syncQueue(studioName.getValue(), value);
 						studioStateCache.queueRev = value;
 					}
 					let el = document.getElementById("stRun");
@@ -10413,6 +10423,7 @@ function moveItemInQueue(obj, fromIdx, toIdx, param){
 			fetchContent("studio/"+studio+"?cmd=move "+fromIdx+" "+toIdx);
 		}
 	}
+	return true; // prevent local drop... wait for list rev. change to reload list.
 }
 
 function queueMetaFromIdx(index){
@@ -10444,6 +10455,30 @@ function playerNumberFromRef(ref){
 			return item.pNum;
 	}
 	return -1;	// not in a player
+}
+
+function queueRefFromPlayer(pnum){
+	let entry;
+	if(studioStateCache.queue && (pnum > -1)){
+		for(let i = 0; i<studioStateCache.queue.length; i++){
+			entry = studioStateCache.queue[i];
+			if(entry.pNum == pnum)
+				return entry["meta-UID"];
+		}
+	}
+	return 0;
+}
+
+function queueIdxFromUID(uid){
+	let entry;
+	if(studioStateCache.queue){
+		for(let i = 0; i<studioStateCache.queue.length; i++){
+			entry = studioStateCache.queue[i];
+			if(entry["meta-UID"] && (parseInt(entry["meta-UID"], 16) == uid))
+				return i;
+		}
+	}
+	return -1;
 }
 
 function refFromPlayerNumber(pNum){
@@ -10507,12 +10542,16 @@ async function syncRecentPlays(evt){
 	}
 }
 
-async function syncQueue(studio){
+async function syncQueue(studio, rev){
 	let resp;
 	resp = await fetchContent("studio/"+studio+"?cmd=list&raw=1");
 	if(resp){
 		if(resp.ok){
 			let raw = await resp.text();
+			if(studioStateCache.queueRev != rev){
+				return;
+			}
+console.log("list reposnse rev. "+rev);
 			let lines = raw.split("\n");
 			let res = [];
 			let keys = lines[0].split("\t");
@@ -10549,6 +10588,28 @@ function pNumPlusOne(pnum){
 	return "";
 }
 
+function qTypeFormat(type){
+	if((type == "filepl") || (type == "playlist"))
+		return type + " <button class='editbutton' onclick='queuePLExpand(event)'>expand</button>";
+	return type;
+}
+
+async function queuePLExpand(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let target = evt.target;
+	let item = target.parentElement.parentElement;
+	let ref = parseInt(item.getAttribute("data-idx"));
+	item = studioStateCache.meta[ref];
+	if(item){
+		let studio = studioName.getValue();
+		if(studio.length){
+			let hexStr =  ("00000000" + ref.toString(16)).substr(-8);
+			await fetchContent("studio/"+studio+"?cmd=expand%20"+hexStr);
+		}
+	}
+}
+
 function updateQueueLogDisplay(logOnly){
 	let res = studioStateCache.queue;
 	if(!logOnly){
@@ -10556,7 +10617,7 @@ function updateQueueLogDisplay(logOnly){
 					<span style='float: right;'>$Duration->timeFormat$ <button class="editbutton" onclick="queueItemInfo(event)">i</button></span>
 					<div style='clear:both;'></div>
 					<span style='float: left;'>$Artist$</span><span style='float: right;'>$stat$ $pNum->pNumPlusOne$</span><div style='clear:both;'></div>
-					<span style='float: left;'>$Album$</span><span style='float: right;'>$Owner$/$Type$</span><div style='clear:both;'></div>`;
+					<span style='float: left;'>$Album$</span><span style='float: right;'>$Owner$/$Type->qTypeFormat$</span><div style='clear:both;'></div>`;
 		let el = document.getElementById("stQlist");
 		el.innerHTML = "";
 		for(let n = 0; n < res.length; n++){
@@ -10636,7 +10697,7 @@ function updateQueueElement(el, meta){
 		<span style='float: right;'>$Duration->timeFormat$ <button class="editbutton" onclick="queueItemInfo(event)">i</button></span>
 		<div style='clear:both;'></div>
 		<span style='float: left;'>$Artist$</span><span style='float: right;'>$stat$ $pNum->pNumPlusOne$</span><div style='clear:both;'></div>
-		<span style='float: left;'>$Album$</span><span style='float: right;'>$Owner$/$Type$</span><div style='clear:both;'></div>`;
+		<span style='float: left;'>$Album$</span><span style='float: right;'>$Owner$/$Type->qTypeFormat$</span><div style='clear:both;'></div>`;
 	setDragableInnerHTML(meta, el, format);
 	queueSetItemcolor(el, meta);
 }
@@ -10695,15 +10756,19 @@ async function updateMetaItem(studio, ref){
 						if(pNum != -1){
 							updatePlayerTitle(pNum, res);
 							let el = document.getElementById("pType"+pNum); 
-							if(res.Type)
-								el.innerText = res.Type;
-							else
-								el.innerText = "";
+							if(el){
+								if(res.Type)
+									el.innerText = res.Type;
+								else
+									el.innerText = "";
+							}
 							el = document.getElementById("pName"+pNum); 
-							if(res.Name)
-								el.innerText = res.Name;
-							else
-								el.innerText = "";
+							if(el){
+								if(res.Name)
+									el.innerText = res.Name;
+								else
+									el.innerText = "";
+							}
 						}
 					}
 				}
@@ -11524,20 +11589,30 @@ async function syncPlayers(studio){
 							obj[keys[i]] = fields[i];
 					}
 					let ref = obj["meta-UID"];
+					let meta = undefined;
+					let pnum = n-1;
 					if(ref){
 						ref = parseInt(ref, 16);
 						obj["meta-UID"] = ref;
+						meta = studioStateCache.meta[ref];
+					}else{
+						ref = queueRefFromPlayer(pnum);
+						ref = parseInt(ref, 16);
+						if(ref){
+							obj["meta-UID"] = ref;
+							meta = studioStateCache.meta[ref];
+							obj.status = 0;
+							pnum = -1;
+						}
 					}
 					// update queue status if in queue
-					let meta = studioStateCache.meta[ref];
 					if(meta){
-						meta.pNum = n-1;
+						meta.pNum = pnum;
 						meta.stat = queueStatusText(obj.status);
-						let el = queueElementFromRef(ref);
-						if(el){
-							updateQueueElement(el.el, meta);
-							// recalc queue time
-							let qitem = studioStateCache.queue[el.idx]
+						// update queue item properties too, if in queue
+						let idx = queueIdxFromUID(ref);
+						if(idx > -1){
+							let qitem = studioStateCache.queue[idx];
 							if(qitem){
 								obj.seg = parseFloat(obj.seg);
 								if(obj.seg)
@@ -11548,6 +11623,9 @@ async function syncPlayers(studio){
 								qitem.status = obj.status;
 							}
 						}
+						let el = queueElementFromRef(ref);
+						if(el)
+							updateQueueElement(el.el, meta);
 					}
 					// check for UI change update
 					let prev = studioStateCache.ins[n-1];
@@ -11678,8 +11756,6 @@ function studioHandleNotice(data){
 			break;
 		case "status":			// over-all status change, no ref, no val.  Use "stat" command to get status
 			// no ref or value: Change in ListRev, LogTime, automation status trigger this notice. Does not include sip registoration.
-//!
-console.log("notify: status");
 			syncStudioStat(studioName.getValue());
 			break;
 		case "metachg":		// metadata content change, ref=UID number, no val. Use "dumpmeta" command to get new content

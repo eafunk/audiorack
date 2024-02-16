@@ -3254,7 +3254,7 @@ function executeQuery(request, response, params, dirs){
 			response.end();
 			return;
 		}
-		if((request.session.permission != "admin") &&  (request.session.permission != "manage")){
+		if((request.session.permission != "admin") && (request.session.permission != "manage")){
 			response.status(401);
 			response.end();
 			return;
@@ -4094,7 +4094,7 @@ function importFile(request, response, params, dirs){
 	if((tailIdx < 0) || (tailLen > 0)){
 		fpath = request.path.substring(tailIdx + dirs[2].length+1);
 		fpath = decodeURIComponent(fpath);
-		if((request.session.permission != "admin") &&  (request.session.permission != "manage")){
+		if(['admin', 'manager', 'production', 'programming', 'library'].includes(request.session.permission) == false){
 			response.status(401);
 			response.end();
 			return;
