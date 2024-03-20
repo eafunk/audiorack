@@ -235,13 +235,13 @@ footer {
 	grid-template-rows: 17px 17px 17px;
 }
 
-@media (min-width: 1420px) {
+@media (min-width: 1640px) {
 	.stGrid {
 		grid-template-areas: 
 			"status outs accord"
 			"queue ins accord"
 			"queue admin accord";
-		grid-template-columns: 1fr 584px 200px;
+		grid-template-columns: 1fr 584px 390px;
 		grid-template-rows: 150px 329px 355px;
 	}
 	

@@ -1273,8 +1273,8 @@ app.get('/sseadd/\*', function(req, res){
 				res.end("Bad request");
 			}
 		}else{
-			res.status(400);
-			res.end("No stream connected");
+			res.status(404);
+			res.end("No stream found");
 		}
 	}else{
 		res.status(401);

@@ -39,10 +39,10 @@ class watchableValue {
 includeScript("vumeter.js");
 
 var infoWidth = "450px";
-var cred = new watchableValue(false);
+var cred = false;
 var locName = new watchableValue(false);
 var locationID;
-var studioName = new watchableValue("");
+var studioName;
 var sseData = {};
 var browseData;
 var mngLocList;
@@ -64,11 +64,13 @@ var locListCache = new watchableValue(false);
 var artListCache = new watchableValue(false);
 var albListCache = new watchableValue(false);
 var mediaListCache = new watchableValue(false);
+var bc = new BroadcastChannel("arUIBroadcastChannel");
 
 /***** Utility functions *****/
 
 function setStash(list){
 	localStorage.setItem("stash", JSON.stringify(list));
+	bc.postMessage({type:"stashChange"});
 }
 
 function getStash(){
@@ -366,18 +368,24 @@ async function checkLogin(){
 }
 
 async function logOut(){
-	cred.setValue(false);
+	if(!cred)
+		return;
+	cred = false;
 	try{
 		await fetch("unauth");
 	}catch(err){
 		return err;
 	}
+	startupContent(false);
+	bc.postMessage({type:"authChange", value:false});
+	/*
 	// reload nav panel, with change is nav options for being logged out.
 	let err = await loadElement("nav", document.getElementById("navtab"));
 	if(err)
 		return err;
 	document.getElementById('studioAdmin').innerHTML = "";
 	showTabElement(document.getElementById('navlogin'), 'login');
+*/
 	return false;
 }
 
@@ -391,7 +399,7 @@ async function getCatList(){
 		}else{
 			alert("Got an error fetching categories from server.\n"+resp.statusText);
 		}
-	}else if(cred.getValue()){
+	}else if(cred){
 		alert("Failed to fetch categories from the server.");
 	}
 }
@@ -466,7 +474,7 @@ async function getLocList(){
 		}else{
 			alert("Got an error fetching location list from server.\n"+resp.statusText);
 		}
-	}else if(cred.getValue()){
+	}else if(cred){
 		alert("Failed to fetch location list from the server.");
 	}
 }
@@ -483,12 +491,10 @@ let resp;
 					newList.push(list[i].id.slice(9));
 			}
 			mediaListCache.setValue(newList, true);
-		}else if(cred.getValue()){
+		}else if(cred)
 			alert("Got an error fetching media location list from server.\n"+resp.statusText);
-		}
-	}else if(cred.getValue()){
+	}else if(cred)
 		alert("Failed to fetch media location list from the server.");
-	}
 }
 
 /***** Navigation  Functions *****/
@@ -524,9 +530,10 @@ async function loginSubmit(event){
 		alert("Caught an error, login failed: "+err);
 		return err;
 	}
-	if(response.ok)
-		startupContent();
-	else
+	if(response.ok){
+		startupContent(); // this will set cred value as well
+		bc.postMessage({type:"authChange", value:cred});
+	}else
 		alert("login failed: try a different username and/or password");
 	return false;
 }
@@ -768,7 +775,6 @@ function hideUnauthDiv(value){
 	el.style.display = "none";
 	el = document.getElementById("dbcrawldiv");
 	el.style.display = "none";
-
 }
 
 function locMenuTrack(value){
@@ -852,13 +858,16 @@ function browseTypeRowSelUpdate(value){
 function showTab(event, id, pass){
 	// pass is the studio name, if set.
 	let element = event.currentTarget;
-	showTabElement(element, id, pass)
+	showTabElement(element, id, pass);
 }
 
 function showTabElement(el, id, pass){
 	// pass is the studio name, if set.
 	let i, tabcontent, tablinks;
 
+	if(!el)
+		return;
+	
 	// Get all elements with class="tabcontent" and hide them
 	tabcontent = document.getElementsByClassName("tabcontent");
 	for(i = 0; i < tabcontent.length; i++){
@@ -884,10 +893,8 @@ function showTabElement(el, id, pass){
 				tablinks[i].className += " active";
 		}
 	}
-	if(pass !== undefined){
-		studioName.setValue(pass);
-		setLibUsingStudio();
-	}
+	if(pass !== undefined)
+		bc.postMessage({type:"studioRequest", value:pass});
 	if((id === "browse") && !browseData)
 		browseQuery();
 	if(id === "libmanage")
@@ -897,6 +904,25 @@ function showTabElement(el, id, pass){
 	if(id === "query")
 		libQueryRefreshList();
 } 
+
+function externalSelectStudio(studio){
+	if(studio == studioName)
+		return;
+	let el;
+	let active = false;
+	let els = document.getElementById("studiodiv");
+	if(els){
+		els = els.children;
+		for(let i=0; i<els.length; i++){
+			if(els[i].innerText == studio)
+				el = els[i];
+			if(els[i].classList.contains('active'))
+				active = true;
+		}
+		if(el && active)
+			showTabElement(el, 'studio');
+	}
+}
 
 function getRowInputProps(row){
 	let props = {};
@@ -1629,7 +1655,15 @@ function stashGetSelected(){
 	return list;
 }
 
-function updateStashDuration(){
+function updateStashDuration(evt){
+	if(evt){
+		let idx = evt.target.parentNode.parentNode.getAttribute("data-idx");
+		if(evt.target.checked)
+			stashList[idx].selected = true;
+		else
+			stashList[idx].selected = false;
+		setStash(stashList);
+	}
 	let timeList = stashGetSelected();
 	if(!timeList.length)
 		timeList = stashList;
@@ -1638,12 +1672,18 @@ function updateStashDuration(){
 		el.innerText = timeFormat(updateListDuration(timeList));
 }
 
+function setCheckedHTML(val){
+	if(val)
+		return "checked";
+	return "";
+}
+
 function loadStashRecallOnLoad(){
 	stashList = getStash();
 	if(!stashList)
 		stashList = [];
 	let el = document.getElementById("stashlist");
-	let format = `<span style='float: left;'><input type='checkbox' onchange='updateStashDuration()'></input></span>
+	let format = `<span style='float: left;'><input type='checkbox' onchange='updateStashDuration(event)' $selected->setCheckedHTML$></input></span>
 						<span style='float: right;'>$Duration->timeFormat$ <button class="editbutton" onclick="stashItemInfo(event)">i</button></span>
 						<div style='clear:both;'></div>
 						<span style='float: left;'>$Name$</span><span style='float: right;'>$StashType$</span><div style='clear:both;'></div>
@@ -1784,8 +1824,7 @@ function stashItemInfo(evt){
 	let item = target.parentElement.parentElement;
 	let idx = item.getAttribute("data-idx");
 	item = stashList[idx];
-	let credentials = cred.getValue();
-	if(credentials && ['admin', 'manager', 'library'].includes(credentials.permission))
+	if(cred && ['admin', 'manager', 'library'].includes(cred.permission))
 		showItem(item, true);
 	else
 		showItem(item, false);
@@ -2975,8 +3014,7 @@ async function saveEncProperties(evt){
 	if(!itemProps.canEdit)
 		return;
 	let ref = itemProps.UID;
-	let studio = studioName.getValue();
-	if(ref && studio.length){
+	if(ref && studioName & studioName.length){
 		let hexStr =  ("00000000" + ref.toString(16)).substr(-8);
 		for(let i = 0 ; i < form.length ; i++){
 			let el = form[i];
@@ -3017,7 +3055,7 @@ async function saveEncProperties(evt){
 			
 			if(was !== is){
 				is = encodeURIComponent(is);
-				let resp = await fetchContent("studio/"+studio+"?cmd=setmeta%20"+hexStr+"%20"+itemName+"%20"+is);
+				let resp = await fetchContent("studio/"+studioName+"?cmd=setmeta%20"+hexStr+"%20"+itemName+"%20"+is);
 				if(resp instanceof Response){
 					if(!err && resp.ok){
 						let text = await resp.text();
@@ -3032,7 +3070,7 @@ async function saveEncProperties(evt){
 		}
 		if(evt){
 			if(!err){
-				let resp = await fetchContent("studio/"+studio+"?cmd=initrec%20"+hexStr);
+				let resp = await fetchContent("studio/"+studioName+"?cmd=initrec%20"+hexStr);
 				if(resp instanceof Response){
 					if(resp.ok){
 						let text = await resp.text();
@@ -3058,13 +3096,12 @@ async function reloadEncProperties(evt){
 	if(!itemProps.canEdit)
 		return;
 	let ref = itemProps.UID;
-	let studio = studioName.getValue();
-	if(ref && studio.length){
+	if(ref && studioName && studioName.length){
 		let hexStr =  ("00000000" + ref.toString(16)).substr(-8);
 		// save the pipeline property
 		itemProps.Pipeline = document.getElementById("enPipeline").value;
 		is = encodeURIComponent(itemProps.Pipeline);
-		let resp = await fetchContent("studio/"+studio+"?cmd=setmeta%20"+hexStr+"%20Pipeline%20"+is);
+		let resp = await fetchContent("studio/"+studioName+"?cmd=setmeta%20"+hexStr+"%20Pipeline%20"+is);
 		if(resp instanceof Response){
 			if(resp.ok){
 				let text = await resp.text();
@@ -3089,11 +3126,10 @@ async function saveItemInstance(evt){
 	let els = document.getElementById("institemform");
 	let ref = els.getAttribute("data-id");
 	let meta = false;
-	let studio = studioName.getValue();
 	ref = parseInt(ref);
 	if(ref)
 		meta = studioStateCache.meta[ref];
-	if(meta && studio.length){
+	if(meta && studioName && studioName.length){
 		let changed = false;
 		let hexStr =  ("00000000" + ref.toString(16)).substr(-8);
 		els = els.elements;
@@ -3132,12 +3168,12 @@ async function saveItemInstance(evt){
 			}
 			if(was != is){
 				is = encodeURIComponent(is);
-				await fetchContent("studio/"+studio+"?cmd=setmeta%20"+hexStr+"%20"+item.name+"%20"+is);
+				await fetchContent("studio/"+studioName+"?cmd=setmeta%20"+hexStr+"%20"+item.name+"%20"+is);
 				changed = true;
 			}
 		}
 		if(changed)
-			await fetchContent("studio/"+studio+"?cmd=logmeta%20"+hexStr);
+			await fetchContent("studio/"+studioName+"?cmd=logmeta%20"+hexStr);
 	}
 }
 
@@ -3627,9 +3663,8 @@ async function itemSendToPlayer(evt){
 	let URL = item.URL;
 	if(item.ID)
 		URL = "item:///"+item.ID;
-	let studio = studioName.getValue();
-	if(studio.length){
-		fetchContent("studio/"+studio+"?cmd=load -1 "+URL);
+	if(studioName && studioName.length){
+		fetchContent("studio/"+studioName+"?cmd=load -1 "+URL);
 	}
 }
 
@@ -5882,8 +5917,7 @@ async function logRowClick(evt){
 		item = logList[idx];
 		if(item.Item){
 			item.tocID = item.Item;
-			let credentials = cred.getValue();
-			if(credentials && ['admin', 'manager', 'library'].includes(credentials.permission))
+			if(cred && ['admin', 'manager', 'library'].includes(cred.permission))
 				showItem(item, true);
 			else
 				showItem(item, false);
@@ -6034,8 +6068,7 @@ async function schedCellClick(evt){
 	let id = sel.getAttribute("data-id");
 	if(id){
 		let item = {tocID: id};
-		let credentials = cred.getValue();
-		if(credentials && ['admin', 'manager', 'library'].includes(credentials.permission))
+		if(cred && ['admin', 'manager', 'library'].includes(cred.permission))
 			showItem(item, true);
 		else
 			showItem(item, false);
@@ -6295,8 +6328,7 @@ async function getQueryItemInfo(evt){
 		let i = row.rowIndex;
 		let id = lastCustomList[i-1].ItemID;
 		if(id){
-			let credentials = cred.getValue();
-			if(credentials && ['admin', 'manager', 'library'].includes(credentials.permission))
+			if(cred && ['admin', 'manager', 'library'].includes(cred.permission))
 				showItem({tocID: id}, true);
 			else
 				showItem({tocID: id}, false);
@@ -6558,8 +6590,7 @@ function browseRowClick(event){
 	let record = browseData[i];
 	if(record.tocID){
 		// get item info
-		let credentials = cred.getValue();
-		if(credentials && ['admin', 'manager', 'library'].includes(credentials.permission))
+		if(cred && ['admin', 'manager', 'library'].includes(cred.permission))
 			showItem(browseData[i], true);
 		else
 			showItem(browseData[i], false);
@@ -6694,10 +6725,9 @@ function browseQuery(evt){
 			if(resp.ok){
 				resp.json().then((data) => {
 					browseData = data;
-					let credentials = cred.getValue();
 					let actions = false;
 					let hactions = false;
-					if(credentials && ['admin', 'manager', 'library'].includes(credentials.permission)){
+					if(cred && ['admin', 'manager', 'library'].includes(cred.permission)){
 						// include edit ability
 						if(data.length && ['artist', 'album', 'category'].includes(post.type))
 							// $i will be replaced by the row index number by the genPopulateTableFromArray() function
@@ -7023,7 +7053,7 @@ var midiAccess;
 
 /***** periodic all-studio-timers update tick and sync *****/
 setInterval('updateStudioTimers()', 500);
-setInterval('syncStudioMetalist(studioName.getValue())', 60000);
+setInterval('syncStudioMetalist(studioName)', 60000);
 
 function updateStudioTimers(){
 	let ins = studioStateCache.ins;
@@ -7114,7 +7144,7 @@ async function setLibUsingStudio(){
 				}else{
 					alert("Got an error fetching library location name from server.\n"+resp.statusText);
 				}
-			}else if(cred.getValue()){
+			}else if(cred){
 				alert("Failed to fetch library location name from the server.");
 			}
 		}
@@ -7122,20 +7152,16 @@ async function setLibUsingStudio(){
 }
 
 async function studioChangeCallback(value){
-	// clear existing VU meters
+	externalSelectStudio(value);
+	studioName = value;
+	// clear existing VU meters - new vu data will repopulate meters
 	let busvu = document.getElementById('studioOutsVU');
 	while(busvu.firstChild)
 		busvu.removeChild(busvu.firstChild);
-	let old = studioName.getPrior();
-	if(old){
-		eventTypeUnreg(old);
-		eventTypeUnreg("vu_"+old);
-	}
-	eventTypeReg(value, studioHandleNotice);
-	// new VU meter canvases will be built once we receive the first VU data event
-	eventTypeReg("vu_"+value, studioVuUpdate);
+	sseData = {};
 	busmeters = [];
-	studioStateCache = {meta: {}, queueRev: -1, queueSec: 0.0, queueDur: 0.0, logTime: 0, logs: [], live: [], ins: [], outs: [], encoders: [], runStat: 0, autoStat: 0, chancnt: 0, buscnt: 0, outcnt: 0};
+	newCache = {meta: {}, queueRev: -1, queueSec: 0.0, queueDur: 0.0, logTime: 0, logs: [], live: [], ins: [], outs: [], encoders: [], runStat: 0, autoStat: 0, chancnt: 0, buscnt: 0, outcnt: 0};
+	studioStateCache = {...studioStateCache, ...newCache};
 	await getServerInfo(value);
 	await syncStudioMetalist(value);
 	await syncStudioStat(value);
@@ -7196,9 +7222,8 @@ function studioSegNow(evt){
 		evt.preventDefault();
 		evt.stopPropagation();
 	}
-	let studio = studioName.getValue();
-	if(studio.length)
-		fetchContent("studio/"+studio+"?cmd=segnow&rt=1");
+	if(studioName && studioName.length)
+		fetchContent("studio/"+studioName+"?cmd=segnow&rt=1");
 }
 
 function studioAutoMode(evt, type){
@@ -7206,9 +7231,8 @@ function studioAutoMode(evt, type){
 		evt.preventDefault();
 		evt.stopPropagation();
 	}
-	let studio = studioName.getValue();
-	if(studio.length)
-		fetchContent("studio/"+studio+"?cmd=auto"+type+"&rt=1");
+	if(studioName && studioName.length)
+		fetchContent("studio/"+studioName+"?cmd=auto"+type+"&rt=1");
 }
 
 function studioRunStop(evt){
@@ -7222,20 +7246,18 @@ function studioRunStop(evt){
 		evt.target.checked = false;
 	else
 		evt.target.checked = true;
-	let studio = studioName.getValue();
-	if(studio.length){
+	if(studioName && studioName.length){
 		if(evt.target.checked)
-			fetchContent("studio/"+studio+"?cmd=halt&rt=1");
+			fetchContent("studio/"+studioName+"?cmd=halt&rt=1");
 		else
-			fetchContent("studio/"+studio+"?cmd=run&rt=1");
+			fetchContent("studio/"+studioName+"?cmd=run&rt=1");
 	}
 }
 
 async function refreshRecorderPanel(){
-	let studio = studioName.getValue();
 	let el = document.getElementById("stRecorderList");
-	if(studio && studio.length){
-		let resp = await fetchContent("studio/"+studio+"?cmd=rstat&raw=1");
+	if(studioName && studioName.length){
+		let resp = await fetchContent("studio/"+studioName+"?cmd=rstat&raw=1");
 		if(resp){
 			if(resp.ok){
 				let list = [];
@@ -7391,11 +7413,10 @@ function stEncoderVolAction(evt){
 	if(uid && uid.length){
 		uid = parseInt(uid);
 		if(uid){
-			let studio = studioName.getValue();
-			if(studio.length){
+			if(studioName && studioName.length){
 				val = faderToLin(val);
 				let hexStr =  ("00000000" + uid.toString(16)).substr(-8);
-				fetchContent("studio/"+studio+"?cmd=recgain "+hexStr+" "+val+"&rt=1");
+				fetchContent("studio/"+studioName+"?cmd=recgain "+hexStr+" "+val+"&rt=1");
 			}
 		}
 	}
@@ -7429,15 +7450,14 @@ async function stEncoderAction(type, evt){
 				}
 			}else{
 				// handle actions
-				let studio = studioName.getValue();
-				if(studio.length){
+				if(studioName && studioName.length){
 					let hexStr =  ("00000000" + uid.toString(16)).substr(-8);
 					if(type == "run"){
-						fetchContent("studio/"+studio+"?cmd=startrec "+hexStr+"&rt=1");
+						fetchContent("studio/"+studioName+"?cmd=startrec "+hexStr+"&rt=1");
 					}else if(type == "stop"){
-						fetchContent("studio/"+studio+"?cmd=stoprec "+hexStr+"&rt=1");
+						fetchContent("studio/"+studioName+"?cmd=stoprec "+hexStr+"&rt=1");
 					}else if(type == "unload"){
-						await fetchContent("studio/"+studio+"?cmd=closerec "+hexStr);
+						await fetchContent("studio/"+studioName+"?cmd=closerec "+hexStr);
 						refreshRecorderPanel();
 					}
 				}
@@ -7483,9 +7503,8 @@ async function stParsePortList(data){
 			let name = fields[0];
 			if(name == "[ourJackName]"){
 				if(!ourName){
-					let studio = studioName.getValue();
-					if(studio.length){
-						let resp = await fetchContent("studio/"+studio+"?cmd=info&raw=1");
+					if(studioName && studioName.length){
+						let resp = await fetchContent("studio/"+studioName+"?cmd=info&raw=1");
 						if(resp instanceof Response){
 							if(resp.ok){
 								let data = await resp.text();
@@ -7550,9 +7569,8 @@ async function stParseConnectionList(data){
 
 async function stGetSourceList(){
 	let resp;
-	let studio = studioName.getValue();
-	if(studio.length){
-		resp = await fetchContent("studio/"+studio+"?cmd=srcports&raw=1");
+	if(studioName && studioName.length){
+		resp = await fetchContent("studio/"+studioName+"?cmd=srcports&raw=1");
 		if(resp){
 			if(resp.ok){
 				let data = await resp.text();
@@ -7568,9 +7586,8 @@ async function stGetSourceList(){
 
 async function stGetDestinationList(){
 	let resp;
-	let studio = studioName.getValue();
-	if(studio.length){
-		resp = await fetchContent("studio/"+studio+"?cmd=dstports&raw=1");
+	if(studioName && studioName.length){
+		resp = await fetchContent("studio/"+studioName+"?cmd=dstports&raw=1");
 		if(resp){
 			if(resp.ok){
 				let data = await resp.text();
@@ -7968,14 +7985,13 @@ async function stJackConnAdd(evt){
 }
 
 function stTriggerConSaveTimer(){
-	let studio = studioName.getValue();
-	if(studio.length){
+	if(studioName && studioName.length){
 		if(stSaveConTimer)
 			clearInterval(stSaveConTimer);
-		stSaveConTimer = setTimeout(function(studio){
+		stSaveConTimer = setTimeout(function(studioName){
 				stSaveConTimer = null;
-				fetchContent("studio/"+studio+"?cmd=savejcons");
-			}, 6000, studio);
+				fetchContent("studio/"+studioName+"?cmd=savejcons");
+			}, 6000, studioName);
 	}
 }
 
@@ -7986,9 +8002,8 @@ async function stJackConnRemove(evt){
 	let row = evt.target.parentNode.parentNode.parentNode;
 	let table = row.parentNode.parentNode;
 	if(row.userOrigValue && row.userOrigValue.length){
-		let studio = studioName.getValue();
-		if(studio.length){
-			let resp = await fetchContent("studio/"+studio+"?cmd=jackdisc%20"+row.userOrigValue);
+		if(studioName && studioName.length){
+			let resp = await fetchContent("studio/"+studioName+"?cmd=jackdisc%20"+row.userOrigValue);
 			if(resp instanceof Response){
 				if(resp.ok){
 					row.remove();
@@ -8007,10 +8022,9 @@ async function stJackConnUpdate(evt){
 
 	let row = evt.target.parentNode.parentNode.parentNode;
 	let table = row.parentNode.parentNode;
-	let studio = studioName.getValue();
-	if(studio.length){
+	if(studioName && studioName.length){
 		if(row.userOrigValue && row.userOrigValue.length){
-			let resp = await fetchContent("studio/"+studio+"?cmd=jackdisc%20"+row.userOrigValue);
+			let resp = await fetchContent("studio/"+studioName+"?cmd=jackdisc%20"+row.userOrigValue);
 			if(resp instanceof Response){
 				if(!resp.ok){
 					alert("Error deleting studio jack audio connection");
@@ -8022,7 +8036,7 @@ async function stJackConnUpdate(evt){
 			}
 		}
 		stTriggerConSaveTimer();
-		let resp = await fetchContent("studio/"+studio+"?cmd=jackconn%20"+row.userPortList);
+		let resp = await fetchContent("studio/"+studioName+"?cmd=jackconn%20"+row.userPortList);
 		if(resp instanceof Response){
 			if(!resp.ok){
 				alert("Error creating studio jack audio connection");
@@ -8038,9 +8052,8 @@ async function stJackConnUpdate(evt){
 }
 
 async function refreshStAdminRouts(){
-	let studio = studioName.getValue();
-	if(studio.length){
-		let resp = await fetchContent("studio/"+studio+"?cmd=jconlist&raw=1");
+	if(studioName && studioName.length){
+		let resp = await fetchContent("studio/"+studioName+"?cmd=jconlist&raw=1");
 		if(resp instanceof Response){
 			if(resp.ok){
 				let text = await resp.text();
@@ -8063,9 +8076,8 @@ async function stRefreshRecTemplateList(evt){
 		evt.stopPropagation();
 	}
 	let resp;
-	let studio = studioName.getValue();
-	if(studio.length){
-		resp = await fetchContent("studio/"+studio+"?cmd=rtemplates&raw=1");
+	if(studioName && studioName.length){
+		resp = await fetchContent("studio/"+studioName+"?cmd=rtemplates&raw=1");
 		if(resp){
 			if(resp.ok){
 				let list = [];
@@ -8094,16 +8106,14 @@ function stNewRecSelection(evt){
 	let el = document.getElementById("stNewRecTemplateBtn");
 	toggleShowSearchList({target: el});
 	let id = evt.target.getAttribute("data-id");
-	let studio = studioName.getValue();
-	if(studio.length)
-		fetchContent("studio/"+studio+"?cmd=newrec "+id);
+	if(studioName && studioName.length)
+		fetchContent("studio/"+studioName+"?cmd=newrec "+id);
 }
 
 async function stConfset(key, value){
-	let studio = studioName.getValue();
-	if(studio.length){
+	if(studioName && studioName.length){
 		// save the pipeline property
-		let resp = await fetchContent("studio/"+studio+"?cmd=set%20"+key+"%20"+value);
+		let resp = await fetchContent("studio/"+studioName+"?cmd=set%20"+key+"%20"+value);
 		if(resp instanceof Response){
 			if(resp.ok){
 				let text = await resp.text();
@@ -8123,7 +8133,7 @@ async function stConfset(key, value){
 	stSaveSetTimer = setTimeout(function(studio){
 			stSaveSetTimer = null;
 			fetchContent("studio/"+studio+"?cmd=saveset");
-		}, 6000, studio);
+		}, 6000, studioName);
 }
 
 function refreshStAdminAuto(){
@@ -8478,9 +8488,8 @@ async function stConfMixSilenceTOChange(evt){
 }
 
 async function refreshStAdminVoIP(){
-	let studio = studioName.getValue();
-	if(studio)
-		await syncStudioStat(studio);
+	if(studioName && studioName.length)
+		await syncStudioStat(studioName);
 	let settings = studioStateCache.meta[0];
 	if(settings){
 		let bus = parseFloat(settings["sip_bus"]);
@@ -8823,9 +8832,8 @@ async function stConfSIPCtlChange(evt){
 	let value = parseInt(el.value);
 	await stConfset("sip_ctl_port", value);
 	await new Promise(resolve => setTimeout(resolve, 3000)); // 3 sec
-	let studio = studioName.getValue();
-	if(studio)
-		syncStudioStat(studio);
+	if(studioName && studioName.length)
+		syncStudioStat(studioName);
 }
 
 async function stConfSIPVolChange(evt){
@@ -8969,10 +8977,9 @@ async function getInputGroupsMM(studio, name){
 }
 
 async function refreshInputGroups(){
-	let studio = studioName.getValue();
 	let el = document.getElementById("stInGrpList");
-	if(studio && studio.length){
-		let resp = await fetchContent("studio/"+studio+"?cmd=dumpin&raw=1");
+	if(studioName && studioName.length){
+		let resp = await fetchContent("studio/"+studioName+"?cmd=dumpin&raw=1");
 		if(resp){
 			if(resp.ok){
 				let list = [];
@@ -8985,7 +8992,7 @@ async function refreshInputGroups(){
 					let ctl = fields[2];
 					let ports = fields[3];
 					if(name.length){
-						let mm = await getInputGroupsMM(studio, name);
+						let mm = await getInputGroupsMM(studioName, name);
 						if(mm){
 							list.push({url: "input:///"+name, Name: name, Bus: bus, Controls: ctl, Ports: ports, ...mm});
 							continue;
@@ -9010,11 +9017,12 @@ async function refreshInputGroups(){
 
 function refreshStAdminInputs(list){
 	let el = document.getElementById("stInConfList");
-	let colMap = {url: false, Name: "Name", Bus: false, Controls: false, Ports: false, mmports: false, mmvol: false, mmbus: false};
-	genPopulateTableFromArray(list, el, colMap, selectStAdminInputItem);
-	
+	if(el){
+		let colMap = {url: false, Name: "Name", Bus: false, Controls: false, Ports: false, mmports: false, mmvol: false, mmbus: false};
+		genPopulateTableFromArray(list, el, colMap, selectStAdminInputItem);
 	el = document.getElementById("stConfInSettings");
-	el.style.display = "none";
+		el.style.display = "none";
+	}
 }
 
 function stConfInNew(evt){
@@ -9036,12 +9044,11 @@ async function stConfInDelete(evt){
 	else
 		oldname = "";
 	if(oldname){
-		let studio = studioName.getValue();
-		if(studio.length){
-			let resp = await fetchContent("studio/"+studio+"?cmd=delin "+oldname);
+		if(studioName && studioName.length){
+			let resp = await fetchContent("studio/"+studioName+"?cmd=delin "+oldname);
 			if(resp && resp.ok){
 				refreshInputGroups();
-				await fetchContent("studio/"+studio+"?cmd=savein");
+				await fetchContent("studio/"+studioName+"?cmd=savein");
 			}
 		}
 	}
@@ -9065,8 +9072,7 @@ async function stConfInSave(evt){
 		oldname = studioStateCache.live[oldname].Name;
 	else
 		oldname = "";
-	let studio = studioName.getValue();
-	if(studio.length){
+	if(studioName && studioName.length){
 		let obj = {cmd: "setin "+newname+" "+bus+" 00000011 "+ports, raw: 1};
 		let resp = await fetchContent("studio/"+studio, {
 				method: 'POST',
@@ -9100,7 +9106,7 @@ async function stConfInSave(evt){
 			}else
 				val = 1.0;
 			obj = {cmd: "setmm "+newname+" "+bus+" "+val+" "+ports, raw: 1};
-			resp = await fetchContent("studio/"+studio, {
+			resp = await fetchContent("studio/"+studioName, {
 					method: 'POST',
 					body: JSON.stringify(obj),
 					headers: {
@@ -9111,7 +9117,7 @@ async function stConfInSave(evt){
 		}
 		if(resp && resp.ok){
 			refreshInputGroups();
-			await fetchContent("studio/"+studio+"?cmd=savein");
+			await fetchContent("studio/"+studioName+"?cmd=savein");
 			if(resp && resp.ok)
 				refreshInputGroups();
 		}
@@ -9425,11 +9431,10 @@ function stOutVolAction(evt){
 	val = parseFloat(evt.target.value);
 	let parent = evt.target.parentNode;
 	let output = parent.previousElementSibling.innerText;
-	let studio = studioName.getValue();
-	if(studio.length){
+	if(studioName && studioName.length){
 		// make val scalar
 		val = faderToLin(val);
-		fetchContent("studio/"+studio+"?cmd=outvol "+output+" "+val+"&rt=1");
+		fetchContent("studio/"+studioName+"?cmd=outvol "+output+" "+val+"&rt=1");
 	}
 }
 
@@ -9451,11 +9456,10 @@ function stOutBusAction(evt){
 	let bus = evt.target.selectedIndex;
 	let parent = evt.target.parentNode.parentNode;
 	let output = parent.firstElementChild.innerText;
-	let studio = studioName.getValue();
-	if(studio.length){
+	if(studioName && studioName.length){
 		// make val scalar
 		val = faderToLin(val);
-		fetchContent("studio/"+studio+"?cmd=outbus "+output+" "+bus);
+		fetchContent("studio/"+studioName+"?cmd=outbus "+output+" "+bus);
 	}
 }
 
@@ -9502,10 +9506,9 @@ function genOutBusMenuHTML(bus){
 async function refreshStudioDelays(outlist, index, delay){
 	let el = document.getElementById("stDelayList");
 	if(outlist){
-		let studio = studioName.getValue();
-		if(studio && studio.length){
+		if(studioName && studioName.length){
 			studioStateCache.outs
-			let resp = await fetchContent("studio/"+studio+"?cmd=getdly&raw=1");
+			let resp = await fetchContent("studio/"+studioName+"?cmd=getdly&raw=1");
 			if(resp){
 				if(resp.ok){
 					let list = [];
@@ -9530,7 +9533,7 @@ async function refreshStudioDelays(outlist, index, delay){
 		// update outlist to include any existing el check box states or non-zero delays
 		let table = el.getElementsByTagName("table");
 		if(table.length){
-			table = table[0]; // should be only one table in el.console.log(table);
+			table = table[0]; // should be only one table in el.
 			let rows = table.firstChild.firstChild;
 			for(let i = 1; i < rows.length; i++){
 				let cols = rows[i].childNodes;
@@ -9559,7 +9562,7 @@ async function refreshStudioDelays(outlist, index, delay){
 			// update row in table
 			let table = el.getElementsByTagName("table");
 			if(table.length){
-				table = table[0]; // should be only one table in el.console.log(table);
+				table = table[0]; // should be only one table in el.
 				let rows = table.firstChild.childNodes;
 				for(let i = 1; i < rows.length; i++){
 					let cols = rows[i].childNodes;
@@ -9592,9 +9595,8 @@ async function refreshStudioDelays(outlist, index, delay){
 }
 
 async function stDumpAction(evt){
-	let studio = studioName.getValue();
-	if(studio.length)
-		await fetchContent("studio/"+studio+"?cmd=dump&rt=1");
+	if(studioName && studioName.length)
+		await fetchContent("studio/"+studioName+"?cmd=dump&rt=1");
 }
 
 async function stDelayCheckAction(evt){
@@ -9603,9 +9605,8 @@ async function stDelayCheckAction(evt){
 	let delay = 0.0;
 	if(target.checked)
 		delay = document.getElementById("stDelaySec").value;
-	let studio = studioName.getValue();
-	if(studio.length){
-		let resp = await fetchContent("studio/"+studio+"?cmd=setdly "+name+" "+delay);
+	if(studioName && studioName.length){
+		let resp = await fetchContent("studio/"+studioName+"?cmd=setdly "+name+" "+delay);
 		if(!resp || !resp.ok){
 			// switch back if failed
 			if(target.checked)
@@ -9629,10 +9630,9 @@ async function stDelayCheckAction(evt){
 }
 
 async function refreshOutGroups(){
-	let studio = studioName.getValue();
 	let el = document.getElementById("studioOutList");
-	if(studio && studio.length){
-		let resp = await fetchContent("studio/"+studio+"?cmd=dumpout&raw=1");
+	if(studioName && studioName.length){
+		let resp = await fetchContent("studio/"+studioName+"?cmd=dumpout&raw=1");
 		if(resp){
 			if(resp.ok){
 				let list = [];
@@ -9721,12 +9721,11 @@ async function stConfOutDelete(evt){
 	else
 		oldname = "";
 	if(oldname){
-		let studio = studioName.getValue();
-		if(studio.length){
-			let resp = await fetchContent("studio/"+studio+"?cmd=delout "+oldname);
+		if(studioName && studioName.length){
+			let resp = await fetchContent("studio/"+studioName+"?cmd=delout "+oldname);
 			if(resp && resp.ok){
 				refreshInputGroups();
-				await fetchContent("studio/"+studio+"?cmd=saveout");
+				await fetchContent("studio/"+studioName+"?cmd=saveout");
 			}
 		}
 	}
@@ -9768,11 +9767,9 @@ async function stConfOutSave(evt){
 		oldname = studioStateCache.outs[oldname].Name;
 	else
 		oldname = "";
-	let studio = studioName.getValue();
-
-	if(studio.length){
+	if(studioName && studioName.length){
 		let obj = {cmd: "setout "+newname+" "+mutgain+" "+bus+" "+showui+" "+ports, raw: 1};
-		let resp = await fetchContent("studio/"+studio, {
+		let resp = await fetchContent("studio/"+studioName, {
 				method: 'POST',
 				body: JSON.stringify(obj),
 				headers: {
@@ -9783,11 +9780,11 @@ async function stConfOutSave(evt){
 		if(resp && resp.ok){
 			if(oldname && (newname !== oldname))
 				// rename: delete old
-				resp = await fetchContent("studio/"+studio+"?cmd=delout "+oldname);
+				resp = await fetchContent("studio/"+studioName+"?cmd=delout "+oldname);
 		}
 		if(resp && resp.ok){
 			refreshOutGroups();
-			await fetchContent("studio/"+studio+"?cmd=saveout");
+			await fetchContent("studio/"+studioName+"?cmd=saveout");
 		}
 	}
 }
@@ -10024,102 +10021,100 @@ async function wallMenuChange(evt){
 
 async function wallItemAction(evt){
 	let url = evt.target.getAttribute("data-url");
-	let studio = studioName.getValue();
-	if(studio.length){
-		await fetchContent("studio/"+studio+"?cmd=playnow%20"+url);
+	if(studioName && studioName.length){
+		await fetchContent("studio/"+studioName+"?cmd=playnow%20"+url);
 	}
 }
 
 function stTBAction(evt, state, tb){
 	evt.preventDefault();
 	evt.stopPropagation();
-	let studio = studioName.getValue();
-	if(studio.length){
+	if(studioName && studioName.length){
 		if(state){
 			evt.target.style.backgroundColor = "Red";
-			fetchContent("studio/"+studio+"?cmd=tbon "+tb+"&rt=1");
+			fetchContent("studio/"+studioName+"?cmd=tbon "+tb+"&rt=1");
 		}else{
 			evt.target.style.backgroundColor = "LightGray";
-			fetchContent("studio/"+studio+"?cmd=tboff "+tb+"&rt=1");
+			fetchContent("studio/"+studioName+"?cmd=tboff "+tb+"&rt=1");
 		}
 	}
 }
 //!
 async function debugSyncStudio(){
 	studioStateCache.queueRev = 0; // force reload
-	syncStudioStat(studioName.getValue());
+	syncStudioStat(studioName);
 }
 
 async function syncStudioStat(studio){
-	let resp = await fetchContent("studio/"+studio+"?cmd=stat&raw=1");
-	if(resp instanceof Response){
-		if(resp.ok){
-			let data = await resp.text();
-			let lines = data.split("\n");
-			for(let n = 0; n < lines.length; n++){
-				let fields = lines[n].split("=");
-				let key = fields[0];
-				let value = fields[1];
-				if(key == "ListRev"){
-					value =  parseInt(value);
-					if(studioStateCache.queueRev != value){
-						// queue (list) has changed... issue list command to handle changes
-//!
-console.log("listrev="+value);
-						syncQueue(studioName.getValue(), value);
-						studioStateCache.queueRev = value;
+	if(studio && studio.length){
+		let resp = await fetchContent("studio/"+studio+"?cmd=stat&raw=1");
+		if(resp instanceof Response){
+			if(resp.ok){
+				let data = await resp.text();
+				let lines = data.split("\n");
+				for(let n = 0; n < lines.length; n++){
+					let fields = lines[n].split("=");
+					let key = fields[0];
+					let value = fields[1];
+					if(key == "ListRev"){
+						value =  parseInt(value);
+						if(studioStateCache.queueRev != value){
+							// queue (list) has changed... issue list command to handle changes
+							syncQueue(studio, value);
+							studioStateCache.queueRev = value;
+						}
+						let el = document.getElementById("stRun");
+						// update Queue Run/Halt button
+						fields = fields[1].split(" ");
+						if(fields[1] == "Running"){
+							el.checked = true;
+							studioStateCache.runStat = 1;
+						}else{
+							el.checked = false;
+							studioStateCache.runStat = 0;
+						}
+					}else if(key == "LogTime"){
+						value =  parseInt(value);
+						if(studioStateCache.logTime != value){
+							// log time has changed... issue list command to handle changes
+							syncRecentPlays();
+							studioStateCache.logTime = value;
+						}
+					}else if(key == "auto"){
+						let idx = value.indexOf(' ');
+						
+						let fill = "Nothing to fill";
+						if(idx > -1){
+							fill = value.slice(idx + 1);
+							value = value.slice(0, idx);
+							if(fill.length == 0)
+								fill = "Nothing to fill yet.";
+						}
+						// update automation buttons and fill text
+						let el = document.getElementById("stFillDesc");
+						el.innerText = fill;
+						if(value == "on"){
+							studioStateCache.autoStat = 2;	// auto
+							el = document.getElementById("stAuto");
+							el.checked = true;
+						}else if(value == "live"){
+							studioStateCache.autoStat = 1;	// live
+							el = document.getElementById("stLive");
+							el.checked = true;
+						}else{
+							studioStateCache.autoStat = 0;	// off
+							el = document.getElementById("stOff");
+							el.checked = true;
+						}
+					}else if(key == "sipPhone"){
+						let el = document.getElementById("stConfSIPstat");
+						if(el)
+							el.innerText = value;
 					}
-					let el = document.getElementById("stRun");
-					// update Queue Run/Halt button
-					fields = fields[1].split(" ");
-					if(fields[1] == "Running"){
-						el.checked = true;
-						studioStateCache.runStat = 1;
-					}else{
-						el.checked = false;
-						studioStateCache.runStat = 0;
-					}
-				}else if(key == "LogTime"){
-					value =  parseInt(value);
-					if(studioStateCache.logTime != value){
-						// log time has changed... issue list command to handle changes
-						syncRecentPlays();
-						studioStateCache.logTime = value;
-					}
-				}else if(key == "auto"){
-					let idx = value.indexOf(' ');
-					
-					let fill = "Nothing to fill";
-					if(idx > -1){
-						fill = value.slice(idx + 1);
-						value = value.slice(0, idx);
-						if(fill.length == 0)
-							fill = "Nothing to fill yet.";
-					}
-					// update automation buttons and fill text
-					let el = document.getElementById("stFillDesc");
-					el.innerText = fill;
-					if(value == "on"){
-						studioStateCache.autoStat = 2;	// auto
-						el = document.getElementById("stAuto");
-						el.checked = true;
-					}else if(value == "live"){
-						studioStateCache.autoStat = 1;	// live
-						el = document.getElementById("stLive");
-						el.checked = true;
-					}else{
-						studioStateCache.autoStat = 0;	// off
-						el = document.getElementById("stOff");
-						el.checked = true;
-					}
-				}else if(key == "sipPhone"){
-					let el = document.getElementById("stConfSIPstat");
-					if(el)
-						el.innerText = value;
 				}
+				if(studioStateCache.control)
+					studioStateCache.control.setAutoStat();
 			}
-			if(studioStateCache.control)
-				studioStateCache.control.setAutoStat();
 		}
 	}
 }
@@ -10159,7 +10154,7 @@ async function syncStudioMetalist(studio){
 			}else{
 				alert("Got an error fetching metalist from studio.\n"+resp.statusText);
 			}
-		}else if(cred.getValue()){
+		}else if(cred){
 			alert("Failed to fetch metalist from the studio.");
 		}
 	}
@@ -10190,8 +10185,7 @@ function queueItemInfo(evt){
 	if(item && item.Type){
 		item.UID = ref;
 		item.qtype = item.Type;
-		let credentials = cred.getValue();
-		if(credentials && ['admin', 'manager', 'library'].includes(credentials.permission))
+		if(cred && ['admin', 'manager', 'library'].includes(cred.permission))
 			showItem(item, true);
 		else
 			showItem(item, false);
@@ -10209,8 +10203,7 @@ function playerItemInfo(evt){
 	if(item && item.Type){
 		item.UID = ref;
 		item.qtype = item.Type;
-		let credentials = cred.getValue();
-		if(credentials && ['admin', 'manager', 'library'].includes(credentials.permission))
+		if(cred && ['admin', 'manager', 'library'].includes(cred.permission))
 			showItem(item, true);
 		else
 			showItem(item, false);
@@ -10227,8 +10220,7 @@ function queueHistoryInfo(evt){
 	for(let i = 0; i<logs.length; i++){
 		let entry = logs[i];
 		if(entry.logID == logID){
-			let credentials = cred.getValue();
-			if(credentials && ['admin', 'manager', 'library'].includes(credentials.permission))
+			if(cred && ['admin', 'manager', 'library'].includes(cred.permission))
 				showItem(entry, true);
 			else
 				showItem(entry, false);
@@ -10295,8 +10287,7 @@ async function queueDeleteSel(evt){
 	if(evt)
 		evt.preventDefault();
 	let rows = document.getElementById("stQlist").childNodes;
-	let studio = studioName.getValue();
-	if(studio.length){
+	if(studioName && studioName.length){
 		for(let i=0; i<rows.length; i++){
 			let sel = rows[i].childNodes[0].childNodes[0];	// checkbox
 			if(sel.checked){
@@ -10305,7 +10296,7 @@ async function queueDeleteSel(evt){
 				if(item){
 					ref = parseInt(ref, 10);
 					let hexStr =  ("00000000" + ref.toString(16)).substr(-8);
-					let resp = await fetchContent("studio/"+studio+"?cmd=delete%20"+hexStr);
+					let resp = await fetchContent("studio/"+studioName+"?cmd=delete%20"+hexStr);
 				}
 			}
 		}
@@ -10316,8 +10307,7 @@ async function appendItemsToQueue(data){
 	if(!data || (data.length == 0))
 		return;
 	let rows = document.getElementById("stQlist").childNodes;
-	let studio = studioName.getValue();
-	if(studio.length){
+	if(studioName && studioName.length){
 		for(let i=0; i<rows.length; i++){
 			let sel = rows[i].childNodes[0].childNodes[0];	// checkbox
 			if(sel.checked){
@@ -10333,7 +10323,7 @@ async function appendItemsToQueue(data){
 						else if(data[n].URL && data[n].URL.length)
 							url = data[n].URL;
 						if(url.length){
-							await fetchContent("studio/"+studio+"?cmd=add%20"+hexStr+"%20"+url);
+							await fetchContent("studio/"+studioName+"?cmd=add%20"+hexStr+"%20"+url);
 						}
 					}
 				}
@@ -10349,7 +10339,7 @@ async function appendItemsToQueue(data){
 				url = data[n].URL;
 			}
 			if(url.length){
-				await fetchContent("studio/"+studio+"?cmd=add%20-1%20"+url);
+				await fetchContent("studio/"+studioName+"?cmd=add%20-1%20"+url);
 			}
 		}
 	}
@@ -10374,8 +10364,7 @@ async function breakToQueue(evt){
 	if(evt)
 		evt.preventDefault();
 	let rows = document.getElementById("stQlist").childNodes;
-	let studio = studioName.getValue();
-	if(studio.length){
+	if(studioName && studioName.length){
 		for(let i=0; i<rows.length; i++){
 			let sel = rows[i].childNodes[0].childNodes[0];	// checkbox
 			if(sel.checked){
@@ -10384,13 +10373,13 @@ async function breakToQueue(evt){
 				if(item && (!item.stat || (item.stat != "Playing"))){
 					ref = parseInt(ref, 10);
 					let hexStr =  ("00000000" + ref.toString(16)).substr(-8);
-					await fetchContent("studio/"+studio+"?cmd=add%20"+hexStr+"%20stop:///");
+					await fetchContent("studio/"+studioName+"?cmd=add%20"+hexStr+"%20stop:///");
 				}
 				return;
 			}
 		}
 		// no queue item selected.  Add to end of the list, forward order
-		await fetchContent("studio/"+studio+"?cmd=add%20-1%20stop:///");
+		await fetchContent("studio/"+studioName+"?cmd=add%20-1%20stop:///");
 	}
 }
 
@@ -10403,9 +10392,8 @@ function moveItemInQueue(obj, fromIdx, toIdx, param){
 			val = param.url;
 		}
 		if(val && val.length){
-			let studio = studioName.getValue();
-			if(studio.length)
-				fetchContent("studio/"+studio+"?cmd=add%20"+toIdx+"%20"+val);
+			if(studioName && studioName.length)
+				fetchContent("studio/"+studioName+"?cmd=add%20"+toIdx+"%20"+val);
 		}
 	}else{
 		let meta = queueMetaFromIdx(fromIdx);
@@ -10418,9 +10406,8 @@ function moveItemInQueue(obj, fromIdx, toIdx, param){
 			if(metato.stat == "Playing")
 				return true; // prevent local drop
 		}
-		let studio = studioName.getValue();
-		if(studio.length){
-			fetchContent("studio/"+studio+"?cmd=move "+fromIdx+" "+toIdx);
+		if(studioName && studioName.length){
+			fetchContent("studio/"+studioName+"?cmd=move "+fromIdx+" "+toIdx);
 		}
 	}
 	return true; // prevent local drop... wait for list rev. change to reload list.
@@ -10506,10 +10493,9 @@ function queueSetItemcolor(el, meta){
 async function syncRecentPlays(evt){
 	if(evt)
 		evt.preventDefault();
-	let studio = studioName.getValue();
 	let cnt = document.getElementById("qHistCount");
 	let settings = studioStateCache.meta[0];
-	if(settings && studio && studio.length){
+	if(settings && studioName && studioName.length){
 		let locID = settings["db_loc"];
 		if(locID && locID.length){
 			locID = parseInt(locID, 10);
@@ -10544,41 +10530,42 @@ async function syncRecentPlays(evt){
 
 async function syncQueue(studio, rev){
 	let resp;
-	resp = await fetchContent("studio/"+studio+"?cmd=list&raw=1");
-	if(resp){
-		if(resp.ok){
-			let raw = await resp.text();
-			if(studioStateCache.queueRev != rev){
-				return;
-			}
-console.log("list reposnse rev. "+rev);
-			let lines = raw.split("\n");
-			let res = [];
-			let keys = lines[0].split("\t");
-			if(lines.length > 1){
-				for(let n = 1; n < lines.length; n++){
-					if(lines[n].length){
-						let obj = {};
-						let fields = lines[n].split("\t");
-						let cnt = fields.length;
-						if(cnt > keys.length) 
-							cnt = keys.length;
-						for(let i = 0; i < cnt; i++)
-							obj[keys[i]] = fields[i];
-						res.push(obj);
+	if(studioName && studioName.length){
+		resp = await fetchContent("studio/"+studioName+"?cmd=list&raw=1");
+		if(resp){
+			if(resp.ok){
+				let raw = await resp.text();
+				if(studioStateCache.queueRev != rev){
+					return;
+				}
+				let lines = raw.split("\n");
+				let res = [];
+				let keys = lines[0].split("\t");
+				if(lines.length > 1){
+					for(let n = 1; n < lines.length; n++){
+						if(lines[n].length){
+							let obj = {};
+							let fields = lines[n].split("\t");
+							let cnt = fields.length;
+							if(cnt > keys.length) 
+								cnt = keys.length;
+							for(let i = 0; i < cnt; i++)
+								obj[keys[i]] = fields[i];
+							res.push(obj);
+						}
 					}
 				}
+				studioStateCache.queue = res;
+				// sync cached times
+				studioStateCache.queueSec = calcQueueTimeToNext(res);
+				studioStateCache.queueDur = calcQueueTimeToEnd(res);
+				updateQueueLogDisplay(false);
+			}else{
+				alert("Got an error fetching list (queue) from studio.\n"+resp.statusText);
 			}
-			studioStateCache.queue = res;
-			// sync cached times
-			studioStateCache.queueSec = calcQueueTimeToNext(res);
-			studioStateCache.queueDur = calcQueueTimeToEnd(res);
-			updateQueueLogDisplay(false);
-		}else{
-			alert("Got an error fetching list (queue) from studio.\n"+resp.statusText);
+		}else if(cred){
+			alert("Failed to fetch list (queue) from the studio.");
 		}
-	}else if(cred.getValue()){
-		alert("Failed to fetch list (queue) from the studio.");
 	}
 }
 
@@ -10602,10 +10589,9 @@ async function queuePLExpand(evt){
 	let ref = parseInt(item.getAttribute("data-idx"));
 	item = studioStateCache.meta[ref];
 	if(item){
-		let studio = studioName.getValue();
-		if(studio.length){
+		if(studioName && studioName.length){
 			let hexStr =  ("00000000" + ref.toString(16)).substr(-8);
-			await fetchContent("studio/"+studio+"?cmd=expand%20"+hexStr);
+			await fetchContent("studio/"+studioName+"?cmd=expand%20"+hexStr);
 		}
 	}
 }
@@ -10667,6 +10653,10 @@ function updateQueueLogDisplay(logOnly){
 		}
 		if(logID){
 			// display this entry
+			let id = entry.ID;
+			if(id)
+				// use item library id in place of direct asset URL (Source)
+				entry.Source = "item:///"+id;
 			let li = appendDragableItem(true, false, entry, logID, hel, format, "Source");
 			queueSetItemcolor(li, entry);
 		}
@@ -10679,7 +10669,7 @@ function studioDelMeta(ref){
 		let el = queueElementFromRef(ref);
 		if(el){
 			// this meta record has an element in the queue... trigger an queue update
-			syncQueue(studioName.getValue());
+			syncQueue(studioName);
 		}
 		// check recorder list for update
 		for(let i=0; i<studioStateCache.encoders.length; i++){
@@ -10703,81 +10693,83 @@ function updateQueueElement(el, meta){
 }
 
 async function updateMetaItem(studio, ref){
-	let resp;
-	let hexStr =  ("00000000" + ref.toString(16)).substr(-8);
-	resp = await fetchContent("studio/"+studio+"?cmd=dumpmeta%20"+hexStr+"&raw=1");
-	if(resp){
-		if(resp.ok){
-			let raw = await resp.text();
-			let lines = raw.split("\n");
-			let res = {};
-			if(lines.length > 1){
-				for(let n = 0; n < lines.length; n++){
-					if(lines[n].length){
-						let fields = lines[n].split("=");
-						if(fields[0].length && (fields[1] != undefined)){
-							// remove first field and keep any additionals, restoring '=' token
-							let prop = fields[0];
-							fields.splice(0,1)
-							res[prop] = fields.join("=");
-						}
-					}
-				}
-			}
-			if(Object.keys(res).length){
-				let old = studioStateCache.meta[ref];
-				let update = false;
-				if(!old){
-					// new ref
-					studioStateCache.meta[ref] = res;
-					update = true;
-				}
-				else if(res["rev"] != old.rev){
-					// merge new properties into existing
-					studioStateCache.meta[ref] = {...old, ...res};
-					update = true;
-				}
-				if(update){
-					// do stuff with updated record
-					if(ref == 0){
-						// got setting... update recent plays
-						syncRecentPlays();
-						if(!old || (old.db_loc != studioStateCache.meta[ref].db_loc))
-							setLibUsingStudio();
-						if(!old || (old.client_players_visible != studioStateCache.meta[ref].client_players_visible))
-							syncPlayers(studio);
-					}else{
-						let qli = queueElementFromRef(ref);
-						if(qli){
-							// meta item is in queue... update queue list item
-							updateQueueElement(qli.el, studioStateCache.meta[ref]);
-						}
-						let pNum = playerNumberFromRef(ref);
-						if(pNum != -1){
-							updatePlayerTitle(pNum, res);
-							let el = document.getElementById("pType"+pNum); 
-							if(el){
-								if(res.Type)
-									el.innerText = res.Type;
-								else
-									el.innerText = "";
-							}
-							el = document.getElementById("pName"+pNum); 
-							if(el){
-								if(res.Name)
-									el.innerText = res.Name;
-								else
-									el.innerText = "";
+	if(studio && studio.length){
+		let resp;
+		let hexStr =  ("00000000" + ref.toString(16)).substr(-8);
+		resp = await fetchContent("studio/"+studio+"?cmd=dumpmeta%20"+hexStr+"&raw=1");
+		if(resp){
+			if(resp.ok){
+				let raw = await resp.text();
+				let lines = raw.split("\n");
+				let res = {};
+				if(lines.length > 1){
+					for(let n = 0; n < lines.length; n++){
+						if(lines[n].length){
+							let fields = lines[n].split("=");
+							if(fields[0].length && (fields[1] != undefined)){
+								// remove first field and keep any additionals, restoring '=' token
+								let prop = fields[0];
+								fields.splice(0,1)
+								res[prop] = fields.join("=");
 							}
 						}
 					}
 				}
+				if(Object.keys(res).length){
+					let old = studioStateCache.meta[ref];
+					let update = false;
+					if(!old){
+						// new ref
+						studioStateCache.meta[ref] = res;
+						update = true;
+					}
+					else if(res["rev"] != old.rev){
+						// merge new properties into existing
+						studioStateCache.meta[ref] = {...old, ...res};
+						update = true;
+					}
+					if(update){
+						// do stuff with updated record
+						if(ref == 0){
+							// got setting... update recent plays
+							syncRecentPlays();
+							if(!old || (old.db_loc != studioStateCache.meta[ref].db_loc))
+								setLibUsingStudio();
+							if(!old || (old.client_players_visible != studioStateCache.meta[ref].client_players_visible))
+								syncPlayers(studio);
+						}else{
+							let qli = queueElementFromRef(ref);
+							if(qli){
+								// meta item is in queue... update queue list item
+								updateQueueElement(qli.el, studioStateCache.meta[ref]);
+							}
+							let pNum = playerNumberFromRef(ref);
+							if(pNum != -1){
+								updatePlayerTitle(pNum, res);
+								let el = document.getElementById("pType"+pNum); 
+								if(el){
+									if(res.Type)
+										el.innerText = res.Type;
+									else
+										el.innerText = "";
+								}
+								el = document.getElementById("pName"+pNum); 
+								if(el){
+									if(res.Name)
+										el.innerText = res.Name;
+									else
+										el.innerText = "";
+								}
+							}
+						}
+					}
+				}
+			}else{
+				alert("Got an error fetching metadata from studio.\n"+resp.statusText);
 			}
-		}else{
-			alert("Got an error fetching metadata from studio.\n"+resp.statusText);
+		}else if(cred){
+			alert("Failed to fetch metadata from the studio.");
 		}
-	}else if(cred.getValue()){
-		alert("Failed to fetch metadata from the studio.");
 	}
 }
 
@@ -10813,11 +10805,10 @@ async function playerFaderAction(obj, pNum){
 		player = parseInt(player.slice(6)); // trim off "pFader" prefix
 		val = parseFloat(obj.value);
 	}
-	let studio = studioName.getValue();
-	if(studio.length){
+	if(studioName && studioName.length){
 		// make val scalar
 		val = faderToLin(val);
-		fetchContent("studio/"+studio+"?cmd=vol "+player+" "+val+"&rt=1");
+		fetchContent("studio/"+studioName+"?cmd=vol "+player+" "+val+"&rt=1");
 	}
 }
 
@@ -10835,13 +10826,12 @@ async function playerBalanceAction(obj, pNum){
 		player = parseInt(player.slice(4)); // trim off "pBal" prefix
 		val = parseFloat(obj.value);
 	}
-	let studio = studioName.getValue();
-	if(studio.length){
+	if(studioName && studioName.length){
 		if(val > 1.0)
 			val = 1.0;
 		if(val < -1.0)
 			val = -1.0;
-		fetchContent("studio/"+studio+"?cmd=bal "+player+" "+val+"&rt=1");
+		fetchContent("studio/"+studioName+"?cmd=bal "+player+" "+val+"&rt=1");
 	} 
 }
 
@@ -10878,11 +10868,10 @@ async function playerPosAction(obj, pNum){
 						scaled = dur;
 					if(scaled < 0.0)
 						scaled = 0.0;
-					let studio = studioName.getValue();
-					if(studio.length){
+					if(studioName && studioName.length){
 						p.pos = scaled.toString();
 						playerTimeUpdate(player);
-						fetchContent("studio/"+studio+"?cmd=pos "+player+" "+scaled+"&rt=1");
+						fetchContent("studio/"+studioName+"?cmd=pos "+player+" "+scaled+"&rt=1");
 					}
 				}
 			}
@@ -10900,12 +10889,11 @@ async function playerAction(cmd, evt, pNum, rt){
 		player = evt.target.parentNode.parentElement.parentElement.getAttribute("data-pnum");
 	}else
 		player = pNum;
-	let studio = studioName.getValue();
-	if(studio.length){
+	if(studioName && studioName.length){
 		if(rt)
-			fetchContent("studio/"+studio+"?cmd="+cmd+" "+player+"&rt=1");
+			fetchContent("studio/"+studioName+"?cmd="+cmd+" "+player+"&rt=1");
 		else
-			fetchContent("studio/"+studio+"?cmd="+cmd+" "+player);
+			fetchContent("studio/"+studioName+"?cmd="+cmd+" "+player);
 	}
 }
 
@@ -11370,10 +11358,9 @@ async function genPlayerBusMenu(evt){ //pNum, bus, meta){
 	}
 
 	// handle talkback and mute assignments
-	let studio = studioName.getValue();
-	if(studio.length){
+	if(studioName && studioName.length){
 		let resp;
-		resp = await fetchContent("studio/"+studio+"?cmd=showbus "+pNum+"&raw=1");
+		resp = await fetchContent("studio/"+studioName+"?cmd=showbus "+pNum+"&raw=1");
 		if(resp){
 			if(resp.ok){
 				let raw = await resp.text();
@@ -11416,11 +11403,10 @@ async function playerFeedVolAction(obj, pNum){
 		player = parseInt(player.slice(5)); // trim off "pfVol" prefix
 		val = parseFloat(obj.target.value);
 	}
-	let studio = studioName.getValue();
-	if(studio.length){
+	if(studioName && studioName.length){
 		// make val scalar
 		val = faderToLin(val);
-		fetchContent("studio/"+studio+"?cmd=mmvol "+player+" "+val+"&rt=1");
+		fetchContent("studio/"+studioName+"?cmd=mmvol "+player+" "+val+"&rt=1");
 		let el = document.getElementById("pFeedSep"+player);
 		el.innerText = "Feed " + linToDBtext(val);
 	}
@@ -11430,8 +11416,7 @@ async function playerBusCheckAction(evt){
 	let b = evt.target.getAttribute("data-idx");
 	let pNum = evt.target.getAttribute("data-pnum");
 	let p = studioStateCache.ins[pNum];
-	let studio = studioName.getValue();
-	if(p && studio.length){
+	if(p && studioName && studioName.length){
 		let bus = parseInt(p.bus, 16);
 		bus = bus & 0x00ffffff;
 		b = 1 << b;
@@ -11440,7 +11425,7 @@ async function playerBusCheckAction(evt){
 		else
 			bus = bus | b;
 		let hexStr =  ("00000000" + bus.toString(16)).substr(-8);
-		fetchContent("studio/"+studio+"?cmd=bus "+pNum+" "+hexStr);
+		fetchContent("studio/"+studioName+"?cmd=bus "+pNum+" "+hexStr);
 	}
 }
 
@@ -11451,15 +11436,14 @@ async function playerMuteTBAction(evt){
 	if(!p)
 		return;
 	let bus = BigInt(parseInt(p.bus, 16));
-	let studio = studioName.getValue();
-	if(studio.length){
+	if(studioName && studioName.length){
 		b = BigInt(1) << b;
 		if(bus & b)
 			bus = bus & ~b;
 		else
 			bus = bus | b;
 		let hexStr =  ("00000000" + bus.toString(16)).substr(-8);
-		fetchContent("studio/"+studio+"?cmd=mutes "+pNum+" "+hexStr);
+		fetchContent("studio/"+studioName+"?cmd=mutes "+pNum+" "+hexStr);
 	}
 }
 
@@ -11486,9 +11470,8 @@ function playerFeedAction(evt){
 	}else{
 		mmbus = (mmbus & 0xff000000n) + b;
 	}
-	let studio = studioName.getValue();
-	if(studio.length){
-		fetchContent("studio/"+studio+"?cmd=mmbus "+pNum+" "+mmbus);
+	if(studioName && studioName.length){
+		fetchContent("studio/"+studioName+"?cmd=mmbus "+pNum+" "+mmbus);
 	}
 }
 
@@ -11497,8 +11480,7 @@ async function playerCueAction(evt){
 		evt.preventDefault();
 		let pNum = evt.target.getAttribute("data-idx");
 		let p = studioStateCache.ins[pNum];
-		let studio = studioName.getValue();
-		if(p && studio.length){
+		if(p && studioName && studioName.length){
 			let bus = parseInt(p.bus, 16);
 			bus = bus & 0x00ffffff;
 			if(bus & 2)
@@ -11506,7 +11488,7 @@ async function playerCueAction(evt){
 			else
 				bus = bus | 2;
 			let hexStr =  ("00000000" + bus.toString(16)).substr(-8);
-			fetchContent("studio/"+studio+"?cmd=bus "+pNum+" "+hexStr);
+			fetchContent("studio/"+studioName+"?cmd=bus "+pNum+" "+hexStr);
 		}
 	}
 }
@@ -11531,9 +11513,8 @@ function playerDropHandler(evt){
 	let pNum = target.getAttribute("data-pnum");
 	let atr = curDrag.getAttribute("data-url");
 	if(atr && atr.length && !target.hasChildNodes()){ // player is empty and drag item url is set
-		let studio = studioName.getValue();
-		if(studio.length){
-			fetchContent("studio/"+studio+"?cmd=load "+pNum+" "+atr);
+		if(studioName && studioName.length){
+			fetchContent("studio/"+studioName+"?cmd=load "+pNum+" "+atr);
 			return true;
 		}
 	}
@@ -11542,167 +11523,169 @@ function playerDropHandler(evt){
 
 async function syncPlayers(studio){
 	// get players list
-	let resp;
-	resp = await fetchContent("studio/"+studio+"?cmd=pstat&raw=1");
-	if(resp){
-		if(resp.ok){
-			let raw = await resp.text();
-			let lines = raw.split("\n");
-			lines.pop(); // remove last, blank line
-			let keys = lines[0].split("\t");
-			let count = lines.length;
-			if(count > 1){
-				let settings = studioStateCache.meta[0];
-				if(settings){
-					let vis = settings.client_players_visible;
-					if(vis && count > vis)
-						count = parseInt(vis)+1;
-				}
-				let mixer = document.getElementById("mixergrid");
-				// check grid size against list size
-				while(count-1 < mixer.childElementCount){
-					// remove columns
-					mixer.removeChild(mixer.lastChild);
-				}
-				while(count-1 > mixer.childElementCount){
-					// add columns
-					let p = document.createElement("div");
-					p.setAttribute("data-pnum", mixer.childElementCount);
-					p.draggable = false;
-					p.className = "player";
-					p.id = "player" + mixer.childElementCount;
-					p.addEventListener("dragstart", playerDragAllow);
-					p.addEventListener("dragenter", playerDropAllow);
-					p.addEventListener("dragover", playerDropAllow);
-					p.addEventListener("dragleave", playerDropAllow);
-					p.addEventListener("drop", playerDropHandler);
-					mixer.appendChild(p);
-				}
-				for(let n = 1; n < count; n++){
-					let obj = {};
-					if(lines[n].length){
-						let fields = lines[n].split("\t");
-						let cnt = fields.length;
-						if(cnt > keys.length) 
-							cnt = keys.length;
-						for(let i = 0; i < cnt; i++)
-							obj[keys[i]] = fields[i];
+	if(studio && studio.length){
+		let resp;
+		resp = await fetchContent("studio/"+studio+"?cmd=pstat&raw=1");
+		if(resp){
+			if(resp.ok){
+				let raw = await resp.text();
+				let lines = raw.split("\n");
+				lines.pop(); // remove last, blank line
+				let keys = lines[0].split("\t");
+				let count = lines.length;
+				if(count > 1){
+					let settings = studioStateCache.meta[0];
+					if(settings){
+						let vis = settings.client_players_visible;
+						if(vis && count > vis)
+							count = parseInt(vis)+1;
 					}
-					let ref = obj["meta-UID"];
-					let meta = undefined;
-					let pnum = n-1;
-					if(ref){
-						ref = parseInt(ref, 16);
-						obj["meta-UID"] = ref;
-						meta = studioStateCache.meta[ref];
-					}else{
-						ref = queueRefFromPlayer(pnum);
-						ref = parseInt(ref, 16);
+					let mixer = document.getElementById("mixergrid");
+					// check grid size against list size
+					while(count-1 < mixer.childElementCount){
+						// remove columns
+						mixer.removeChild(mixer.lastChild);
+					}
+					while(count-1 > mixer.childElementCount){
+						// add columns
+						let p = document.createElement("div");
+						p.setAttribute("data-pnum", mixer.childElementCount);
+						p.draggable = false;
+						p.className = "player";
+						p.id = "player" + mixer.childElementCount;
+						p.addEventListener("dragstart", playerDragAllow);
+						p.addEventListener("dragenter", playerDropAllow);
+						p.addEventListener("dragover", playerDropAllow);
+						p.addEventListener("dragleave", playerDropAllow);
+						p.addEventListener("drop", playerDropHandler);
+						mixer.appendChild(p);
+					}
+					for(let n = 1; n < count; n++){
+						let obj = {};
+						if(lines[n].length){
+							let fields = lines[n].split("\t");
+							let cnt = fields.length;
+							if(cnt > keys.length) 
+								cnt = keys.length;
+							for(let i = 0; i < cnt; i++)
+								obj[keys[i]] = fields[i];
+						}
+						let ref = obj["meta-UID"];
+						let meta = undefined;
+						let pnum = n-1;
 						if(ref){
+							ref = parseInt(ref, 16);
 							obj["meta-UID"] = ref;
 							meta = studioStateCache.meta[ref];
-							obj.status = 0;
-							pnum = -1;
-						}
-					}
-					// update queue status if in queue
-					if(meta){
-						meta.pNum = pnum;
-						meta.stat = queueStatusText(obj.status);
-						// update queue item properties too, if in queue
-						let idx = queueIdxFromUID(ref);
-						if(idx > -1){
-							let qitem = studioStateCache.queue[idx];
-							if(qitem){
-								obj.seg = parseFloat(obj.seg);
-								if(obj.seg)
-									qitem.segout = obj.seg;
-								else
-									qitem.segout = parseFloat(obj.dur);
-								qitem.segout = qitem.segout - parseFloat(obj.pos);
-								qitem.status = obj.status;
-							}
-						}
-						let el = queueElementFromRef(ref);
-						if(el)
-							updateQueueElement(el.el, meta);
-					}
-					// check for UI change update
-					let prev = studioStateCache.ins[n-1];
-					if((!prev && obj.status) || (prev.status != obj.status)){
-						let player = document.getElementById("player" + (n-1));
-						if(obj.status == 0){
-							while(player.hasChildNodes())
-								player.removeChild(player.lastChild);
-							player.title = "";
-							player.draggable = false;
 						}else{
-							if(!player.hasChildNodes()){
-								// copy player template
-								let clone = pTemplate.content.cloneNode(true);
-								let el = clone.querySelector("#pLabel"); 
-								el.setAttribute("id", "pLabel"+(n-1));
-								el.setAttribute("data-pnum", n-1);
-								el.draggable = true;
-								el.innerText = n.toString();
-								el = clone.querySelector("#pType"); 
-								el.setAttribute("id", "pType"+(n-1));
-								if(meta)
-									el.innerText = meta.Type;
-								else
-									el.innerText = "";
-								el = clone.querySelector("#pName"); 
-								el.setAttribute("id", "pName"+(n-1));
-								if(meta)
-									el.innerText = meta.Name;
-								else
-									el.innerText = "";
-								el = clone.querySelector("#pTime"); 
-								el.setAttribute("id", "pTime"+(n-1));
-								el = clone.querySelector("#pRem"); 
-								el.setAttribute("id", "pRem"+(n-1));
-								el = clone.querySelector("#pPos"); 
-								el.setAttribute("id", "pPos"+(n-1));
-								el = clone.querySelector("#pVU"); 
-								el.setAttribute("id", "pVU"+(n-1));
-								el = clone.querySelector("#pBusSel"); 
-								el.setAttribute("id", "pBusSel"+(n-1));
-								el.setAttribute("data-childdiv", "pBusList"+(n-1));
-								el = clone.querySelector("#pBusList"); 
-								el.setAttribute("id", "pBusList"+(n-1));
-								el = clone.querySelector("#pCue"); 
-								el.setAttribute("id", "pCue"+(n-1));
-								el.setAttribute("data-idx", n-1);
-								el = clone.querySelector("#pBal"); 
-								el.setAttribute("id", "pBal"+(n-1));
-								el = clone.querySelector("#pFader"); 
-								el.setAttribute("id", "pFader"+(n-1));
-								el = clone.querySelector("#pGain"); 
-								el.setAttribute("id", "pGain"+(n-1));
-								el = clone.querySelector("#pPlay"); 
-								el.setAttribute("id", "pPlay"+(n-1));
-								el = clone.querySelector("#pStop"); 
-								el.setAttribute("id", "pStop"+(n-1));
-								el = clone.querySelector("#pUnload"); 
-								el.setAttribute("id", "pUnload"+(n-1));
-								
-								player.appendChild(clone);
-								player.draggable = true;
-								if(meta)
-									updatePlayerTitle(n-1, meta);
+							ref = queueRefFromPlayer(pnum);
+							ref = parseInt(ref, 16);
+							if(ref){
+								obj["meta-UID"] = ref;
+								meta = studioStateCache.meta[ref];
+								obj.status = 0;
+								pnum = -1;
 							}
-							updatePlayerUI(obj);
 						}
+						// update queue status if in queue
+						if(meta){
+							meta.pNum = pnum;
+							meta.stat = queueStatusText(obj.status);
+							// update queue item properties too, if in queue
+							let idx = queueIdxFromUID(ref);
+							if(idx > -1){
+								let qitem = studioStateCache.queue[idx];
+								if(qitem){
+									obj.seg = parseFloat(obj.seg);
+									if(obj.seg)
+										qitem.segout = obj.seg;
+									else
+										qitem.segout = parseFloat(obj.dur);
+									qitem.segout = qitem.segout - parseFloat(obj.pos);
+									qitem.status = obj.status;
+								}
+							}
+							let el = queueElementFromRef(ref);
+							if(el)
+								updateQueueElement(el.el, meta);
+						}
+						// check for UI change update
+						let prev = studioStateCache.ins[n-1];
+						if((!prev && obj.status) || (prev.status != obj.status)){
+							let player = document.getElementById("player" + (n-1));
+							if(obj.status == 0){
+								while(player.hasChildNodes())
+									player.removeChild(player.lastChild);
+								player.title = "";
+								player.draggable = false;
+							}else{
+								if(!player.hasChildNodes()){
+									// copy player template
+									let clone = pTemplate.content.cloneNode(true);
+									let el = clone.querySelector("#pLabel"); 
+									el.setAttribute("id", "pLabel"+(n-1));
+									el.setAttribute("data-pnum", n-1);
+									el.draggable = true;
+									el.innerText = n.toString();
+									el = clone.querySelector("#pType"); 
+									el.setAttribute("id", "pType"+(n-1));
+									if(meta)
+										el.innerText = meta.Type;
+									else
+										el.innerText = "";
+									el = clone.querySelector("#pName"); 
+									el.setAttribute("id", "pName"+(n-1));
+									if(meta)
+										el.innerText = meta.Name;
+									else
+										el.innerText = "";
+									el = clone.querySelector("#pTime"); 
+									el.setAttribute("id", "pTime"+(n-1));
+									el = clone.querySelector("#pRem"); 
+									el.setAttribute("id", "pRem"+(n-1));
+									el = clone.querySelector("#pPos"); 
+									el.setAttribute("id", "pPos"+(n-1));
+									el = clone.querySelector("#pVU"); 
+									el.setAttribute("id", "pVU"+(n-1));
+									el = clone.querySelector("#pBusSel"); 
+									el.setAttribute("id", "pBusSel"+(n-1));
+									el.setAttribute("data-childdiv", "pBusList"+(n-1));
+									el = clone.querySelector("#pBusList"); 
+									el.setAttribute("id", "pBusList"+(n-1));
+									el = clone.querySelector("#pCue"); 
+									el.setAttribute("id", "pCue"+(n-1));
+									el.setAttribute("data-idx", n-1);
+									el = clone.querySelector("#pBal"); 
+									el.setAttribute("id", "pBal"+(n-1));
+									el = clone.querySelector("#pFader"); 
+									el.setAttribute("id", "pFader"+(n-1));
+									el = clone.querySelector("#pGain"); 
+									el.setAttribute("id", "pGain"+(n-1));
+									el = clone.querySelector("#pPlay"); 
+									el.setAttribute("id", "pPlay"+(n-1));
+									el = clone.querySelector("#pStop"); 
+									el.setAttribute("id", "pStop"+(n-1));
+									el = clone.querySelector("#pUnload"); 
+									el.setAttribute("id", "pUnload"+(n-1));
+									
+									player.appendChild(clone);
+									player.draggable = true;
+									if(meta)
+										updatePlayerTitle(n-1, meta);
+								}
+								updatePlayerUI(obj);
+							}
+						}
+						studioStateCache.ins[n-1] = obj;
 					}
-					studioStateCache.ins[n-1] = obj;
+					studioStateCache.queueSec = calcQueueTimeToNext(studioStateCache.queue);
 				}
-				studioStateCache.queueSec = calcQueueTimeToNext(studioStateCache.queue);
+			}else{
+				alert("Got an error fetching players from studio.\n"+resp.statusText);
 			}
-		}else{
-			alert("Got an error fetching players from studio.\n"+resp.statusText);
+		}else if(cred){
+			alert("Failed to fetch players from the studio.");
 		}
-	}else if(cred.getValue()){
-		alert("Failed to fetch players from the studio.");
 	}
 }
 
@@ -11752,15 +11735,15 @@ function studioHandleNotice(data){
 			if(studioStateCache.control)
 				studioStateCache.control.setPStat(val, ref);
 //!! handle TB status too...
-			syncPlayers(studioName.getValue());
+			syncPlayers(studioName);
 			break;
 		case "status":			// over-all status change, no ref, no val.  Use "stat" command to get status
 			// no ref or value: Change in ListRev, LogTime, automation status trigger this notice. Does not include sip registoration.
-			syncStudioStat(studioName.getValue());
+			syncStudioStat(studioName);
 			break;
 		case "metachg":		// metadata content change, ref=UID number, no val. Use "dumpmeta" command to get new content
 			ref = data.uid;
-			updateMetaItem(studioName.getValue(), ref);
+			updateMetaItem(studioName, ref);
 			break;
 		case "rstat":			// recorder/encoder status change, no ref, no val. Use "rstat" command to get status of all recorders
 			refreshRecorderPanel();
@@ -11801,6 +11784,30 @@ function studioHandleNotice(data){
 		default:
 			// ignore unknown type;
 			return;
+	}
+}
+
+async function stConsSend(){
+	if(studioName && studioName.length){
+		let resp;
+		let el = document.getElementById("conCommand");
+		let obj = {cmd: el.value, raw: 1};
+		resp = await fetchContent("studio/"+studioName, {
+				method: 'POST',
+				body: JSON.stringify(obj),
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp){
+			if(resp.ok){
+				let raw = await resp.text();
+				let lines = raw.split("\n");
+				el = document.getElementById("stConsRep");
+				el.value = raw;
+			}
+		}
 	}
 }
 
@@ -11890,31 +11897,6 @@ async function stContSurfChange(evt){
 	}
 }
 
-async function stConsSend(){
-	let studio = studioName.getValue();
-	if(studio.length){
-		let resp;
-		let el = document.getElementById("conCommand");
-		let obj = {cmd: el.value, raw: 1};
-		resp = await fetchContent("studio/"+studio, {
-				method: 'POST',
-				body: JSON.stringify(obj),
-				headers: {
-					"Content-Type": "application/json",
-					"Accept": "application/json"
-				}
-			});
-		if(resp){
-			if(resp.ok){
-				let raw = await resp.text();
-				let lines = raw.split("\n");
-				el = document.getElementById("stConsRep");
-				el.value = raw;
-			}
-		}
-	}
-}
-
 async function selectControlSurface(entry){
 	// load module
 	if(entry){
@@ -11987,9 +11969,9 @@ function studioVuUpdate(data){
 				canv.setAttribute('height',128);
 				busvu.appendChild(canv);
 				busmeters.push(new vumeter(canv, {
-					"boxCount": 32,
-					"boxCountRed": 9,
-					"boxCountYellow": 7,
+					"boxCount": 24,
+					"boxCountRed": 6,
+					"boxCountYellow": 5,
 					"boxGapFraction": 0.25,
 					"max": 255,
 				}));
@@ -12019,9 +12001,9 @@ function studioVuUpdate(data){
 						canv.setAttribute('height',128);
 						vu.appendChild(canv);
 						vu.vumeters.push(new vumeter(canv, {
-							"boxCount": 32,
-							"boxCountRed": 9,
-							"boxCountYellow": 7,
+							"boxCount": 24,
+							"boxCountRed": 6,
+							"boxCountYellow": 5,
 							"boxGapFraction": 0.25,
 							"max": 255,
 						}));
@@ -12051,9 +12033,9 @@ function studioVuUpdate(data){
 						canv.setAttribute('class', 'rVUcanvas');
 						vu.appendChild(canv);
 						vu.vumeters.push(new vumeter(canv, {
-							"boxCount": 32,
-							"boxCountRed": 9,
-							"boxCountYellow": 7,
+							"boxCount": 24,
+							"boxCountRed": 6,
+							"boxCountYellow": 5,
 							"boxGapFraction": 0.25,
 							"max": 255,
 							"rotate": true
@@ -12073,42 +12055,26 @@ function studioVuUpdate(data){
 	}
 }
 
-/***** Server Side Events/Messages functions *****/
+/***** Studio MIDI Control/Worker/Messages functions *****/
+const studioWorker = new SharedWorker("mcsWorker.js");
+studioWorker.port.onmessage = studioWorkerRx;
+studioWorker.port.postMessage("ping");
 
-var sseMsgObj = new watchableValue({});
-var es;
-const sseReconFreqMilliSec = 10000;	// 10 seconds
-
-function sseSetup(credVal){
-	// login status changed callback or reconnecting
-	if(es){
-		es.close();
-		es = false;
-	}
-	if(credVal){
-		// logged in
-		es = new EventSource('/ssestream'); // event source creation
-		es.onopen = function(e) {
-			es.addEventListener('msg', sseListener); // listen for 'msg' general messages at a minimum
-			addListenersForAllSubscriptions();
-			// if a studio is already selected, make the sse session get studio's events
-			if(studioName.getValue().length)
-				studioChangeCallback(studioName.getValue());
-		};
-		es.onerror = function(e) {
-			es.close();
-			es = false;
-		};
-	}
+function studioWorkerRx(evt){
+	console.log("from studioWorder:", evt.data);
 }
 
-//  periodic check of sse connection for reconnect
-setInterval(function() {
-	if(!es || (es.readyState !== EventSource.OPEN)){
-		if(cred.getValue())
-			sseSetup(true);
-	}
-}, sseReconFreqMilliSec);
+/***** Server Side Events/Worker/Messages functions *****/
+
+const sseWorker = new SharedWorker("sseWorker.js");
+sseWorker.port.onmessage = sseWorkerRx;
+
+function sseWorkerRx(evt){
+//!! this worker never send anything through the port.  It's uses a broadcast channel
+	console.log("from sseWorker:", evt.data);
+}
+
+var sseMsgObj = new watchableValue({});
 
 function sseMsgObjShow(val){
 	let obj = val.dbsync;
@@ -12137,71 +12103,36 @@ function sseMsgObjShow(val){
 	}
 }
 
-/* unregister to receive a event type */ 
-function eventTypeUnreg(type){
-	fetch("/sserem/"+type).then(response => {
-		if(response.status == 200){
-			// sucess...
-			es.removeEventListener(type, sseListener);
-			delete sseData[type];
-		}
-	});
-}
-
-/* register receiving of an event type */
-function eventTypeReg(type, cb){
-	fetch("/sseadd/"+type).then(response => {
-		if(response.status == 200){
-			// sucess...
-			if(!sseData[type])
-				sseData[type] = new watchableValue(false);
-			let etype = sseData[type];
-			etype.registerCallback(cb);
-			addListenersForAllSubscriptions();
-		}
-	});
-}
-
-function sseListener(event) { // event data callback
+function sseListener(msg) { // event data callback
 	let etype;
-	let idx = event.type.indexOf("vu_");
+	let idx = msg.sseType.indexOf("vu_");
 	if(idx == 0){
-		let vu = buffToUvObj(toArrayBuffer(event.data));
-		etype = sseData[event.type];
-		if(etype){
-			// because vu is an array, not a simple type, a old to new value
-			// comparison is not valid for triggering a value change callback.
-			// instead, we unconditionaly force a callback of all interested watchers.
-			etype.setValue(vu, true); 
+		let vu = buffToUvObj(toArrayBuffer(msg.value));
+		etype = sseData[msg.sseType];
+		if(!etype){
+			etype = new watchableValue(false);
+			etype.registerCallback(studioVuUpdate);
+			sseData[msg.sseType] = etype;
 		}
-	}else if(event.type === "msg"){
-		let obj = JSON.parse(event.data);
+		// because vu is an array, not a simple type, a old to new value
+		// comparison is not valid for triggering a value change callback.
+		// instead, we unconditionaly force a callback of all interested watchers.
+		etype.setValue(vu, true); 
+	}else if(msg.sseType === "msg"){
+		let obj = JSON.parse(msg.value);
 		let cur = sseMsgObj.getValue();
 		sseMsgObj.setValue({...cur, ...obj}, true);
 	}else{
-		etype = sseData[event.type];
-		if(etype){
-			let obj = JSON.parse(event.data);
-			etype.setValue(obj, true);
+		etype = sseData[msg.sseType];
+		if(!etype){
+			etype = new watchableValue(false);
+			etype.registerCallback(studioHandleNotice);
+			sseData[msg.sseType] = etype;
 		}
+		let obj = JSON.parse(msg.value);
+		etype.setValue(obj, true);
 	}
 };
-
-/* add a handler for all evens the server has us listed to get 
-		for this login session */ 
-function addListenersForAllSubscriptions(){
-	fetch("/sseget").then(response => {
-		if((response.status >= 200) && (response.status < 400)){
-			// sucess...
-			response.json().then(data => {
-				data.forEach(entry => {
-					es.removeEventListener(entry, sseListener); // to prevent duplicate calls ifalready registered
-					es.addEventListener(entry, sseListener);
-				});
-			});
-		}
-	});
-}
 
 /* VU meter data conversion */
 function toArrayBuffer(hexStr){
@@ -12238,25 +12169,35 @@ function buffToUvObj(buffer){
 
 /**** startup and load functions *****/
 
-async function startupContent(){
-	loadElement("nav", document.getElementById("navtab")).then((err) => {
-		if(!err){
-			checkLogin().then((res)=> {
-				if(res){
-					cred.setValue(res);
-					showTabElement(document.getElementById('navabout'), 'about');
-				}else{
-					cred.setValue(false);
-					showTabElement(document.getElementById('navlogin'), 'login');
-				}
-				// change file import visibility based on login status
-				let el = document.getElementById('fileimportbox');
-				getLocList();
-				getCatList();
-				getMediaLocs();
-			});
+async function startupContent(auth){
+	let err = await loadElement("nav", document.getElementById("navtab"));
+	if(!err){
+		if(typeof auth !== "undefined")
+			cred = auth;
+		else{
+			let res = await checkLogin();
+			if(res)
+				cred = res;
+			else
+				cred = false;
+			bc.postMessage({type:"authChange", value:cred});
 		}
-	});
+		hideUnauthDiv(cred);
+		let el = document.getElementById('fileimportbox');
+		if(cred){
+			showTabElement(document.getElementById('navabout'), 'about');
+			if(['admin', 'manager', 'library', 'programming'].includes(cred.permission))
+				el.style.display = "block";
+			else
+				el.style.display = "none";
+		}else{
+			showTabElement(document.getElementById('navlogin'), 'login');
+			el.style.display = "none"
+		}
+		getLocList();
+		getCatList();
+		getMediaLocs();
+	}
 	await loadElement("stadmin", document.getElementById("studioAdmin"));
 	let el = document.getElementById("conCommand");
 	if(el){
@@ -12274,8 +12215,25 @@ document.onclick = function(event){
 			closeInfo(event);
 	}
 };
-        
+
+function bcRcvMsg(event){
+	let msg = event.data;
+	if(msg.type == "stashChange")
+		loadStashRecallOnLoad();
+	else if(msg.type == "sse"){
+		sseListener(msg);
+		return;
+	}
+	else if(msg.type == "studioChange")
+		studioChangeCallback(msg.value);
+	else if(msg.type == "authChange")
+		startupContent(msg.value);
+	else
+		console.log("bcrx:",msg);
+}
+
 window.onload = function(){
+	bc.onmessage = bcRcvMsg;
 	locName.registerCallback(locMenuTrack);
 	locName.registerCallback(refreshLogsLocationDep);
 	locName.registerCallback(refreshSchedLocationDep);
@@ -12292,9 +12250,6 @@ window.onload = function(){
 	catListCache.registerCallback(refreshItemReassign);
 	artListCache.registerCallback(refreshItemReassign);
 	albListCache.registerCallback(refreshItemReassign);
-	studioName.registerCallback(studioChangeCallback);
-	cred.registerCallback(hideUnauthDiv);
-	cred.registerCallback(sseSetup);
 	browseType.registerCallback(browseTypeRowSelUpdate);
 	sseMsgObj.registerCallback(sseMsgObjShow);
 	startupContent();
