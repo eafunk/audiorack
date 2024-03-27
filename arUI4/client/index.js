@@ -894,7 +894,7 @@ function showTabElement(el, id, pass){
 		}
 	}
 	if(pass !== undefined)
-		bc.postMessage({type:"studioRequest", value:pass});
+		bc.postMessage({type:"studioRequest", value:pass, who:sseID});
 	if((id === "browse") && !browseData)
 		browseQuery();
 	if(id === "libmanage")
@@ -7151,7 +7151,7 @@ async function setLibUsingStudio(){
 	}
 }
 
-async function studioChangeCallback(value){
+async function studioChangeCallback(value, who){
 	externalSelectStudio(value);
 	studioName = value;
 	// clear existing VU meters - new vu data will repopulate meters
@@ -7167,7 +7167,12 @@ async function studioChangeCallback(value){
 	await syncStudioStat(value);
 	await syncPlayers(value);
 	await refreshOutGroups();
-	updateControlSurface();
+	if(who && (who == sseID))
+		// only the original sender of a studio change gets to implement the midi control surface
+		updateControlSurface();
+	else
+		// otherwise we disable control surface for this context
+		updateControlSurface(true);
 }
 
 async function getServerInfo(studio){
@@ -11811,12 +11816,21 @@ async function stConsSend(){
 	}
 }
 
-async function updateControlSurface(){
-	if(!midiAccess){
-		if(navigator.requestMIDIAccess){
-			midiAccess = await navigator.requestMIDIAccess({sysex: false});
-			if(midiAccess)
-				midiAccess.onstatechange = updateControlSurface; // call this function when midi devices change
+async function updateControlSurface(clear){
+	if(clear){
+console.log("disabling midi use");
+		if(midiAccess){
+			delete midiAccess;
+			midiAccess = false;
+		}
+	}else{
+console.log("enabling midi use");
+		if(!midiAccess){
+			if(navigator.requestMIDIAccess){
+				midiAccess = await navigator.requestMIDIAccess({sysex: false});
+				if(midiAccess)
+					midiAccess.onstatechange = updateControlSurface; // call this function when midi devices change
+			}
 		}
 	}
 	if(midiAccess){
@@ -11873,10 +11887,14 @@ async function updateControlSurface(){
 			alert("Failed to fetch control surface modules from the server.");
 		}
 	}else{
-		console.log("no browser support for midi");
+		studioStateCache.midiList = false;
 		let element = document.getElementById("ctlsurf");
-		if(element)
-			element.innerHTML = "<option value='' >No Browser Midi Support</option>";
+		if(element){
+			if(clear)
+				element.innerHTML = "<option value='' >Midi active on another window</option>";
+			else
+				element.innerHTML = "<option value='' >No Browser Midi Support</option>";
+		}
 	}
 }
 
@@ -11931,7 +11949,8 @@ async function selectControlSurface(entry){
 
 function reloadStudioSection(el, type){
 	if(type == "control"){
-		updateControlSurface();
+		if(midiAccess)
+			updateControlSurface();
 	}else if(type == "wall"){
 		refreshWallPanel();
 	}else if(type == "ins"){
@@ -12056,6 +12075,7 @@ function studioVuUpdate(data){
 }
 
 /***** Studio MIDI Control/Worker/Messages functions *****/
+/* Workers do not currently support WebMIDI!
 const studioWorker = new SharedWorker("mcsWorker.js");
 studioWorker.port.onmessage = studioWorkerRx;
 studioWorker.port.postMessage("ping");
@@ -12063,14 +12083,17 @@ studioWorker.port.postMessage("ping");
 function studioWorkerRx(evt){
 	console.log("from studioWorder:", evt.data);
 }
+*/
 
 /***** Server Side Events/Worker/Messages functions *****/
 
 const sseWorker = new SharedWorker("sseWorker.js");
+var sseID;
 sseWorker.port.onmessage = sseWorkerRx;
 
 function sseWorkerRx(evt){
-//!! this worker never send anything through the port.  It's uses a broadcast channel
+	// after connecting to the sseWorker, we get a serial number back, this is our ID
+	sseID = evt.data;
 	console.log("from sseWorker:", evt.data);
 }
 
@@ -12225,7 +12248,7 @@ function bcRcvMsg(event){
 		return;
 	}
 	else if(msg.type == "studioChange")
-		studioChangeCallback(msg.value);
+		studioChangeCallback(msg.value, msg.who);
 	else if(msg.type == "authChange")
 		startupContent(msg.value);
 	else

@@ -4,6 +4,8 @@ const sseReconFreqMilliSec = 10000;	// 10 seconds
 
 var es;
 var studioName;
+var stReqID;
+var lastClientNumber = 0;
 var cred;
 var bc = new BroadcastChannel("arUIBroadcastChannel");
 bc.onmessage = bcRcvMsg;
@@ -11,18 +13,21 @@ bc.onmessage = bcRcvMsg;
 async function bcRcvMsg(event){
 	let msg = event.data;
 	if(msg.type == "studioRequest"){
-		if(studioName == msg.value)
+		if((studioName == msg.value) && (stReqID == msg.who))
 			return;	// no change
-		if(studioName && studioName.length){
-			await sseEventTypeUnreg(studioName);
-			await sseEventTypeUnreg("vu_"+studioName);
+		stReqID = msg.who; // used to keep just one midi control in use
+		if(studioName = msg.value){
+			if(studioName && studioName.length){
+				await sseEventTypeUnreg(studioName);
+				await sseEventTypeUnreg("vu_"+studioName);
+			}
+			studioName = msg.value;
+			if(studioName && studioName.length){
+				await sseEventTypeReg(studioName);
+				await sseEventTypeReg("vu_"+studioName);
+			}
 		}
-		studioName = msg.value;
-		if(studioName && studioName.length){
-			await sseEventTypeReg(studioName);
-			await sseEventTypeReg("vu_"+studioName);
-		}
-		bc.postMessage({type:"studioChange", value:studioName});
+		bc.postMessage({type:"studioChange", value:studioName, who:msg.who});
 	}
 	if(msg.type == "authChange"){
 		cred = msg.value;
@@ -33,7 +38,9 @@ async function bcRcvMsg(event){
 onconnect = function(e){
 	let port = e.ports[0];
 	// set msg rx handler
+	lastClientNumber++;
 	port.onmessage = getMessage;
+	port.postMessage(lastClientNumber);
 }
 
 function getMessage(e){
