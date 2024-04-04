@@ -59,6 +59,15 @@ function initialize(inport, outport){
 	selectVpotMode(0);
 }
 
+function uninitialize(){
+	if(midiin){
+		midiin.onmidimessage = null;
+		midiin = null;
+	}
+	if(midiout)
+		midiout = null;
+}
+
 function onMIDIRecv(message){
 	let zone;
 	let sw;
@@ -98,7 +107,7 @@ function onMIDIRecv(message){
 				}
 			}else if(((sw & 0xf8) == 0x08) && (iVal > 0)){
 				//cue button
-				let studio = studioName.getValue();
+				let studio = studioName;
 				let p = studioStateCache.ins[(zone + (bank * pCount))];
 				if(p && studio.length){
 					let bus = parseInt(p.bus, 16);
@@ -112,7 +121,7 @@ function onMIDIRecv(message){
 				}
 			}if(((sw & 0xf8) == 0x18) && (iVal > 0)){
 				//main button
-				let studio = studioName.getValue();
+				let studio = studioName;
 				let p = studioStateCache.ins[(zone + (bank * pCount))];
 				if(p && studio.length){
 					let bus = parseInt(p.bus, 16);
@@ -126,7 +135,7 @@ function onMIDIRecv(message){
 				}
 			}else if(((sw & 0xf8) == 0x10) && (iVal > 0)){
 				//alt button
-				let studio = studioName.getValue();
+				let studio = studioName;
 				let p = studioStateCache.ins[(zone + (bank * pCount))];
 				if(p && studio.length){
 					let bus = parseInt(p.bus, 16);
@@ -164,12 +173,12 @@ function onMIDIRecv(message){
 				//vPot button
 				if(vPotMode == 0){
 					// zero position
-					let studio = studioName.getValue();
+					let studio = studioName;
 					if(studio.length)
 						fetchContent("studio/"+studio+"?cmd=pos "+(zone + (bank * pCount))+" 0.0&rt=1");
 				}else if(vPotMode == 1){
 					// center pan
-					let studio = studioName.getValue();
+					let studio = studioName;
 					if(studio.length)
 						fetchContent("studio/"+studio+"?cmd=bal "+(zone + (bank * pCount))+" 0.0&rt=1");
 				}else if(vPotMode == 2){
@@ -178,32 +187,32 @@ function onMIDIRecv(message){
 				}
 			}else if((sw == 0x5b) && (iVal > 0)){
 				// Auto-on
-				let studio = studioName.getValue();
+				let studio = studioName;
 				if(studio.length)
 					fetchContent("studio/"+studio+"?cmd=autoon&rt=1");
 			}else if((sw == 0x56) && (iVal > 0)){
 				// Auto-live
-				let studio = studioName.getValue();
+				let studio = studioName;
 				if(studio.length)
 					fetchContent("studio/"+studio+"?cmd=autolive&rt=1");
 			}else if((sw == 0x5d) && (iVal > 0)){
 				// auto-off
-				let studio = studioName.getValue();
+				let studio = studioName;
 				if(studio.length)
 					fetchContent("studio/"+studio+"?cmd=autooff&rt=1");
 			}else if((sw == 0x5c) && (iVal > 0)){
 				// Queue run
-				let studio = studioName.getValue();
+				let studio = studioName;
 				if(studio.length)
 					fetchContent("studio/"+studio+"?cmd=run&rt=1");
 			}else if((sw == 0x5f) && (iVal > 0)){
 				// Queue stop
-				let studio = studioName.getValue();
+				let studio = studioName;
 				if(studio.length)
 					fetchContent("studio/"+studio+"?cmd=halt&rt=1");
 			}else if((sw == 0x5e) && (iVal > 0)){
 				// seg now
-				let studio = studioName.getValue();
+				let studio = studioName;
 				if(studio.length)
 					fetchContent("studio/"+studio+"?cmd=segnow&rt=1");
 			}else if((sw == 0x28) && (iVal > 0))
@@ -218,22 +227,22 @@ function onMIDIRecv(message){
 				selectVpotMode(2);
 			else if((sw == 0x2e) && (iVal > 0)){
 				// Monitor down 0.5 dB
-				let studio = studioName.getValue();
+				let studio = studioName;
 				if(studio.length)
 					fetchContent("studio/"+studio+"?cmd=outvol Monitor d0.89125&rt=1");
 			}else if((sw == 0x2f) && (iVal > 0)){
 				// Monitor up 0.5dB
-				let studio = studioName.getValue();
+				let studio = studioName;
 				if(studio.length)
 					fetchContent("studio/"+studio+"?cmd=outvol Monitor d1.12202&rt=1");
 			}else if((sw == 0x30) && (iVal > 0)){
 				// Phones down 0.5dB
-				let studio = studioName.getValue();
+				let studio = studioName;
 				if(studio.length)
 					fetchContent("studio/"+studio+"?cmd=outvol Phones d0.89125&rt=1");
 			}else if((sw == 0x31) && (iVal > 0)){
 				// Phones up 0.5 dB
-				let studio = studioName.getValue();
+				let studio = studioName;
 				if(studio.length)
 					fetchContent("studio/"+studio+"?cmd=outvol Phones d1.12202&rt=1");
 			}
@@ -261,7 +270,7 @@ function onMIDIRecv(message){
 						iVal = 0.0;
 					if(iVal > dur)
 						iVal = dur;
-					let studio = studioName.getValue();
+					let studio = studioName;
 					if(studio.length){
 						fetchContent("studio/"+studio+"?cmd=pos "+(zone + (bank * pCount))+" "+iVal+"&rt=1");
 						studioStateCache.ins[zone + (bank * pCount)].pos = iVal;
@@ -276,7 +285,7 @@ function onMIDIRecv(message){
 					bal = 1.0;
 				if(bal < -1.0)
 					bal = -1.0;
-				let studio = studioName.getValue();
+				let studio = studioName;
 				if(studio.length){
 					fetchContent("studio/"+studio+"?cmd=bal "+(zone + (bank * pCount))+" "+bal+"&rt=1");
 					studioStateCache.ins[zone + (bank * pCount)].bal = bal;
@@ -302,7 +311,7 @@ function onMIDIRecv(message){
 				}else{
 					fVal = 0.0;
 				}
-				let studio = studioName.getValue();
+				let studio = studioName;
 				if(studio.length){
 					volIgn[zone] = 8; // ignore vol callbacks for 8 ticks
 					fetchContent("studio/"+studio+"?cmd=vol "+(zone + (bank * pCount))+" "+fVal+"&rt=1");
@@ -313,23 +322,26 @@ function onMIDIRecv(message){
 }
 
 function tick(){
-	let msg = new Array(3);
-	let i;
-	let base;
-	// This is a great place to send a "ping" to control surface, since this code gets executed every half second.
-	msg[0] = 0x90;
-	msg[1] = 0x00;
-	msg[2] = 0x00;
-	if(midiout)
+	if(midiout){
+		let msg = new Array(3);
+		let i;
+		let base;
+		// This is a great place to send a "ping" to control surface, since this code gets executed every half second.
+		msg[0] = 0x90;
+		msg[1] = 0x00;
+		msg[2] = 0x00;
 		midiout.send(msg);
-	base = bank * pCount;
-	for(i = 0; i < pCount; i++){
-		if(volIgn[i]){
-			volIgn[i] = volIgn[i] - 1;
-		}
-		if(vPotMode == 0){
-			let pos = studioStateCache.ins[base+i].pos;
-			showPPos(pos, i + base);
+		base = bank * pCount;
+		for(i = 0; i < pCount; i++){
+			if(volIgn[i]){
+				volIgn[i] = volIgn[i] - 1;
+			}
+			if(vPotMode == 0){
+				if(studioStateCache && studioStateCache.ins && studioStateCache.ins[base+i]){
+					let pos = studioStateCache.ins[base+i].pos;
+					showPPos(pos, i + base);
+				}
+			}
 		}
 	}
 }
@@ -611,6 +623,7 @@ function playersUpdate(){
 
 export {
 	initialize as init,
+	uninitialize as uninit,
 	tick as tick,
 	showAutoStat as setAutoStat,
 	showPPos as setPPos,

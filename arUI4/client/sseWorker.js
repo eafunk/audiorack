@@ -16,7 +16,7 @@ async function bcRcvMsg(event){
 		if((studioName == msg.value) && (stReqID == msg.who))
 			return;	// no change
 		stReqID = msg.who; // used to keep just one midi control in use
-		if(studioName = msg.value){
+		if(studioName != msg.value){
 			if(studioName && studioName.length){
 				await sseEventTypeUnreg(studioName);
 				await sseEventTypeUnreg("vu_"+studioName);
@@ -38,6 +38,9 @@ async function bcRcvMsg(event){
 onconnect = function(e){
 	let port = e.ports[0];
 	// set msg rx handler
+	if(!lastClientNumber)
+		// start up with no subscriptions (remove any still registered in web session)
+		removeListenersForAllSubscriptions();
 	lastClientNumber++;
 	port.onmessage = getMessage;
 	port.postMessage(lastClientNumber);
@@ -108,5 +111,15 @@ async function addListenersForAllSubscriptions(){
 			es.removeEventListener(entry, sseListener); // to prevent duplicate calls if already registered
 			es.addEventListener(entry, sseListener);
 		}
+	}
+}
+
+async function removeListenersForAllSubscriptions(){
+	let response = await fetch("/sseget");
+	if((response.status >= 200) && (response.status < 400)){
+		// sucess...
+		let data = await response.json();
+		for(const entry of data)
+			sseEventTypeUnreg(entry);
 	}
 }

@@ -1,5 +1,6 @@
 #!/bin/sh
 # shell script that will run a command and parameters IF IT IS NOT ALREAD RUNNING
+# and keep it running by re-running it if it exits with an error.
 # first parameter is the path to a lock file to prevent concurrent execution
 # subsequent parameters form the command to execute
 
@@ -9,5 +10,14 @@ if [ -f $1 ]; then
 fi
 echo $$ > $1
 shift
-eval "$@"
+
+result=1
+while [ $result -ne 0 ]; do
+	eval $@
+	result=$?
+	if [ $result -ne 0 ]; then
+  		sleep 1
+	fi
+done
+
 rm $pidfile

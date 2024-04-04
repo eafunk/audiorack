@@ -7049,7 +7049,6 @@ async function importSelectFiles(evt){
 var busmeters = [];
 var studioStateCache = {control: false, meta: {}, queue: [], queueRev: 0, queueSec: 0.0, queueDur: 0.0, logTime: 0, logs: [], live: [], ins: [], outs: [], encoders: {}, autoStat: 0, runStat: 0, chancnt: 0, buscnt: 0, outcnt: 0};
 var pTemplate;
-var midiAccess;
 
 /***** periodic all-studio-timers update tick and sync *****/
 setInterval('updateStudioTimers()', 500);
@@ -7169,7 +7168,7 @@ async function studioChangeCallback(value, who){
 	await refreshOutGroups();
 	if(who && (who == sseID))
 		// only the original sender of a studio change gets to implement the midi control surface
-		updateControlSurface();
+		updateControlSurface(false);
 	else
 		// otherwise we disable control surface for this context
 		updateControlSurface(true);
@@ -11616,7 +11615,8 @@ async function syncPlayers(studio){
 						}
 						// check for UI change update
 						let prev = studioStateCache.ins[n-1];
-						if((!prev && obj.status) || (prev.status != obj.status)){
+						if(!prev || (prev.status != obj.status)){
+//						if((!prev && obj.status) || (prev && (prev.status != obj.status))){
 							let player = document.getElementById("player" + (n-1));
 							if(obj.status == 0){
 								while(player.hasChildNodes())
@@ -11681,7 +11681,9 @@ async function syncPlayers(studio){
 								updatePlayerUI(obj);
 							}
 						}
-						studioStateCache.ins[n-1] = obj;
+						studioStateCache.ins[n-1] = obj;	
+						if(studioStateCache.control)
+							studioStateCache.control.setPStat(obj.status, n-1);
 					}
 					studioStateCache.queueSec = calcQueueTimeToNext(studioStateCache.queue);
 				}
@@ -11707,6 +11709,9 @@ function studioHandleNotice(data){
 		case "invol":			// player volume change, ref=input index, val=scalar volume
 			val = data.val;	// number
 			ref = data.num;
+			p = studioStateCache.ins[ref];
+			if(p)
+				p.vol = val;
 			if(studioStateCache.control)
 				studioStateCache.control.setPVol(val, ref);
 			updatePlayerFaderUI(val, ref);
@@ -11737,8 +11742,6 @@ function studioHandleNotice(data){
 		case "instat":			// input status change, ref=input index, val=status number
 			val = data.val;	// number
 			ref = data.num;
-			if(studioStateCache.control)
-				studioStateCache.control.setPStat(val, ref);
 //!! handle TB status too...
 			syncPlayers(studioName);
 			break;
@@ -11816,24 +11819,24 @@ async function stConsSend(){
 	}
 }
 
+var midiAccess;
+var midiDisable = true;
+
 async function updateControlSurface(clear){
-	if(clear){
-console.log("disabling midi use");
-		if(midiAccess){
-			delete midiAccess;
-			midiAccess = false;
-		}
-	}else{
-console.log("enabling midi use");
+	if(clear === true){
+		midiDisable = true;
+	}else if(clear === false){
 		if(!midiAccess){
 			if(navigator.requestMIDIAccess){
 				midiAccess = await navigator.requestMIDIAccess({sysex: false});
 				if(midiAccess)
-					midiAccess.onstatechange = updateControlSurface; // call this function when midi devices change
+					midiAccess.onstatechange = updateControlSurface; // call this function when midi devices changed
 			}
 		}
+		midiDisable = false;
 	}
-	if(midiAccess){
+	
+	if(midiAccess && !midiDisable){
 		let resp = await fetchContent("control");
 		if(resp && resp.ok){
 			let list = [];
@@ -11887,10 +11890,16 @@ console.log("enabling midi use");
 			alert("Failed to fetch control surface modules from the server.");
 		}
 	}else{
-		studioStateCache.midiList = false;
+		if(studioStateCache.control){
+			studioStateCache.control.uninit();
+			studioStateCache.control = false;
+		}
+		if(studioStateCache.midiList){
+			studioStateCache.midiList = false;
+		}
 		let element = document.getElementById("ctlsurf");
 		if(element){
-			if(clear)
+			if(midiAccess)
 				element.innerHTML = "<option value='' >Midi active on another window</option>";
 			else
 				element.innerHTML = "<option value='' >No Browser Midi Support</option>";
@@ -11918,16 +11927,18 @@ async function stContSurfChange(evt){
 async function selectControlSurface(entry){
 	// load module
 	if(entry){
-		let Module = await import('/control/'+entry.module);
-		if(entry.name != studioStateCache.midiName){
+		if(!studioStateCache.control || (entry.name != studioStateCache.midiName)){
+			let Module = await import('/control/'+entry.module);
 			if(Module){
 				setStorageMidiControl(entry.name);
 				studioStateCache.midiName = entry.name;
 				studioStateCache.control = Module;
 				Module.init(entry.input, entry.output);
 			}
-		}else
+		}else if(studioStateCache.control){
+			let Module = studioStateCache.control;
 			Module.init();	// already selected, just refresh controls to new studio
+		}
 	}else{
 		if(studioStateCache.midiName !== false){
 			studioStateCache.midiName = false;
@@ -11988,9 +11999,9 @@ function studioVuUpdate(data){
 				canv.setAttribute('height',128);
 				busvu.appendChild(canv);
 				busmeters.push(new vumeter(canv, {
-					"boxCount": 24,
-					"boxCountRed": 6,
-					"boxCountYellow": 5,
+					"boxCount": 32,
+					"boxCountRed": 9,
+					"boxCountYellow": 7,
 					"boxGapFraction": 0.25,
 					"max": 255,
 				}));
@@ -12020,9 +12031,9 @@ function studioVuUpdate(data){
 						canv.setAttribute('height',128);
 						vu.appendChild(canv);
 						vu.vumeters.push(new vumeter(canv, {
-							"boxCount": 24,
-							"boxCountRed": 6,
-							"boxCountYellow": 5,
+							"boxCount": 32,
+							"boxCountRed": 9,
+							"boxCountYellow": 7,
 							"boxGapFraction": 0.25,
 							"max": 255,
 						}));
@@ -12052,9 +12063,9 @@ function studioVuUpdate(data){
 						canv.setAttribute('class', 'rVUcanvas');
 						vu.appendChild(canv);
 						vu.vumeters.push(new vumeter(canv, {
-							"boxCount": 24,
-							"boxCountRed": 6,
-							"boxCountYellow": 5,
+							"boxCount": 32,
+							"boxCountRed": 9,
+							"boxCountYellow": 7,
 							"boxGapFraction": 0.25,
 							"max": 255,
 							"rotate": true
@@ -12074,17 +12085,6 @@ function studioVuUpdate(data){
 	}
 }
 
-/***** Studio MIDI Control/Worker/Messages functions *****/
-/* Workers do not currently support WebMIDI!
-const studioWorker = new SharedWorker("mcsWorker.js");
-studioWorker.port.onmessage = studioWorkerRx;
-studioWorker.port.postMessage("ping");
-
-function studioWorkerRx(evt){
-	console.log("from studioWorder:", evt.data);
-}
-*/
-
 /***** Server Side Events/Worker/Messages functions *****/
 
 const sseWorker = new SharedWorker("sseWorker.js");
@@ -12094,7 +12094,6 @@ sseWorker.port.onmessage = sseWorkerRx;
 function sseWorkerRx(evt){
 	// after connecting to the sseWorker, we get a serial number back, this is our ID
 	sseID = evt.data;
-	console.log("from sseWorker:", evt.data);
 }
 
 var sseMsgObj = new watchableValue({});

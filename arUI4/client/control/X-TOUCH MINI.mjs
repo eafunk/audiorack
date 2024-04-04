@@ -26,6 +26,15 @@ function initialize(inport, outport){
 	showAutoStat();
 }
 
+function uninitialize(){
+	if(midiin){
+		midiin.onmidimessage = null;
+		midiin = null;
+	}
+	if(midiout)
+		midiout = null;
+}
+
 function onMIDIRecv(message){
 	let zone;
 	let sw;
@@ -92,7 +101,7 @@ function onMIDIRecv(message){
 			}
 		}else if(((sw & 0xf8) == 0x20) && (iVal > 0)){
 			//cue button
-			let studio = studioName.getValue();
+			let studio = studioName;
 			let p = studioStateCache.ins[(zone + (bank * pCount))];
 			if(p && studio.length){
 				let bus = parseInt(p.bus, 16);
@@ -128,32 +137,32 @@ function onMIDIRecv(message){
 			}
 		}else if((sw == 0x57) && (iVal > 0)){
 			// Auto-on
-			let studio = studioName.getValue();
+			let studio = studioName;
 			if(studio.length)
 				fetchContent("studio/"+studio+"?cmd=autoon&rt=1");
 		}else if((sw == 0x58) && (iVal > 0)){
 			// Auto-live
-			let studio = studioName.getValue();
+			let studio = studioName;
 			if(studio.length)
 				fetchContent("studio/"+studio+"?cmd=autolive&rt=1");
 		}else if((sw == 0x5B) && (iVal > 0)){
 			// auto-off
-			let studio = studioName.getValue();
+			let studio = studioName;
 			if(studio.length)
 				fetchContent("studio/"+studio+"?cmd=autooff&rt=1");
 		}else if((sw == 0x5D) && (iVal > 0)){
-			// Queue run
-			let studio = studioName.getValue();
-			if(studio.length)
-				fetchContent("studio/"+studio+"?cmd=run&rt=1");
-		}else if((sw == 0x5E) && (iVal > 0)){
 			// Queue stop
-			let studio = studioName.getValue();
+			let studio = studioName;
 			if(studio.length)
 				fetchContent("studio/"+studio+"?cmd=halt&rt=1");
+		}else if((sw == 0x5E) && (iVal > 0)){
+			// Queue run
+			let studio = studioName;
+			if(studio.length)
+				fetchContent("studio/"+studio+"?cmd=run&rt=1");
 		}else if((sw == 0x5F) && (iVal > 0)){
 			// seg now
-			let studio = studioName.getValue();
+			let studio = studioName;
 			if(studio.length)
 				fetchContent("studio/"+studio+"?cmd=segnow&rt=1");
 		}
@@ -181,7 +190,7 @@ function onMIDIRecv(message){
 					iVal = 0.0;
 				if(iVal > dur)
 					iVal = dur;
-				let studio = studioName.getValue();
+				let studio = studioName;
 				if(studio.length){
 					fetchContent("studio/"+studio+"?cmd=pos "+(zone + (bank * pCount))+" "+iVal+"&rt=1");
 					studioStateCache.ins[zone + (bank * pCount)].pos = iVal;
@@ -195,7 +204,7 @@ function onMIDIRecv(message){
 				iVal = 10.0;
 			if(iVal < 0.0)
 				iVal = 0.0;
-			let studio = studioName.getValue();
+			let studio = studioName;
 			if(studio.length)
 				fetchContent("studio/"+studio+"?cmd=vol "+zone+" d"+iVal+"&rt=1");
 		}
@@ -208,40 +217,46 @@ function onMIDIRecv(message){
 		}else{
 			iVal = 0.0;
 		}
-		let studio = studioName.getValue();
+		let studio = studioName;
 		if(studio.length)
 			fetchContent("studio/"+studio+"?cmd=outvol Monitor "+iVal+"&rt=1");
 	}
 }
 
 function tick(){
-	let msg = new Array(3);
-	let i;
-	let base = bank * pCount;
-	blink++;
-	if(blink > 1)
-		blink = 0;
-	for(let i = 0; i < pCount; i++){
-		if(cue[i]){
-			// chan in cue mode.. vPot shows position, on light blinks
-			msg[0] = 0x90;
-			if(i<2)
-				msg[1] = i + 0x59;
-			else 
-				msg[1] = i + 0x26;
-			if(blink)
-				msg[2] = 0x7f;
-			else
-				msg[2] = 0x00;
-			if(midiout)
+	if(midiout){
+		let msg = new Array(3);
+		let i;
+		let base = bank * pCount;
+		blink++;
+		if(blink > 1)
+			blink = 0;
+		for(let i = 0; i < pCount; i++){
+			if(cue[i]){
+				// chan in cue mode.. vPot shows position, on light blinks
+				msg[0] = 0x90;
+				if(i<2)
+					msg[1] = i + 0x59;
+				else 
+					msg[1] = i + 0x26;
+				if(blink)
+					msg[2] = 0x7f;
+				else
+					msg[2] = 0x00;
+				
 				midiout.send(msg);
-			// update position display
-			let pos = studioStateCache.ins[base+i].pos;
-			showPPos(pos, base+i);
-		}else{
-			// update status display
-			let stat = studioStateCache.ins[base+i].status;
-			showPStat(stat, base+i);
+				// update position display
+				if(studioStateCache && studioStateCache.ins && studioStateCache.ins[base+i]){
+					let pos = studioStateCache.ins[base+i].pos;
+					showPPos(pos, base+i);
+				}
+			}/*else{
+				// update status display
+				if(studioStateCache && studioStateCache.ins && studioStateCache.ins[base+i]){
+					let stat = studioStateCache.ins[base+i].status;
+					showPStat(stat, base+i);
+				}
+			}*/
 		}
 	}
 }
@@ -299,11 +314,11 @@ function showAutoStat(){
 	if(studioStateCache.runStat){
 		msg[0] = 0x90;
 		msg[1] = 0x5d;
-		msg[2] = 0x7f;
+		msg[2] = 0x00;
 		if(midiout)
 			midiout.send(msg);
 		msg[1] = 0x5e;
-		msg[2] = 0x00;
+		msg[2] = 0x7f;
 		if(midiout)
 			midiout.send(msg);
 		msg[1] = 0x5f;
@@ -313,11 +328,11 @@ function showAutoStat(){
 	}else{
 		msg[0] = 0x90;
 		msg[1] = 0x5d;
-		msg[2] = 0x00;
+		msg[2] = 0x7f;
 		if(midiout)
 			midiout.send(msg);
 		msg[1] = 0x5e;
-		msg[2] = 0x7f;
+		msg[2] = 0x00;
 		if(midiout)
 			midiout.send(msg);
 		msg[1] = 0x5f;
@@ -373,7 +388,7 @@ function showPStat(val, ref){
 			msg[2] = 0x00;
 		if(midiout)
 			midiout.send(msg);
-			if(val == 0){
+		if(!val){
 			// clear Vpot
 			msg[0] = 0xb0;
 			msg[1] = 0x30 + i;
@@ -411,6 +426,7 @@ function showPBal(val, ref){
 }
 
 function showPVol(val, ref){
+console.log("showPVol:", val, ref);
 	let msg = new Array(3);
 	ref = parseInt(ref);
 	if(val === undefined)
@@ -455,6 +471,7 @@ function playersUpdate(){
 
 export {
 	initialize as init,
+	uninitialize as uninit,
 	tick as tick,
 	showAutoStat as setAutoStat,
 	showPPos as setPPos,
