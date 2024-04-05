@@ -235,13 +235,13 @@ footer {
 	grid-template-rows: 17px 17px 17px;
 }
 
-@media (min-width: 1640px) {
+@media (min-width: 1485px) {
 	.stGrid {
 		grid-template-areas: 
 			"status outs accord"
 			"queue ins accord"
 			"queue admin accord";
-		grid-template-columns: 1fr 584px 390px;
+		grid-template-columns: 1fr 584px 264px;
 		grid-template-rows: 150px 329px 355px;
 	}
 	
@@ -712,7 +712,7 @@ button.active {
 	justify-content: center;
 	align-items: center;
 	height: 40px; 
-	width: 180px; 
+	width: 250px; 
 	background-color: LightGray;
 }
 

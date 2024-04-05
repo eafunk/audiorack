@@ -68,9 +68,10 @@ var bc = new BroadcastChannel("arUIBroadcastChannel");
 
 /***** Utility functions *****/
 
+addEventListener("storage", loadStashRecallOnLoad);
+
 function setStash(list){
 	localStorage.setItem("stash", JSON.stringify(list));
-	bc.postMessage({type:"stashChange"});
 }
 
 function getStash(){
@@ -177,7 +178,7 @@ function timeFormat(timesec, noDP){
 			else
 				result += ":";
 		}
-		if(hrs){
+		if(hrs || days){
 			result += hrs;
 			if(mins < 10)
 				result += ":0";
@@ -1678,7 +1679,13 @@ function setCheckedHTML(val){
 	return "";
 }
 
-function loadStashRecallOnLoad(){
+function loadStashRecallOnLoad(evt){
+	if(evt){
+		if(evt.storageArea != localStorage)
+			return;
+		if(evt.key != "stash")
+			return;
+	}
 	stashList = getStash();
 	if(!stashList)
 		stashList = [];
@@ -1836,8 +1843,12 @@ function stashUnselectAll(evt){
 	let list = document.getElementById("stashlist");
 	let els = list.querySelectorAll('input[type=checkbox]:checked');
 	if(els){
-		for(let i=0; i<els.length; i++)
+		for(let i=0; i<els.length; i++){
 			els[i].checked = false;
+			let idx = els[i].parentNode.parentNode.getAttribute("data-idx");
+			stashList[idx].selected = false;
+		}
+		setStash(stashList);
 		updateStashDuration();
 	}
 }
@@ -1848,10 +1859,15 @@ function stashSelectAll(evt){
 	let list = document.getElementById("stashlist");
 	let els = list.querySelectorAll('input[type=checkbox]:not(:checked)');
 	if(els){
-		for(let i=0; i<els.length; i++)
+		for(let i=0; i<els.length; i++){
 			els[i].checked = true;
+			let idx = els[i].parentNode.parentNode.getAttribute("data-idx");
+			stashList[idx].selected = true;
+		}
+		setStash(stashList);
 		updateStashDuration();
 	}
+	
 }
 
 async function stashToQueue(evt){
@@ -3014,7 +3030,7 @@ async function saveEncProperties(evt){
 	if(!itemProps.canEdit)
 		return;
 	let ref = itemProps.UID;
-	if(ref && studioName & studioName.length){
+	if(ref && studioName && studioName.length){
 		let hexStr =  ("00000000" + ref.toString(16)).substr(-8);
 		for(let i = 0 ; i < form.length ; i++){
 			let el = form[i];
@@ -12240,9 +12256,7 @@ document.onclick = function(event){
 
 function bcRcvMsg(event){
 	let msg = event.data;
-	if(msg.type == "stashChange")
-		loadStashRecallOnLoad();
-	else if(msg.type == "sse"){
+	if(msg.type == "sse"){
 		sseListener(msg);
 		return;
 	}
