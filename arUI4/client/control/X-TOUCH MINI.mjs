@@ -250,13 +250,7 @@ function tick(){
 					let pos = studioStateCache.ins[base+i].pos;
 					showPPos(pos, base+i);
 				}
-			}/*else{
-				// update status display
-				if(studioStateCache && studioStateCache.ins && studioStateCache.ins[base+i]){
-					let stat = studioStateCache.ins[base+i].status;
-					showPStat(stat, base+i);
-				}
-			}*/
+			}
 		}
 	}
 }

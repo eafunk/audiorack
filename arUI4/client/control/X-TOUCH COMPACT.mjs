@@ -327,9 +327,9 @@ function tick(){
 		let i;
 		let base;
 		// This is a great place to send a "ping" to control surface, since this code gets executed every half second.
-		msg[0] = 0x90;
+		msg[0] = 0x9F;
 		msg[1] = 0x00;
-		msg[2] = 0x00;
+		msg[2] = 0x7F;
 		midiout.send(msg);
 		base = bank * pCount;
 		for(i = 0; i < pCount; i++){

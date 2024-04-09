@@ -566,6 +566,20 @@ function clickAccordType(evt, cb, param){
 	}
 }
 
+function closeAccordTypeChildren(div){
+	// close all syblings
+	let els = div.getElementsByClassName("accordion");
+	for(let i = 0; i < els.length; i++){
+		let sib = els[i];
+		if(sib.classList.contains("active")){
+			sib.classList.remove("active");
+			let sibpanel = sib.nextElementSibling;
+			if(sibpanel.style.display === "flex")
+				sibpanel.style.display = "none";
+		}
+	}
+}
+
 function selectAccordType(evt, cb, param){
 	// Open target, close syblings
 	let target = evt.target;
@@ -908,7 +922,7 @@ function showTabElement(el, id, pass){
 
 function externalSelectStudio(studio){
 	if(studio == studioName)
-		return;
+		return true;
 	let el;
 	let active = false;
 	let els = document.getElementById("studiodiv");
@@ -3965,7 +3979,7 @@ async function reloadItemSection(el, type){
 		else
 			inner += " readonly></input><br>";
 		if(itemProps.ID /*|| ((itemProps.Type !== "file") && (itemProps.Type !== "playlist"))*/){
-			inner += "Tag: <input type='text' size='45' name='Tag'";
+			inner += "Comment: <input type='text' size='45' name='Tag'";
 			if(itemProps.Tag)
 				inner += " value='"+quoteattr(itemProps.Tag)+"'";
 			if(itemProps.canEdit)
@@ -7167,21 +7181,29 @@ async function setLibUsingStudio(){
 }
 
 async function studioChangeCallback(value, who){
-	externalSelectStudio(value);
-	studioName = value;
-	// clear existing VU meters - new vu data will repopulate meters
-	let busvu = document.getElementById('studioOutsVU');
-	while(busvu.firstChild)
-		busvu.removeChild(busvu.firstChild);
-	sseData = {};
-	busmeters = [];
-	newCache = {meta: {}, queueRev: -1, queueSec: 0.0, queueDur: 0.0, logTime: 0, logs: [], live: [], ins: [], outs: [], encoders: [], runStat: 0, autoStat: 0, chancnt: 0, buscnt: 0, outcnt: 0};
-	studioStateCache = {...studioStateCache, ...newCache};
-	await getServerInfo(value);
-	await syncStudioMetalist(value);
-	await syncStudioStat(value);
-	await syncPlayers(value);
-	await refreshOutGroups();
+	if(!externalSelectStudio(value)){
+		// name value has changed
+		studioName = value;
+		// clear existing VU meters - new vu data will repopulate meters
+		let busvu = document.getElementById('studioOutsVU');
+		while(busvu.firstChild)
+			busvu.removeChild(busvu.firstChild);
+		sseData = {};
+		busmeters = [];
+		newCache = {meta: {}, queueRev: -1, queueSec: 0.0, queueDur: 0.0, logTime: 0, logs: [], live: [], ins: [], outs: [], encoders: [], runStat: 0, autoStat: 0, chancnt: 0, buscnt: 0, outcnt: 0};
+		studioStateCache = {...studioStateCache, ...newCache};
+		await getServerInfo(value);
+		await syncStudioMetalist(value);
+		await syncStudioStat(value);
+		await syncPlayers(value);
+		await refreshOutGroups();
+		// close right tabs
+		let div = document.getElementById('studioSide');
+		if(div)
+			div = div.firstElementChild;
+		if(div)
+			closeAccordTypeChildren(div)
+	}
 	if(who && (who == sseID))
 		// only the original sender of a studio change gets to implement the midi control surface
 		updateControlSurface(false);
@@ -10263,6 +10285,8 @@ function queueItemCheckAction(evt){
 		else
 			item.chkd = "";
 	}
+	// notify other windows/tabs
+	queueCheckChange();
 }
 
 function queueSelectAll(evt){
@@ -10282,6 +10306,8 @@ function queueSelectAll(evt){
 			}
 		}
 	}
+	// notify other windows/tabs
+	queueCheckChange();
 }
 
 function queueUnselectAll(evt){
@@ -10298,6 +10324,44 @@ function queueUnselectAll(evt){
 			if(item){
 				// make persistent accross queue list updates
 				item.chkd = "";
+			}
+		}
+	}
+	// notify other windows/tabs
+	queueCheckChange();
+}
+
+function queueCheckChange(){
+	let selArray = [];
+	let rows = document.getElementById("stQlist").childNodes;
+	for(let i=0; i<rows.length; i++){
+		let sel = rows[i].childNodes[0].childNodes[0];	// checkbox
+		if(sel.checked){
+			let item = rows[i];
+			let ref = item.getAttribute("data-idx");
+			if(ref)
+				selArray.push(ref);
+		}
+	}
+	bc.postMessage({type:"stQselChange", value:{studio: studioName, sellist:selArray}});
+}
+
+function queueUpdateSelToUidList(list){
+	let rows = document.getElementById("stQlist").childNodes;
+	for(let i=0; i<rows.length; i++){
+		let item = rows[i];
+		let sel = item.childNodes[0].childNodes[0];	// checkbox
+		let ref = item.getAttribute("data-idx");
+		if(ref){
+			item = studioStateCache.meta[ref];
+			if(list.includes(ref)){
+				sel.checked = true;
+				if(item)
+					item.chkd = "checked";
+			}else{
+				sel.checked = false;
+				if(item)
+					item.chkd = "";
 			}
 		}
 	}
@@ -12264,7 +12328,13 @@ function bcRcvMsg(event){
 		studioChangeCallback(msg.value, msg.who);
 	else if(msg.type == "authChange")
 		startupContent(msg.value);
-	else
+	else if(msg.type == "stQselChange"){
+		if(studioName == msg.value.studio){
+			let selUIDs = msg.value.sellist;
+			if(selUIDs)
+				queueUpdateSelToUidList(selUIDs);
+		}
+	}else
 		console.log("bcrx:",msg);
 }
 
