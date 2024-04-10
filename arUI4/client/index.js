@@ -1790,7 +1790,7 @@ function appendItemToStash(item){
 	let index = stashList.length -1;
 	setStash(stashList);
 	let el = document.getElementById("stashlist");
-	let format = `<span style='float: left;'><input type='checkbox'></input></span>
+	let format = `<span style='float: left;'><input type='checkbox' onchange='updateStashDuration(event)'></input></span>
 						<span style='float: right;'>$Duration->timeFormat$ <button class="editbutton" onclick="stashItemInfo(event)">i</button></span>
 						<div style='clear:both;'></div>
 						<span style='float: left;'>$Name$</span><span style='float: right;'>$StashType$</span><div style='clear:both;'></div>

@@ -1291,7 +1291,7 @@ app.get('/sserem/\*', function(req, res){
 			if(dirs[2].length){
 				let i = client.registered.indexOf(dirs[2]);
 				if(i > -1){
-					client.registered.splice(i,i);
+					client.registered.splice(i,1);
 					res.status(200);
 					res.end("Removed");
 				}else{

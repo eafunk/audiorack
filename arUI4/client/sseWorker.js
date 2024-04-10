@@ -31,6 +31,7 @@ async function bcRcvMsg(event){
 	}
 	if(msg.type == "authChange"){
 		cred = msg.value;
+		studioName = false;
 		await sseSetup();
 	}
 }

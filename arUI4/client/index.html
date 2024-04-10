@@ -45,7 +45,6 @@
  DEALINGS IN THE SOFTWARE.</p>
 			</div>
 			<div id="stash" class="tabcontent">
-				<h2>Local Stash</h2>
 				<span style='float: left;'>Total/Selected Duration:</span><span id='stashdur' style='float: right;'></span><div style='clear:both;'></div><p>
 				<button onclick="stashSelectAll(event)">Selected all</button>
 				<button onclick="stashUnselectAll(event)">Unselect all</button><br>
@@ -56,7 +55,6 @@
 			</div>
 			<div id="files" class="tabcontent">
 				<div class="scroll">
-					<h2>Temporary Files</h2>
 					<div class="boxed">
 						<h3>Upload Files to Temporary Media Directory</h3>
 						<form id="uploadform" enctype="multipart/form-data">
@@ -118,7 +116,6 @@
 				</form>
 			</div>
 			<div id="browse" class="tabcontent">
-				<h2>Browse Library</h2>
 				<label for="bmatch" style="float: left" >Contains:
 					<input type="search" id="bmatch" name="match" onchange="browseQuery(event)" placeholder="Enter Text..."> 
 				</label>
@@ -135,7 +132,6 @@
 				</div>
 			</div>
 			<div id="schedule" class="tabcontent">
-				<h2>Schedule</h2>
 				<div>
 					<button class="editbutton" onclick="loadSchedule()">Reload</button>
 					Date: <input type='date' id='scheddatesel' name='scheddate' value='' onchange='loadSchedule()'></input>
@@ -146,7 +142,6 @@
 				</div>
 			</div>
 			<div id="logs" class="tabcontent">
-				<h2>Logs</h2>
 				<div>
 					Date: <input type='date' id='logdatesel' name='logdate' value='' onchange='loadLogs()'></input><button class="editbutton" onclick="logNowBtn()">Now</button>
 				</div>
@@ -165,7 +160,6 @@
 				</div>
 			</div>
 			<div id="query" class="tabcontent">
-				<h2>Custom Queries</h2>
 				<table>
 					<tr>
 						<td>
@@ -190,7 +184,6 @@
 				<div style="padding: 5px;"><button onclick="exportTableToCSV(event, 'CustomQueryResult.csv')">download CSV</button></div>
 			</div>
 			<div id="libmanage" class="tabcontent">
-				<h2>Manage Database</h2>
 				<div class="scroll">
 					<div id="dbinit" class="boxed">
 						<h3>Initialize/Update Library Database</h3>
@@ -364,7 +357,6 @@
 				</div>
 			</div>
 			<div id="configure" class="tabcontent">
-				<h2>UI Configuration</h2>
 				<div class="scroll">
 					<button class="accordion" onclick="clickAccordType(event, reloadConfSection, 'users')">User Settings</button>
 					<div class="accpanel">
@@ -384,23 +376,18 @@
 				</div>
 			</div>
 			<div id="cust" class="tabcontent">
-				<h2>Ad Customers</h2>
 				<p>Radio is fun...</p>
 			</div>
 			<div id="campaign" class="tabcontent">
-				<h2>Ad Campaigns</h2>
 				<p>Radio is fun...</p>
 			</div>
 			<div id="invoice" class="tabcontent">
-				<h2>Ad Invoices</h2>
 				<p>Radio is fun...</p>
 			</div>
 			<div id="trafsched" class="tabcontent">
-				<h2>Ad Schedule</h2>
 				<p>Radio is fun...</p>
 			</div>
 			<div id="trafdp" class="tabcontent">
-				<h2>Ad Dayparts</h2>
 				<p>Radio is fun...</p>
 			</div>
 		</div>

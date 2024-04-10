@@ -341,7 +341,7 @@ footer {
 	display: none;
 	background-color: #ccc;
 	float: left;
-	padding: 0px 12px;
+	padding: 5px 10px;
 	text-align: center;
 	align-items: stretch;
 	animation: fadeEffect 1s; /* Fading effect takes 1 second */
@@ -552,7 +552,7 @@ textarea {
 	flex-flow: row;
 	padding: 10px;
 	width: 100%;
-	height: 100%;
+	height: calc(100% - 20px);
 }
 
 .tablecont {
