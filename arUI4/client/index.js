@@ -10100,10 +10100,10 @@ async function syncStudioStat(studio){
 					let value = fields[1];
 					if(key == "ListRev"){
 						value =  parseInt(value);
-						if(studioStateCache.queueRev != value){
+						if(studioStateCache.queueRev < value){
 							// queue (list) has changed... issue list command to handle changes
-							syncQueue(studio, value);
 							studioStateCache.queueRev = value;
+							syncQueue(studio, value);
 						}
 						let el = document.getElementById("stRun");
 						// update Queue Run/Halt button

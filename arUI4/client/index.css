@@ -552,7 +552,7 @@ textarea {
 	flex-flow: row;
 	padding: 10px;
 	width: 100%;
-	height: calc(100% - 20px);
+	height: calc(100% - 45px);
 }
 
 .tablecont {
