@@ -77,7 +77,7 @@ extern "C"
 #define cType_MASK		0x0f
 #define cType_tags		0	// tags - data is counted json string of track tags
 #define cType_pos			1	// position - data is a float (seconds)
-#define cType_start		2	// start - data is empty	
+#define cType_start		2	// start - data is empty
 #define cType_stop		3	// stop - data is empty
 #define cType_end			4	// reached media end - data is empty.  Closes recorder
 #define cType_anc			5	// anounce (recorder) - data is json collection of recorder settings.
@@ -89,11 +89,25 @@ extern "C"
 #define cType_unlock		11	// set recorder to unlocked - data is empty
 #define cType_posack		12	// arServer acknowlage of pos change back to a player - data is empty
 
+typedef struct __attribute__((packed)){
+						/* Structure of contol packet: used to control/communicate with recorders and players
+						 * NOTE: packets passed as midi data via jackaudio midi API, even though the data format
+						 * is not midi.  Jack is fine with this, but don't try to connect the arserver control midi
+						 * ports to other applications that are expecting actual midi data. */
+	uint8_t			sysExFlag;
+	uint8_t			topBits;
+	uint8_t			type;
+	uint32_t			peer;		// network byte order - player input number [0,N] or recorder UID.
+	uint16_t			dataSize;	// network byte order - size, in bytes, of the raw data prior to 7 bit endoding, if any.
+	int8_t			data[1];	// network byte order or text.  Text need NOT to be null terminated
+									// due to the size (length) specified above.
+} controlPacket;
+
 typedef struct {
 		void *next;			// next record in list, or NULL for end
-        struct tm when;
-        char *message;
-}ServerLogRecord;
+		struct tm when;
+		char *message;
+} ServerLogRecord;
 
 typedef struct {
 		void *next;			// next record in list, or NULL for end
@@ -115,7 +129,7 @@ typedef struct {
 		unsigned char added;
 		unsigned char played;
 		unsigned char post;
-}ProgramLogRecord;
+} ProgramLogRecord;
 
 extern time_t logChangeTime;
 extern uint32_t	log_busses;
@@ -138,6 +152,10 @@ void programLogMakeEntry(ProgramLogRecord *entry);
 void programLogUIDEntry(uint32_t passUID, unsigned char Added, unsigned char Played);
 
 unsigned char queueControlOutPacket(mixEngineRecPtr mixRef, char type, uint32_t peer, size_t size, char *data);
+
+uint16_t controlDataSizeFromRaw(uint16_t byteCount);
+unsigned char decodeControlPacket(controlPacket *packet, char headerOnly);
+char *encodeControlPacket(controlPacket *header, char *data, uint16_t *size, char *extraPtr);
 
 #ifdef __cplusplus
 }

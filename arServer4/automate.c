@@ -91,7 +91,7 @@ void shutdownAutomator(void){
 		}
 	}	
 	pthread_rwlock_unlock(&queueLock);
-
+	
 	free(fillStr);
 	
 	pthread_mutex_destroy(&mgrMutex);
@@ -142,7 +142,7 @@ uint32_t AddItem(int pos, char *URLstr, char *adder, uint32_t adderUID){
 				appendNode((LinkedListEntry *)&queueList, (LinkedListEntry *)instance);
 		}
 		pthread_rwlock_unlock(&queueLock);
-
+		
 		tmp = GetMetaData(newID, "Type", 0);
 		if(!strcmp(tmp, "task")){
 			// try running the task
@@ -162,7 +162,7 @@ uint32_t AddItem(int pos, char *URLstr, char *adder, uint32_t adderUID){
 		
 		// create program log entry of added item
 		programLogUIDEntry(newID, 1, 0);
-
+		
 		// send out notifications
 		notifyData	data;
 		data.reference = 0;
@@ -176,12 +176,12 @@ uint32_t AddItem(int pos, char *URLstr, char *adder, uint32_t adderUID){
 		releaseMetaRecord(newID);
 		return 0;
 	}
-    return newID;
+	return newID;
 }
 
 void AddPlayer(int pos, int pNum){    
 	// assumes queueLock is NOT locked!
-
+	
 	inChannel *instance;
 	queueRecord *rec, *prev;
 	
@@ -190,7 +190,7 @@ void AddPlayer(int pos, int pNum){
 	}else
 		// invalid player number
 		return;
-
+		
 	pthread_rwlock_rdlock(&queueLock);
 	if(!instance->UID || findNode((LinkedListEntry *)&queueList, instance->UID, NULL, NULL)){
 		// player's UID was found in the list already... bail out
@@ -214,16 +214,16 @@ void AddPlayer(int pos, int pNum){
 				appendNode((LinkedListEntry *)&queueList, (LinkedListEntry *)rec);
 		}
 		pthread_rwlock_unlock(&queueLock);
-
+		
 		// clear needed status flags
 		instance->status = instance->status & ~status_hasPlayed;
 		instance->status = instance->status & ~status_logged;
 		
 		plRev++;
-
+		
 		// create program log entry of added item
 		programLogUIDEntry(instance->UID, 1, 0);
-
+		
 		// send out notifications
 		notifyData	data;
 		data.reference = 0;
@@ -232,12 +232,12 @@ void AddPlayer(int pos, int pNum){
 		notifyMakeEntry(nType_status, &data, sizeof(data));
 		data.reference = htonl(instance->UID);
 		notifyMakeEntry(nType_mstat, &data, sizeof(data));
-    }
+	}
 }
 
 uint32_t SplitItem(uint32_t parent, char *URLstr, unsigned char last){    
 	// assumes queueLock is NOT locked!
-
+	
 	queueRecord *instance, *parentNode;
 	LinkedListEntry *prevNode;
 	uint32_t newID;
@@ -248,7 +248,7 @@ uint32_t SplitItem(uint32_t parent, char *URLstr, unsigned char last){
 	newID = createMetaRecord(URLstr, NULL, 0);
 	// fill the metadata record
 	GetURLMetaData(newID, URLstr);
-
+	
 	pthread_rwlock_wrlock(&queueLock);
 	if(parentNode = (queueRecord *)findNode((LinkedListEntry *)&queueList, parent, NULL, &prevNode)){
 		if(instance = createQueueRecord(newID)){
@@ -298,7 +298,7 @@ uint32_t SplitItem(uint32_t parent, char *URLstr, unsigned char last){
 			if(atoi(tmp = GetMetaData(parent, "NoLog", 0)))
 				SetMetaData(newID, "NoLog", tmp);
 			free(tmp);
-
+			
 			// parent gets/looses it's priority to the child
 			SetMetaData(newID, "Priority", (tmp = GetMetaData(parent, "Priority", 0)));
 			free(tmp);
@@ -324,7 +324,7 @@ uint32_t SplitItem(uint32_t parent, char *URLstr, unsigned char last){
 				SetMetaData(parent, "Duration", tmp);
 				free(tmp);
 			}
-
+			
 			tmp = GetMetaData(newID, "Type", 0);
 			if(!strcmp(tmp, "task")){
 				// try running the task
@@ -352,7 +352,7 @@ uint32_t SplitItem(uint32_t parent, char *URLstr, unsigned char last){
 			
 			// create program log entry of added item
 			programLogUIDEntry(newID, 1, 0);
-
+			
 			// send out notifications
 			notifyData	data;
 			data.reference = 0;
@@ -387,7 +387,7 @@ int LoadItem(int pos, queueRecord *qrec){
 	inChannel *instance;
 	int i;
 	char *tmp;
-
+	
 	if(!qrec){
 		// use index to find record
 		if(pos < 1)
@@ -397,7 +397,7 @@ int LoadItem(int pos, queueRecord *qrec){
 /* char debugtxt[128];
 snprintf(debugtxt, sizeof debugtxt, "[debug] automate:LoadItem - pos=%d, stat=%d, player+1=%d, UID=%08x", pos, qrec->status, qrec->player, qrec->UID);
 serverLogMakeEntry(debugtxt); */
-
+		
 		if(!qrec)
 			return -2; // missing delete
 	}
@@ -415,7 +415,7 @@ serverLogMakeEntry(debugtxt); */
 	if(!qrec->UID)
 		// No meta Data to base load on...
 		return -2;  //delete
-    
+	
 	tmp = GetMetaData(qrec->UID, "Type", 0);
 	if(!strcmp(tmp, "stop")){
 		// it's a playlist stop item... don't do anything!
@@ -428,7 +428,7 @@ serverLogMakeEntry(debugtxt); */
 		return -3;  //don't delete
 	}
 	free(tmp);
-
+	
 	// load player
 	tmp = GetMetaData(qrec->UID, "URL", 0);
 	i = -1;  // load from next available player
@@ -474,11 +474,11 @@ serverLogMakeEntry(debugtxt); */
 
 void UnloadItem(int pos, queueRecord *qrec){    
 	// assumes queueLock is alread write locked!
-
+	
 	uint32_t c, cmax;
 	inChannel *instance;
 	jack_port_t **port;
-
+	
 	if(!qrec){
 		// use index to find record
 		if(pos < 0)
@@ -487,7 +487,7 @@ void UnloadItem(int pos, queueRecord *qrec){
 		if(!qrec)
 			return;
 	}
-
+	
 	if(checkPnumber(qrec->player-1)){
 		instance = &mixEngine->ins[qrec->player-1];
 		if(!instance->managed || (instance->status & status_playing))
@@ -512,18 +512,18 @@ void UnloadItem(int pos, queueRecord *qrec){
 
 void MoveItem(int sourcePos, int destPos, unsigned char clearTimes){    
 	// assumes queueLock is alread write locked!
-
+	
 	LinkedListEntry *fromRec, *toRec;
 	queueRecord *rec;
 	uint32_t UID;
 	inChannel *instance;
-    
+	
 	if(sourcePos < 0)
 		return;
-     
+		
 	if(sourcePos == destPos)
 		return;
-        
+		
 	fromRec = getNthNode((LinkedListEntry *)&queueList, sourcePos+1);
 	if(!fromRec)
 		return;
@@ -555,7 +555,7 @@ void MoveItem(int sourcePos, int destPos, unsigned char clearTimes){
 			UnloadItem(destPos, NULL);
 		}
 		plRev++;  // new rev number since the list changed 
-
+		
 		if(clearTimes){
 			if(UID = rec->UID){
 				// clear all scheduled time properties
@@ -576,7 +576,7 @@ void setSegTimes(inChannel *thisp, inChannel *nextp, int nextNum){
 		return;
 	if(nextp == NULL)
 		return;  
-        
+		
 	// NOTE: Negative number forces imediate segue.
 	
 	// set seg level
@@ -617,7 +617,7 @@ void setSegTimes(inChannel *thisp, inChannel *nextp, int nextNum){
 	segoutT = segoutT - seginT;
 	if(segoutT < 0.0) 
 		segoutT = 0.0;
-
+		
 	n_priority = GetMetaInt(nextp->UID, "Priority", NULL);
 	t_priority = GetMetaInt(thisp->UID, "Priority", NULL);
 	if((n_priority > 9) && (t_priority < n_priority)){ // priority 10 or higher forces fade into next at exact time
@@ -640,7 +640,7 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 	double targetTime, dur;
 	unsigned char force;
 	char *tmp, *type;
-
+	
 	*firstp = -1;
 	force = 0;
 	next = NULL;
@@ -656,7 +656,7 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 		if(!strcmp(tmp, "stop")){
 			// it's a playlist stop item... stop the playlist and delete it!
 			plRunning = 0;
-			releaseQueueRecord((queueRecord	*)&queueList, instance, 0);
+			releaseQueueRecord((queueRecord *)&queueList, instance, 0);
 			// send out notifications
 			notifyData	data;
 			data.reference = 0;
@@ -703,7 +703,7 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 //				*sbtime = 0;
 		}
 	}
-
+	
 	if(!instance->player){
 		// Not in a player... load the item if needed
 		if(force || (*sbtime < 60)){
@@ -775,7 +775,7 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 	}
 	
 	NextListItem(status, instance, &nextp, sbtime, remtime, isPlaying);
-
+	
 	type = GetMetaData(instance->UID, "Type", 0);
 	if(!strcmp(type, "task")){
 		// If this is a task, skip it... use the the next returned current player as the returned current player 
@@ -837,7 +837,7 @@ void watchdogReset(void){
 		int m = c + mixEngine->chanCount;
 		for(; c < m; c++)
 			sum += mixEngine->mixbuses->VUmeters[c].peak;
-
+			
 		if(sum < silent_thresh){
 			if((difftime(time(NULL), silent_event) > silent_timeout)){
 				silent_event = time(NULL); // we are about to handle this. Reset timer so we don't handle over and over again
@@ -887,7 +887,7 @@ void watchdogReset(void){
 						return;	// silence.fault script take precidence over default action
 					}
 					free(triggerDir);
-
+					
 					sleep(5);	// wait 5 seconds for log entry to be made
 					write(STDOUT_FILENO, "#", 1);
 					return;
@@ -915,9 +915,9 @@ void SchedulerInserter(time_t *lastSchedTime, unsigned char highOnly){
 	time_t endTime, firstTime, target, lastTarget;
 	struct tm lastTimeRec, endTimeRec;
 	char *tmp;
-
+	
 	listSize = queueCount();
-
+	
 	// update end time estimates
 	pthread_rwlock_rdlock(&queueLock);
 	UpdateQueueEndTimes(0);
@@ -942,7 +942,7 @@ void SchedulerInserter(time_t *lastSchedTime, unsigned char highOnly){
 		*lastSchedTime = endTime;
 	if(*lastSchedTime < firstTime)
 		*lastSchedTime = firstTime;
-
+	
 	priority = 0;
 	target = -1;
 	lastTarget = -1;
@@ -990,7 +990,7 @@ void PlayListFiller(uint32_t *lastFillID, int *listPos){
 	struct tm timeRec;
 	char *url, *type, *tmp;
 	unsigned char err;
-
+	
 	url = NULL;
 	taskCount = 0;
 	pthread_rwlock_rdlock(&taskLock);
@@ -1032,7 +1032,7 @@ void PlayListFiller(uint32_t *lastFillID, int *listPos){
 	if(endTime == 0)
 		endTime = time(NULL);
 	pthread_rwlock_unlock(&queueLock);
-
+	
 	// playlist filling is enabled
 	fillTime = endTime;
 	if(ID = dbGetFillID(&fillTime)){
@@ -1046,7 +1046,7 @@ void PlayListFiller(uint32_t *lastFillID, int *listPos){
 			pthread_rwlock_unlock(&queueLock);
 			free(tmp);
 		}
-
+		
 		// check item type
 		str_setstr(&url, "item:///");
 		tmp = ustr(ID);
@@ -1056,7 +1056,7 @@ void PlayListFiller(uint32_t *lastFillID, int *listPos){
 		localUID = createMetaRecord(url, NULL, 1);
 		// fill the metadata record
 		GetURLMetaData(localUID, url);
-
+		
 		missing = GetMetaInt(localUID, "Missing", NULL);
 		type = GetMetaData(localUID, "Type", 0);
 		if(missing || (!strlen(type))){
@@ -1189,7 +1189,7 @@ void checkRecorders(void){
 	long ts;
 	unsigned char empty;
 	unsigned char del = 0;
-
+	
 	i = 0;
 	while(UID = FindUidForKeyAndValue("Type", "encoder", i)){
 		ts = GetMetaInt(UID, "TimeStamp", &empty);

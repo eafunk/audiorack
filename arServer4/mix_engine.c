@@ -193,59 +193,66 @@ int process(jack_nframes_t nframes, void *arg){
 	event_count = jack_midi_get_event_count(midi_buffer);
 	for(c=0; c<event_count; c++){
 		jack_midi_event_get(&in_event, midi_buffer, c);
-		if(in_event.size > 6){
-			packet = (controlPacket *)in_event.buffer;
-			size = 7 + ntohs(packet->dataSize);
-			handled = 0;
-			if((packet->type & cPeer_MASK) == cPeer_player){
-				i = ntohl(packet->peer);
-				if(checkPnumber(i)){
-					inchrec = &mixEngineRef->ins[i];
-					if(inchrec->status){
-						char type = packet->type & 0x0f;
-						if(type == cType_end){
-							/* handle end of media message */
-							inchrec->status = inchrec->status | status_finished;
-							// force a segue when segNext is set
-							if(inchrec->segNext)
-								inchrec->posSeg = 0.1;
-							inchrec->requested = inchrec->requested | change_stop;
-							handled = 1;
-						}else if((type == cType_pos) && (size == 11)){
-							val = (valuetype *)&packet->data;
-							val->iVal = ntohl(val->iVal);
-							syncTime = val->fVal;
-							inchrec->posack = 1;	/* set flag to send pos ack control packet */
-							if(inchrec->status & status_playing)
-								/* adjust for midi arrive time within sample frame - NOTE: nFrames of time will be added soon */
-								syncTime = syncTime - (double)in_event.time / (double)mixEngineRef->mixerSampleRate;
-							if(inchrec->sourceType != sourceTypeCanRepos){
-								inchrec->sourceType = sourceTypeCanRepos;
-								inchrec->changed = inchrec->changed | change_type;
-							}
-							if(fabs(syncTime - inchrec->pos) > 0.1){
-								/* more than a minor adjustment */
+//fprintf(stderr, "midiIn=%lu\n", in_event.size);
+		packet = (controlPacket *)in_event.buffer;
+		if(in_event.size >= sizeof(controlPacket)){
+			header = *packet; // copy header portion, for header decoding
+			if(decodeControlPacket(&header, 1)){
+//fprintf(stderr, "sysex: b=%b, t=%x, s=%d, p=%x\n", header.topBits, header.type, htons(header.dataSize), ntohl(header.peer));
+				handled = 0;
+				if((header.type & cPeer_MASK) == cPeer_player){
+					i = ntohl(header.peer);
+					if(checkPnumber(i)){
+						inchrec = &mixEngineRef->ins[i];
+						if(inchrec->status){
+							char type = header.type & 0x0f;
+							size = htons(header.dataSize);
+							if(type == cType_end){
+								// handle end of media message
+								inchrec->status = inchrec->status | status_finished;
+								// force a segue when segNext is set
+								if(inchrec->segNext)
+									inchrec->posSeg = 0.1;
+								inchrec->requested = inchrec->requested | change_stop;
+								handled = 1;
+							}else if((type == cType_pos) && (size == sizeof(valuetype))){
+								decodeControlPacket(packet, 0);
+								val = (valuetype *)packet->data;
+								val->iVal = ntohl(val->iVal);
+								syncTime = val->fVal;
+								inchrec->posack = 1;	// set flag to send pos ack control packet
+								if(inchrec->status & status_playing)
+									// adjust for midi arrive time within sample frame - NOTE: nFrames of time will be added soon
+									syncTime = syncTime - (double)in_event.time / (double)mixEngineRef->mixerSampleRate;
+								if(inchrec->sourceType != sourceTypeCanRepos){
+									inchrec->sourceType = sourceTypeCanRepos;
+									inchrec->changed = inchrec->changed | change_type;
+								}
+								if(fabs(syncTime - inchrec->pos) > 0.1){
+									// more than a minor adjustment
+									inchrec->pos = syncTime;
+									inchrec->changed = inchrec->changed | change_pos;
+								}
 								inchrec->pos = syncTime;
-								inchrec->changed = inchrec->changed | change_pos;
+								handled = 1;
+							}else if((type == cType_vol) && (size == sizeof(valuetype))){
+								decodeControlPacket(packet, 0);
+								val = (valuetype *)packet->data;
+								val->iVal = ntohl(val->iVal);
+								inchrec->requested = inchrec->requested | change_vol;
+								inchrec->reqVol = val->fVal;
+								handled = 1;
 							}
-							inchrec->pos = syncTime;
-							handled = 1;
-						}else if((type == cType_vol) && (size == 11)){
-							val = (valuetype *)&packet->data;
-							val->iVal = ntohl(val->iVal);
-							inchrec->requested = inchrec->requested | change_vol;
-							inchrec->reqVol = val->fVal;
-							handled = 1;
 						}
 					}
 				}
-			}
-			if(!handled){
-				// non-realtime packet... queue it for handling by another thread
-				if(jack_ringbuffer_write_space(mixEngineRef->ctlInQueue) >= size){
-					// enque packet in midi/control queue ring buffer
-					jack_ringbuffer_write(mixEngineRef->ctlInQueue, (char *)packet, size);	
-					wakeChanged = 1;
+				if(!handled){
+					// non-realtime packet... queue it for handling by another thread
+					if(jack_ringbuffer_write_space(mixEngineRef->ctlInQueue) >= in_event.size){
+						// enque packet in midi/control queue ring buffer
+						jack_ringbuffer_write(mixEngineRef->ctlInQueue, (char *)packet, in_event.size);
+						wakeChanged = 1;
+					}
 				}
 			}
 		}
@@ -259,6 +266,7 @@ int process(jack_nframes_t nframes, void *arg){
 	midi_buffer = jack_port_get_buffer(mixEngineRef->ctlOutPort, nframes);
 	jack_midi_clear_buffer(midi_buffer);
 	
+//fprintf(stderr, "midiout space=%lu\n", jack_midi_max_event_size(midi_buffer));
 	/* Talkback Control bits update */
 	tbBits = (uint32_t)mixEngineRef->reqTalkBackBits << 29;
 	activeBus = tbBits;  // activeBus bit may be modified as we loop through channels, tbBit will not.
@@ -273,10 +281,11 @@ int process(jack_nframes_t nframes, void *arg){
 		
 		if(inchrec->posack){
 			/* send pos ack control packet */
-			if(packet = (controlPacket *)jack_midi_event_reserve(midi_buffer, 0, 7)){
+			if(packet = (controlPacket *)jack_midi_event_reserve(midi_buffer, 0, sizeof(controlPacket))){
 				packet->type = cType_posack | cPeer_player;
 				packet->peer = htonl(i);
 				packet->dataSize = 0;
+				encodeControlPacket(packet, NULL, NULL, NULL); // size = 0, no additional bytes returned.
 			}
 			inchrec->posack = 0;
 		}
@@ -318,13 +327,16 @@ int process(jack_nframes_t nframes, void *arg){
 			if(inchrec->status & status_standby){
 				inchrec->status = inchrec->status & ~status_finished;
 				if(inchrec->sourceType == sourceTypeCanRepos){
-					if(packet = (controlPacket *)jack_midi_event_reserve(midi_buffer, 0, 11)){
+					size = controlDataSizeFromRaw(sizeof(valuetype));
+					if(packet = (controlPacket *)jack_midi_event_reserve(midi_buffer, 0, sizeof(controlPacket) + size)){
 						packet->type = cType_pos | cPeer_player;
 						packet->peer = htonl(i);
-						packet->dataSize = htons(4);
-						val = (valuetype*)&packet->data;
+						packet->dataSize = htons(sizeof(valuetype));
+						val = (valuetype*)packet->data;
 						val->fVal = inchrec->reqPos;
 						val->iVal = htonl(val->iVal); 
+						uint16_t dataSize = sizeof(valuetype);
+						encodeControlPacket(packet, (char*)val, &dataSize, (char*)val+sizeof(valuetype)); // extraPtr is set for inline use: no additional bytes returned.
 					}
 				}
 			}
@@ -333,10 +345,11 @@ int process(jack_nframes_t nframes, void *arg){
 		if(inchrec->requested & change_play){
 			if(inchrec->status & status_standby){
 				if((inchrec->status & status_playing) == 0){
-					if(packet = (controlPacket *)jack_midi_event_reserve(midi_buffer, 0, 7)){
-						packet->type = cType_start | cPeer_player;	
+					if(packet = (controlPacket *)jack_midi_event_reserve(midi_buffer, 0, sizeof(controlPacket))){
+						packet->type = cType_start | cPeer_player;
 						packet->peer = htonl(i);
 						packet->dataSize = 0;
+						encodeControlPacket(packet, NULL, NULL, NULL); // size = 0, no additional bytes returned.
 					}
 					inchrec->changed = inchrec->changed | change_play;
 					inchrec->status = inchrec->status | status_playing;
@@ -355,10 +368,11 @@ int process(jack_nframes_t nframes, void *arg){
 		if(inchrec->requested & change_stop){
 			if(inchrec->status & status_standby){
 				if(inchrec->status & status_playing){
-					if(packet = (controlPacket *)jack_midi_event_reserve(midi_buffer, 0, 7)){
+					if(packet = (controlPacket *)jack_midi_event_reserve(midi_buffer, 0, sizeof(controlPacket))){
 						packet->type = cType_stop | cPeer_player;	
 						packet->peer = htonl(i);
 						packet->dataSize = 0;
+						encodeControlPacket(packet, NULL, NULL, NULL); // size = 0, no additional bytes returned.
 					}
 					inchrec->status = inchrec->status & ~status_playing;
 					inchrec->changed = inchrec->changed | change_stop;
@@ -510,7 +524,7 @@ int process(jack_nframes_t nframes, void *arg){
 			/* for level based segue, use the largest avr VU channel value */
 			if(avr > curSegLevel)
 				curSegLevel = avr;
-
+			
 			// VU peak fall time constatnt is 50,000 samples - aprox 2 Hz @ sample rate = 96,000
 			vu->peak = vu->peak * ( 1.0 - (0.00002 * nframes));
 			if(pk > 100.0)
@@ -615,7 +629,7 @@ int process(jack_nframes_t nframes, void *arg){
 		}
 		inchrec++;
 	}
-
+	
 	/* distrubute mix buffers to assigned input mix-minus outputs */
 	inchrec = mixEngineRef->ins;
 	for(i=0; i<icount; i++){
@@ -694,12 +708,12 @@ int process(jack_nframes_t nframes, void *arg){
 			}
 			vol = ((float)least / 255.0); // make a float
 			vol = powf(vol, 3) * outchrec->vol;
-
+		
 		/* note: ccount still set from input processing loop */
 		for(c=0; c<ccount; c++){
 			/* channel c of output number i */
 			samp = dest = jack_port_get_buffer(*out_port, nframes);
-
+			
 			/* get samples from assigned mixbus ring buffer */
 			mixbuffer_read(mixEngineRef->mixbuses, nframes, 
 											delay, dest, c, b, 0);
@@ -715,12 +729,12 @@ int process(jack_nframes_t nframes, void *arg){
 		}
 		/* after all requests have been handled */
 		outchrec->requested = 0;
-
+		
 		/* check if we changed the associated changed flags */
 		if(outchrec->changed)
 			wakeChanged = 1;
 			
-		outchrec++;	
+		outchrec++;
 	}
 	
 	/* and copy mix buffers to corrisponding mix outputs */
@@ -732,7 +746,7 @@ int process(jack_nframes_t nframes, void *arg){
 			dest = samp = jack_port_get_buffer(*out_port, nframes);
 			/* get samples from assigned mixbus ring buffer */
 			mixbuffer_read(mixEngineRef->mixbuses, nframes, 
-											0, dest, c, b, 0);
+														0, dest, c, b, 0);
 			pk = 0.0;
 			avr = 0.0;
 			for(s = 0; s < nframes; s++){
@@ -744,7 +758,7 @@ int process(jack_nframes_t nframes, void *arg){
 					
 				samp++;
 			}
-
+			
 			/* VU Block calculations */
 			i = (ccount * b) + c;
 			vu = &(mixEngineRef->mixbuses->VUmeters[i]);
@@ -752,7 +766,7 @@ int process(jack_nframes_t nframes, void *arg){
 			vu->avr = ( 1 - (0.0001 * nframes)) * vu->avr + 0.0001 * avr;
 			if(vu->avr > 100.0) 
 				vu->avr = 100.0;
-
+			
 			// VU peak fall time constatnt is 50,000 samples - aprox 2 Hz @ sample rate = 96,000
 			vu->peak = vu->peak * ( 1 - (0.00002 * nframes));
 			if(pk > vu->peak)
@@ -769,26 +783,28 @@ int process(jack_nframes_t nframes, void *arg){
 		mixEngineRef->activeBus = activeBus;
 		wakeChanged = 1;
 	}
-
+	
 	/* advance mixbus buffer write marker */
 	mixbuffer_advance(mixEngineRef->mixbuses, nframes);
 	
 	/* handle sending queued out-going control packets
-	 *  upto one per  process cycle */
-	size = jack_ringbuffer_peek(mixEngineRef->ctlOutQueue, (char*)&header, 7);
-	if(size == 7){
-		size = 7 + ntohs(header.dataSize);
-		if(jack_ringbuffer_read_space(mixEngineRef->ctlOutQueue) >= size){
-			if(packet = (controlPacket *)jack_midi_event_reserve(midi_buffer, nframes-1, size)){
-				jack_ringbuffer_read(mixEngineRef->ctlOutQueue, (char*)packet, size);
+	 *  upto one per  process cycle.  These come off the ring buffer already MIDI SysEx encoded. */
+	size = jack_ringbuffer_peek(mixEngineRef->ctlOutQueue, (char*)&header, sizeof(controlPacket));
+	if(size == sizeof(controlPacket)){
+		if(decodeControlPacket(&header, 1)){
+			size = sizeof(controlPacket) + controlDataSizeFromRaw(ntohs(header.dataSize));
+			if(jack_ringbuffer_read_space(mixEngineRef->ctlOutQueue) >= size){
+				if(packet = (controlPacket *)jack_midi_event_reserve(midi_buffer, nframes-1, size)){
+					jack_ringbuffer_read(mixEngineRef->ctlOutQueue, (char*)packet, size);
+				}
 			}
 		}
 	}
-
+	
 	/* One or more Changed flags have been set... signal the thread that cares */
 	if(wakeChanged)
 		pthread_cond_broadcast(&mixEngineRef->changedSemaphore);
-
+	
 	return 0;
 }
 

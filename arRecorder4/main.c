@@ -95,10 +95,12 @@ typedef struct __attribute__((packed)){
 						 * NOTE: packets passed as midi data via jackaudio midi API, even though the data format
 						 * is not midi.  Jack is fine with this, but don't try to connect the arserver control midi
 						 * ports to other applications that are expecting actual midi data. */
-	uint8_t				type;
+	uint8_t			sysExFlag;
+	uint8_t			topBits;
+	uint8_t			type;
 	uint32_t			peer;		// network byte order - player input number [0,N] or recorder UID.
 	uint16_t			dataSize;	// network byte order - size, in bytes, of the data, if any.
-	int8_t				data[1];	// network byte order or text.  Text need NOT to be null terminated
+	int8_t			data[1];	// network byte order or text.  Text need NOT to be null terminated
 									// due to the size (length) specified above.
 }controlPacket;
 
@@ -469,6 +471,109 @@ void AddFPLEntryFromProgramLogStruct(FILE *fpl, double Offset, ProgramLogRecord 
 	free(line);
 }
 
+uint16_t controlDataSizeFromRaw(uint16_t byteCount){
+	// calculated a new byte size required to hold the data and additional bytes 
+	// for required encoding to pass as midi data where MSbit is always zero.
+	if(byteCount)
+		byteCount += ((byteCount - 1) / 7) + 1;
+	return byteCount;
+}
+
+char *encodeControlData(char *data, uint16_t *size, char *extraPtr){
+	// size on entry is size of data in bytes.  On return, the size of additional bytes encoded, including sysex stop byte
+	// Result is additional data bytes needed to 7 bit rncode 8 bit data. if result is not null, the memory must be freed.
+	// If extraPtr is not NULL on entry, no axtra bytes are allocated or returned, and the extar data is writen to this pointer.
+	if(!size || (*size == 0))
+		return NULL;
+	uint16_t newSize = controlDataSizeFromRaw(*size) - *size + 1; // extra byte is for the 0xF7 MIDI SysEx end flag
+	char *newData = NULL;
+	if(!extraPtr)
+		extraPtr = newData = (char *)calloc(1, newSize);
+	char *extra = extraPtr;
+	uint16_t rem = *size;
+	uint16_t bit = 0;
+	char *byte = data;
+	*extra = 0;
+	while(rem){
+		if(bit > 7){
+			bit = 0;
+			extra++;
+			*extra = 0;
+		}
+		if(*byte & 0x80){
+			*byte = *byte & 0x7F; 	// clear top bit
+			*extra = *extra | (1 << bit);	// set corrisponding bit in current extra byte
+		}
+		bit++;
+		byte++;
+		rem--;
+	}
+	extra++;
+	*extra = 0xF7;
+	*size = newSize;
+	return newData;
+}
+
+void decodeControlData(char *data, uint16_t origSize){
+	// *data must point to origSize bytes plus extra bytes at the end needed for endoding. See controlDataSizeFromRaw()
+	uint16_t rem = origSize;
+	uint16_t bit = 0;
+	char *byte = data;
+	char *extra = data + origSize; // top bit clusters added at end of raw array
+	while(rem){
+		if(*extra & (1 << bit))
+			*byte = *byte | 0x80; 	// set top bit
+		bit++;
+		byte++;
+		rem--;
+		if(bit >= 7){
+			bit = 0;
+			extra++;
+		}
+	}
+}
+
+unsigned char decodeControlPacket(controlPacket *packet, char headerOnly){
+	if(packet->sysExFlag == 0xF0){
+		// must start with MIDI SysEx flag
+		char *byte = (char *)(&packet->type);
+		char topBits = packet->topBits;
+		for(char b=0; b < 7; b++){
+			if(topBits & (1 << b))
+				*byte = *byte | 0x80; 	// set top bit
+			byte++;
+		}
+		if(!headerOnly && packet->dataSize)
+			decodeControlData(packet->data, ntohs(packet->dataSize));
+		return 1;
+	}
+	return 0; // bad packet format
+}
+
+char *encodeControlPacket(controlPacket *header, char *data, uint16_t *size, char *extraPtr){
+	// size on entry is size of data in bytes.  On return, the size of additionall bytes returned.
+	// Result is additional bytes needed to 7 bit rncode 8 bit data. if result is not null, the memory must be freed.
+	// if extraPtr is not NULL, extra data will be stored in this location, and result will be NULL (No new memory 
+	// allocated needing to be freed)  NOTE: extraPtr must point to enouch memory to store the extra data.
+	char *result = NULL;
+	int8_t *byte = header->data;
+	header->topBits = 0;
+	header->sysExFlag = 0xF0;	// MIDI SysEx start flag: 0xF0
+	if(size && *size)
+		result = encodeControlData(data, size, extraPtr);
+	else
+		*header->data = 0xF7;	// MIDI SysEx end flag
+	byte = (char *)(&header->type);
+	for(char b=0; b < 7; b++){
+		if(*byte & 0x80){
+			*byte = *byte & 0x7F; 	// clear top bit
+			header->topBits = header->topBits | (1 << b);	// set corrisponding bit in corrisponding topBits byte
+		}
+		byte++;
+	}
+	return result;
+}
+
 void checkPortReconnect(CustomData *data, jack_port_id_t port_id){
 	jack_port_t **port;
 	jack_port_t *cport;
@@ -581,27 +686,28 @@ static int jack_process(jack_nframes_t nframes, void *arg){
 	midi_bufferOut = jack_port_get_buffer(data->midiOut_jPort, nframes);
 	jack_midi_clear_buffer(midi_bufferOut);
 	if(data->eos){
-		/* send end of media message */	
-		if(packet = (controlPacket *)jack_midi_event_reserve(midi_bufferOut, 0, 7)){
-			packet->type = cType_end | cPeer_recorder;	
+		/* send end of media message */
+		if(packet = (controlPacket *)jack_midi_event_reserve(midi_bufferOut, 0, sizeof(controlPacket))){
+			packet->type = cType_end | cPeer_recorder;
 			packet->peer = htonl(data->UID);
 			packet->dataSize = 0;
+			encodeControlPacket(packet, NULL, NULL, NULL); // size = 0, no additional bytes returned.
 		}
 		data->eos = FALSE;
 	}
-
-	// Check tags (send queue) for non-realtime queued packets
-	// to be sent, upto one per proc/usr/lib/x86_64-linux-gnu/ess cycle: settings, VU, etc.
-	cnt = jack_ringbuffer_peek(data->ctlsendqueue, (char*)&header, 7);
-	if(cnt == 7){
-		cnt = 7 + ntohs(header.dataSize);
+	
+	// Check send queue for non-realtime queued packets
+	// to be sent, upto one per proc cycle: settings, VU, etc.
+	cnt = jack_ringbuffer_peek(data->ctlsendqueue, (char*)&header, sizeof(controlPacket));
+	if(cnt == sizeof(controlPacket)){
+		cnt = sizeof(controlPacket) + controlDataSizeFromRaw(ntohs(header.dataSize));
 		if(jack_ringbuffer_read_space(data->ctlsendqueue) >= cnt){
 			if(packet = (controlPacket *)jack_midi_event_reserve(midi_bufferOut, 0, cnt)){
 				jack_ringbuffer_read(data->ctlsendqueue, (char*)packet, cnt);
 			}
 		}
 	}
-			
+	
 	/* handle received packets */
 	midi_bufferIn = jack_port_get_buffer(data->midiIn_jPort, nframes);
 	event_count = jack_midi_get_event_count(midi_bufferIn);
@@ -609,80 +715,81 @@ static int jack_process(jack_nframes_t nframes, void *arg){
 	peer = htonl(data->UID);
 	for(i=0; i<event_count; i++){
 		jack_midi_event_get(&in_event, midi_bufferIn, i);
-		if(in_event.size > 6){
-			packet = (controlPacket *)in_event.buffer;
-			cnt = ntohs(packet->dataSize);
-			if(((packet->type & cPeer_MASK) == cPeer_recorder) && (packet->peer == peer)){
-				uint8_t type = packet->type & cType_MASK;
-				if(type == cType_start){
-					/* handle realtime control play packet */
-					if((data->status & (rec_start | rec_running)) == 0){
-						if(data->start)
-							data->status = data->status | rec_wait;
-						else{
-							if(data->state == GST_STATE_PLAYING)
-								data->status = data->status | (rec_ready | rec_running);
-							else
-								data->status = data->status | rec_start;
+		packet = (controlPacket *)in_event.buffer;
+		if(in_event.size >= sizeof(controlPacket)){
+			header = *packet; // copy header portion, for header decoding
+			if(decodeControlPacket(&header, 1)){
+				cnt = ntohs(header.dataSize);
+				uint8_t type = header.type & cType_MASK;
+				if(((header.type & cPeer_MASK) == cPeer_recorder) && (header.peer == peer)){
+					if(type == cType_start){
+						/* handle realtime control play packet */
+						if((data->status & (rec_start | rec_running)) == 0){
+							if(data->start)
+								data->status = data->status | rec_wait;
+							else{
+								if(data->state == GST_STATE_PLAYING)
+									data->status = data->status | (rec_ready | rec_running);
+								else
+									data->status = data->status | rec_start;
+							}
+							change_flag = TRUE;
 						}
-						change_flag = TRUE;
-					}
-				}else if(type == cType_stop){
-					/* handle realtime control pause packet */
-					if((data->status & (rec_start | rec_running | rec_wait))){
-						if(data->start)
-							data->status = data->status & ~rec_wait;
-						else
-							data->status = data->status & ~(rec_start | rec_running);
-						change_flag = TRUE;
-					}
-				}else if(type == cType_end){
-					/* handle realtime control end packet */
-					data->closeReq = TRUE;
-					change_flag = FALSE;
-				}else if(type == cType_lock){
-					/* handle realtime control end packet */
-					if(!(data->status & rec_locked)){
-						data->status = data->status | rec_locked;
-						change_flag = TRUE;
-					}
-				}else if(type == cType_unlock){
-					/* handle realtime control end packet */
-					if(data->status & rec_locked){
-						data->status = data->status & ~rec_locked;
-						change_flag = TRUE;
-					}
-				}else if(type == cType_vol){
-					/* handle realtime record volume packet */
-					if(cnt == 4){
-						val = (valuetype *)&packet->data;
+					}else if(type == cType_stop){
+						/* handle realtime control pause packet */
+						if((data->status & (rec_start | rec_running | rec_wait))){
+							if(data->start)
+								data->status = data->status & ~rec_wait;
+							else
+								data->status = data->status & ~(rec_start | rec_running);
+							change_flag = TRUE;
+						}
+					}else if(type == cType_end){
+						/* handle realtime control end packet */
+						data->closeReq = TRUE;
+						change_flag = FALSE;
+					}else if(type == cType_lock){
+						/* handle realtime control lockrec packet */
+						if(!(data->status & rec_locked)){
+							data->status = data->status | rec_locked;
+							change_flag = TRUE;
+						}
+					}else if(type == cType_unlock){
+						/* handle realtime control unlockrec packet */
+						if(data->status & rec_locked){
+							data->status = data->status & ~rec_locked;
+							change_flag = TRUE;
+						}
+					}else if((type == cType_vol) && (cnt == sizeof(valuetype))){
+						/* handle realtime record volume packet */
+						decodeControlPacket(packet, 0);
+						val = (valuetype *)packet->data;
 						val->iVal = ntohl(val->iVal);
 						data->vol = val->fVal;
 						change_flag = TRUE;
-					}
-				}else if(type == cType_reid){
-					/* handle realtime re-ID packet */
-					if(cnt == 4){
-						val = (valuetype *)&packet->data;
+					}else if((type == cType_reid) && (cnt == sizeof(valuetype))){
+						/* handle realtime re-ID packet */
+						decodeControlPacket(packet, 0);
+						val = (valuetype *)packet->data;
 						data->UID = ntohl(val->iVal);
 						change_flag = TRUE;
+					}else if((type == cType_tags)){ 
+						/* tags (most likely application specific) directed to just this recorder:
+						 * enqueue packet for non-realtime tag handling */
+						if(jack_ringbuffer_write_space(data->ctlrecvqueue) >= in_event.size){
+							jack_ringbuffer_write(data->ctlrecvqueue, (char *)packet, in_event.size);
+							change_flag = TRUE;
+						}
 					}
-				}else if(((packet->type & cType_MASK) == cType_tags)){ 
-					/* tags (most likely application specific) directed to just this recorder:
-					 * enqueue packet for non-realtime tag handling */
-					if(((cnt+7) <= 2048) && (jack_ringbuffer_write_space(data->ctlrecvqueue) >= (cnt+7))){
-						jack_ringbuffer_write(data->ctlrecvqueue, (char *)packet, cnt+7);
-						change_flag = TRUE;
-					}
-				}
-			}else if(((packet->type & cType_MASK) == cType_tags)){ 
-				if(((packet->type & cPeer_MASK) == cPeer_allrec) 
-						|| (((packet->type & cPeer_MASK) == cPeer_bus) && data->tagBus && (ntohl(packet->peer) & (1 << (data->tagBus - 1))))){
-					/* tags directed to all or any recorder recording the tagBus, likely track info:
-					 * enqueue packet for non-realtime tag handling */
-					if(((cnt+7) <= 2048) && (jack_ringbuffer_write_space(data->ctlrecvqueue) >= (cnt+7))){
-						jack_ringbuffer_write(data->ctlrecvqueue, (char *)packet, cnt+7);
-						change_flag = TRUE;
+				}else if(type == cType_tags){ 
+					if(((header.type & cPeer_MASK) == cPeer_allrec) 
+							|| (((header.type & cPeer_MASK) == cPeer_bus) && data->tagBus && (ntohl(header.peer) & (1 << (data->tagBus - 1))))){
+						/* tags directed to all or any recorder recording the tagBus, likely track info:
+						 * enqueue packet for non-realtime tag handling */
+						if(jack_ringbuffer_write_space(data->ctlrecvqueue) >= in_event.size){
+							jack_ringbuffer_write(data->ctlrecvqueue, (char *)packet, in_event.size);
+							change_flag = TRUE;
+						}
 					}
 				}
 			}
@@ -738,7 +845,7 @@ static int jack_process(jack_nframes_t nframes, void *arg){
 			if(!rbdPtr->len)
 				rbdPtr = &rbData[1];
 		}
-		nframes--;	
+		nframes--;
 	}
 
 	for(i=0; i<data->chCount; i++){
@@ -763,19 +870,21 @@ static int jack_process(jack_nframes_t nframes, void *arg){
 	data->vuSampleRem = data->vuSampleRem - origFrames;
 	if(data->vuSampleRem <= 0){
 		data->vuSampleRem = data->vuSampleRem + data->vuPeriod;
-		cnt = (sizeof(controlPacket) - 1) + (data->chCount * sizeof(vuNData));
-		if(packet = (controlPacket *)jack_midi_event_reserve(midi_bufferOut, origFrames-1, cnt)){
+		uint16_t dataSize = data->chCount * sizeof(vuNData);
+		cnt = controlDataSizeFromRaw(dataSize);
+		if(packet = (controlPacket *)jack_midi_event_reserve(midi_bufferOut, origFrames-1, cnt+sizeof(controlPacket))){
 			vuNData *values;
 			packet->type = cType_vu | cPeer_recorder;	
 			packet->peer = htonl(data->UID);
-			packet->dataSize = htons(cnt - (sizeof(controlPacket) - 1));
-			values = (vuNData *)&packet->data;
+			packet->dataSize = htons(dataSize);
+			values = (vuNData *)packet->data;
 			for(i=0; i<data->chCount; i++){
 				vu = &(data->VUmeters[i]);
 				values->avr = ftovu(vu->avr), 
 				values->peak = ftovu(vu->peak);
 				values++;
 			}
+			encodeControlPacket(packet, packet->data, &dataSize, (packet->data)+dataSize); // extraPtr is set for inline use: no additional bytes returned.
 		}
 	}
 	
@@ -795,7 +904,7 @@ static int jack_process(jack_nframes_t nframes, void *arg){
 		data->settingsChanged = TRUE;
 		pthread_cond_broadcast(&data->ctlSemaphore);
 	}
-	return 0;      
+	return 0;
 }
 
 /* queue appsrc samples from ringbuffer */
@@ -902,7 +1011,7 @@ char *settingsToControlPacketData(CustomData *data){
 	
 	cJSON_AddNumberToObject(obj, "Status", data->status);
 	str = cJSON_PrintUnformatted(obj);
-	cJSON_Delete(obj);	
+	cJSON_Delete(obj);
 	return str;
 }
 
@@ -925,29 +1034,38 @@ void* handleCtlQueues(void *refCon){
 	do{
 		/* check for writing settings to outqueue */
 		if(data->settingsChanged){
-
 			jstr = settingsToControlPacketData(data);
 			len = strlen(jstr);
-			if((len <= 2048) && (jack_ringbuffer_write_space(data->ctlsendqueue) >= (len + 7))){
+			uint16_t encSize = controlDataSizeFromRaw(len);
+			if((encSize <= (2048 - sizeof(controlPacket))) && (jack_ringbuffer_write_space(data->ctlsendqueue) >= (encSize + sizeof(controlPacket)))){
 				// enque packet in midi/control queue ring buffer
 				controlPacket header;
 				header.type = cPeer_recorder | cType_anc;
 				header.peer = htonl(data->UID);
 				header.dataSize = htons(len);
-				jack_ringbuffer_write(data->ctlsendqueue, (char*)&header, 7);
-				jack_ringbuffer_write(data->ctlsendqueue, jstr, len);	
+				encSize = len;
+				int8_t *extra = encodeControlPacket(&header, jstr, &encSize, NULL);
+				if(extra){
+					// don't send SysEx byte at header end.  This will be included in extra data
+					jack_ringbuffer_write(data->ctlsendqueue, (char*)&header, sizeof(controlPacket)-1); 
+					jack_ringbuffer_write(data->ctlsendqueue, jstr, len);
+					jack_ringbuffer_write(data->ctlsendqueue, extra, encSize);
+					free(extra);
+				}
 			}
 			free(jstr);
 			data->settingsChanged = FALSE;
 		}
 		
 		/* check inqueue for tags */
-		len = jack_ringbuffer_peek(data->ctlrecvqueue, (char*)&header, 7);
-		if(len == 7){
+		len = jack_ringbuffer_peek(data->ctlrecvqueue, (char*)&header, sizeof(controlPacket));
+		if(len == sizeof(controlPacket)){
 			len = ntohs(header.dataSize);
-			if(jack_ringbuffer_read_space(data->ctlrecvqueue) >= (len+7)){
-				if(packet = (controlPacket *)calloc(1, len+8)){
-					jack_ringbuffer_read(data->ctlrecvqueue, (char*)packet, len+7);
+			uint16_t encSize = controlDataSizeFromRaw(len) + sizeof(controlPacket);
+			if(jack_ringbuffer_read_space(data->ctlrecvqueue) >= encSize){
+				if(packet = (controlPacket *)calloc(1, encSize)){
+					jack_ringbuffer_read(data->ctlrecvqueue, (char*)packet, encSize);
+					decodeControlPacket(packet, 0);
 					packet->data[len] = 0;
 					if(obj = cJSON_Parse(packet->data)){
 						if(item = obj->child){ 

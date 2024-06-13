@@ -1537,20 +1537,29 @@ void *programLogWatcher(void* refCon){
 	return NULL;
 }
 
-unsigned char queueControlOutPacket(mixEngineRecPtr mixRef, char type, uint32_t peer, size_t size, char *data){	
+unsigned char queueControlOutPacket(mixEngineRecPtr mixRef, char type, uint32_t peer, size_t size, char *data){
 	pthread_mutex_lock(&mixRef->ctlOutQueueMutex);
-	if((size <= 2041) && (jack_ringbuffer_write_space(mixRef->ctlOutQueue) >= (size + 7))){
+	uint16_t encSize = controlDataSizeFromRaw(size);
+	if((encSize <= (2048 - sizeof(controlPacket))) && (jack_ringbuffer_write_space(mixRef->ctlOutQueue) >= (encSize + sizeof(controlPacket)))){
 		// enque packet in midi/control queue ring buffer
+		uint16_t dataSize = size;
+		uint16_t extSize = dataSize;
 		controlPacket header;
 		header.type = type;
 		header.peer = htonl(peer);
-		header.dataSize = htons(size);
-		jack_ringbuffer_write(mixRef->ctlOutQueue, (char*)&header, 7);
-		if(size)
-			jack_ringbuffer_write(mixRef->ctlOutQueue, data, size);
+		header.dataSize = htons(dataSize);
+		int8_t *extra = encodeControlPacket(&header, data, &extSize, NULL);
+		if(extra){
+			// don't send SysEx byte at header end.  This will be included in extra data
+			jack_ringbuffer_write(mixRef->ctlOutQueue, (char*)&header, sizeof(controlPacket)-1); 
+			jack_ringbuffer_write(mixRef->ctlOutQueue, data, dataSize);
+			jack_ringbuffer_write(mixRef->ctlOutQueue, extra, extSize); // sysex end flag added to end
+			free(extra);
+		}else
+			jack_ringbuffer_write(mixRef->ctlOutQueue, (char*)&header, sizeof(controlPacket));
 		pthread_mutex_unlock(&mixRef->ctlOutQueueMutex);
 		pthread_mutex_unlock(&mixRef->ctlOutQueueMutex);
-		return 1;	
+		return 1;
 	}else{
 		pthread_mutex_unlock(&mixRef->ctlOutQueueMutex);
 		return 0;
@@ -1575,14 +1584,14 @@ void *controlQueueInWatcher(void *refCon){
 	while(dispRun){
 		while(1){	// loop until we break -> nothing else in queue
 			now = time(NULL);
-			size = jack_ringbuffer_peek(mixEngine->ctlInQueue, (char*)&header, 7);
-			if(size == 7){
-				size = 7 + ntohs(header.dataSize);
+			// packet data is not decoded... this is stored in the ring buffer just as a raw MIDI SysEx event
+			size = jack_ringbuffer_peek(mixEngine->ctlInQueue, (char*)&header, sizeof(controlPacket));
+			if(decodeControlPacket(&header, 1) && (size == sizeof(controlPacket))){
+				size = controlDataSizeFromRaw(htons(header.dataSize)) + sizeof(controlPacket);
 				if(jack_ringbuffer_read_space(mixEngine->ctlInQueue) >= size){
-					
-					
-					if(packet = calloc(1, size+1)){ // +1 for added null termination
+					if(packet = calloc(1, size)){ // NULL termination if needed will over-write SysEx end flag byte
 						jack_ringbuffer_read(mixEngine->ctlInQueue, (char*)packet, size);
+						decodeControlPacket(packet, 0);
 						// convert endia-ness from network to host
 						packet->peer = ntohl(packet->peer);
 						packet->dataSize = ntohs(packet->dataSize);
@@ -1793,4 +1802,107 @@ void *controlQueueInWatcher(void *refCon){
 		free(vuRecord);
 
 	return NULL;
+}
+
+uint16_t controlDataSizeFromRaw(uint16_t byteCount){
+	// calculated a new byte size required to hold the data and additional bytes 
+	// for required encoding to pass as midi data where MSbit is always zero.
+	if(byteCount)
+		byteCount += ((byteCount - 1) / 7) + 1;
+	return byteCount;
+}
+
+char *encodeControlData(char *data, uint16_t *size, char *extraPtr){
+	// size on entry is size of data in bytes.  On return, the size of additional bytes encoded.
+	// Result is additional data bytes needed to 7 bit rncode 8 bit data. if result is not null, the memory must be freed.
+	// If extraPtr is not NULL on entry, no axtra bytes are allocated or returned, and the extar data is writen to this pointer.
+	if(!size || (*size == 0))
+		return NULL;
+	uint16_t newSize = controlDataSizeFromRaw(*size) - *size + 1; // extra byte is for the 0xF7 MIDI SysEx end flag
+	char *newData = NULL;
+	if(!extraPtr)
+		extraPtr = newData = (char *)calloc(1, newSize);
+	char *extra = extraPtr;
+	uint16_t rem = *size;
+	uint16_t bit = 0;
+	char *byte = data;
+	*extra = 0;
+	while(rem){
+		if(bit > 7){
+			bit = 0;
+			extra++;
+			*extra = 0;
+		}
+		if(*byte & 0x80){
+			*byte = *byte & 0x7F; 	// clear top bit
+			*extra = *extra | (1 << bit);	// set corrisponding bit in current extra byte
+		}
+		bit++;
+		byte++;
+		rem--;
+	}
+	extra++;
+	*extra = 0xF7;
+	*size = newSize;
+	return newData;
+}
+
+void decodeControlData(char *data, uint16_t origSize){
+	// *data must point to origSize bytes plus extra bytes at the end needed for endoding. See controlDataSizeFromRaw()
+	uint16_t rem = origSize;
+	uint16_t bit = 0;
+	char *byte = data;
+	char *extra = data + origSize; // top bit clusters added at end of raw array
+	while(rem){
+		if(*extra & (1 << bit))
+			*byte = *byte | 0x80; 	// set top bit
+		bit++;
+		byte++;
+		rem--;
+		if(bit >= 7){
+			bit = 0;
+			extra++;
+		}
+	}
+}
+
+unsigned char decodeControlPacket(controlPacket *packet, char headerOnly){
+	if(packet->sysExFlag == 0xF0){
+		// must start with MIDI SysEx flag
+		char *byte = (char *)&packet->type;
+		char topBits = packet->topBits;
+		for(char b = 0; b < 7; b++){
+			if(topBits & (1 << b))
+				*byte = *byte | 0x80; 	// set top bit
+			byte++;
+		}
+		if(!headerOnly && packet->dataSize)
+			decodeControlData(packet->data, ntohs(packet->dataSize));
+		return true;
+	}
+	return false; // bad packet format
+}
+
+char *encodeControlPacket(controlPacket *header, char *data, uint16_t *size, char *extraPtr){
+	// size on entry is size of data in bytes.  On return, the size of additionall bytes returned.
+	// Result is additional bytes needed to 7 bit rncode 8 bit data. if result is not null, the memory must be freed.
+	// if extraPtr is not NULL, extra data will be stored in this location, and result will be NULL (No new memory 
+	// allocated needing to be freed)  NOTE: extraPtr must point to enouch memory to store the extra data.
+	char *result = NULL;
+	int8_t *byte = header->data;
+	header->topBits = 0;
+	header->sysExFlag = 0xF0;	// MIDI SysEx start flag
+	if(size && *size)
+		result = encodeControlData(data, size, extraPtr);
+	else
+		*header->data = 0xF7;	// MIDI SysEx end flag
+	byte = (char *)(&header->type);
+	for(char b=0; b < 7; b++){
+		if(*byte & 0x80){
+			*byte = *byte & 0x7F; 	// clear top bit
+			header->topBits = header->topBits | (1 << b);	// set corrisponding bit in corrisponding topBits byte
+		}
+		byte++;
+	}
+	return result;
 }

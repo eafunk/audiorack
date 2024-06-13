@@ -73,6 +73,8 @@ typedef struct __attribute__((packed)){
 						 * NOTE: packets passed as midi data via jackaudio midi API, even though the data format
 						 * is not midi.  Jack is fine with this, but don't try to connect the arserver control midi
 						 * ports to other applications that are expecting actual midi data. */
+	uint8_t			sysExFlag;
+	uint8_t			topBits;
 	uint8_t			type;
 	uint32_t			peer;			// network byte order - player input number [0,N] or recorder UID.
 	uint16_t			dataSize;	// network byte order - size, in bytes, of the data, if any.
@@ -152,6 +154,109 @@ char *str_NthField(const char *string, const char *token, unsigned int field){
 	return result;
 }
 
+uint16_t controlDataSizeFromRaw(uint16_t byteCount){
+	// calculated a new byte size required to hold the data and additional bytes 
+	// for required encoding to pass as midi data where MSbit is always zero.
+	if(byteCount)
+		byteCount += ((byteCount - 1) / 7) + 1;
+	return byteCount;
+}
+
+char *encodeControlData(char *data, uint16_t *size, char *extraPtr){
+	// size on entry is size of data in bytes.  On return, the size of additional bytes encoded.
+	// Result is additional data bytes needed to 7 bit rncode 8 bit data. if result is not null, the memory must be freed.
+	// If extraPtr is not NULL on entry, no axtra bytes are allocated or returned, and the extar data is writen to this pointer.
+	if(!size || (*size == 0))
+		return NULL;
+	uint16_t newSize = controlDataSizeFromRaw(*size) - *size + 1; // extra byte is for the 0xF7 MIDI SysEx end flag
+	char *newData = NULL;
+	if(!extraPtr)
+		extraPtr = newData = (char *)calloc(1, newSize);
+	char *extra = extraPtr;
+	uint16_t rem = *size;
+	uint16_t bit = 0;
+	char *byte = data;
+	*extra = 0;
+	while(rem){
+		if(bit > 7){
+			bit = 0;
+			extra++;
+			*extra = 0;
+		}
+		if(*byte & 0x80){
+			*byte = *byte & 0x7F; 	// clear top bit
+			*extra = *extra | (1 << bit);	// set corrisponding bit in current extra byte
+		}
+		bit++;
+		byte++;
+		rem--;
+	}
+	extra++;
+	*extra = 0xF7;
+	*size = newSize;
+	return newData;
+}
+
+void decodeControlData(char *data, uint16_t origSize){
+	// *data must point to origSize bytes plus extra bytes at the end needed for endoding. See controlDataSizeFromRaw()
+	uint16_t rem = origSize;
+	uint16_t bit = 0;
+	char *byte = data;
+	char *extra = data + origSize; // top bit clusters added at end of raw array
+	while(rem){
+		if(*extra & (1 << bit))
+			*byte = *byte | 0x80; 	// set top bit
+		bit++;
+		byte++;
+		rem--;
+		if(bit >= 7){
+			bit = 0;
+			extra++;
+		}
+	}
+}
+
+unsigned char decodeControlPacket(controlPacket *packet, char headerOnly){
+	if(packet->sysExFlag == 0xF0){
+		// must start with MIDI SysEx flag
+		char *byte = (char *)(&packet->type);
+		char topBits = packet->topBits;
+		for(char b=0; b < 7; b++){
+			if(topBits & (1 << b))
+				*byte = *byte | 0x80; 	// set top bit
+			byte++;
+		}
+		if(!headerOnly && packet->dataSize)
+			decodeControlData(packet->data, ntohs(packet->dataSize));
+		return 1;
+	}
+	return 0; // bad packet format
+}
+
+char *encodeControlPacket(controlPacket *header, char *data, uint16_t *size, char *extraPtr){
+	// size on entry is size of data in bytes.  On return, the size of additionall bytes returned.
+	// Result is additional bytes needed to 7 bit rncode 8 bit data. if result is not null, the memory must be freed.
+	// if extraPtr is not NULL, extra data will be stored in this location, and result will be NULL (No new memory 
+	// allocated needing to be freed)  NOTE: extraPtr must point to enouch memory to store the extra data.
+	char *result = NULL;
+	int8_t *byte = header->data;
+	header->topBits = 0;
+	header->sysExFlag = 0xF0;	// MIDI SysEx start flag
+	if(size && *size)
+		result = encodeControlData(data, size, extraPtr);
+	else
+		*header->data = 0xF7;	// MIDI SysEx end flag
+	byte = (char *)(&header->type);
+	for(char b=0; b < 7; b++){
+		if(*byte & 0x80){
+			*byte = *byte & 0x7F; 	// clear top bit
+			header->topBits = header->topBits | (1 << b);	// set corrisponding bit in corrisponding topBits byte
+		}
+		byte++;
+	}
+	return result;
+}
+
 void jack_shutdown_callback(void *arg){
 	CustomData *data = (CustomData *)arg;
 	/* Jack server went away... shutdown. */
@@ -179,41 +284,46 @@ int jack_process(jack_nframes_t nframes, void *arg){
 	char change_flag = FALSE;
 	for(i=0; i<event_count; i++){
 		jack_midi_event_get(&in_event, midi_buffer, i);
-		if(in_event.size > 6){
-			uint32_t peer = htonl(data->ctlID);
-			packet = (controlPacket *)in_event.buffer;
-			if(((packet->type & cPeer_MASK) == cPeer_player) && (packet->peer == peer)){
-				char type = packet->type & cType_MASK;
-				cnt = htons(packet->dataSize);
-				if(type == cType_posack){
-					/* handle realtime pos. change ack packet */
-					data->posUpdate = FALSE;
-				}
-				if(type == cType_start){
-					/* handle realtime control play packet */
-					data->playReq = TRUE;
-					change_flag = TRUE;
-				}
-				if(type == cType_stop){
-					/* handle realtime control pause packet */
-					data->pauseReq = TRUE;
-					change_flag = TRUE;
-					data->endFlag = FALSE;
-				}
-				if((type == cType_pos) && (cnt == 4)){
-					/* handle realtime control pos change packet */
-					double syncTime;
-					valuetype *val;
-					val = (valuetype *)&packet->data;
-					val->iVal = ntohl(val->iVal);
-					syncTime = val->fVal;
-					syncTime = syncTime - (double)(in_event.time + 1) / (double)data->sampleRate;
-					/* syncTime is requested time in seconds adjusted for arrival time offset */
-					if(!data->posReq){
-						data->reqPos = syncTime;
-						data->posReq = TRUE;
+		packet = (controlPacket *)in_event.buffer;
+//fprintf(stderr, "MidiIn=%lu\n", in_event.size);
+		if(in_event.size >= sizeof(controlPacket)){
+			header = *packet; // copy header portion, for header decoding
+			if(decodeControlPacket(&header, 1)){
+				uint32_t peer = htonl(data->ctlID);
+				if(((header.type & cPeer_MASK) == cPeer_player) && (header.peer == peer)){
+					char type = header.type & cType_MASK;
+					cnt = htons(header.dataSize);
+					if(type == cType_posack){
+						/* handle realtime pos change ack packet */
+						data->posUpdate = FALSE;
+					}
+					if(type == cType_start){
+						/* handle realtime control play packet */
+						data->playReq = TRUE;
+						change_flag = TRUE;
+					}
+					if(type == cType_stop){
+						/* handle realtime control pause packet */
+						data->pauseReq = TRUE;
 						change_flag = TRUE;
 						data->endFlag = FALSE;
+					}
+					if((type == cType_pos) && (cnt == sizeof(valuetype))){
+						/* handle realtime control pos change packet */
+						decodeControlPacket(packet, 0);
+						double syncTime;
+						valuetype *val;
+						val = (valuetype *)packet->data;
+						val->iVal = ntohl(val->iVal);
+						syncTime = val->fVal;
+						syncTime = syncTime - (double)(in_event.time + 1) / (double)data->sampleRate;
+						/* syncTime is requested time in seconds adjusted for arrival time offset */
+						if(!data->posReq){
+							data->reqPos = syncTime;
+							data->posReq = TRUE;
+							change_flag = TRUE;
+							data->endFlag = FALSE;
+						}
 					}
 				}
 			}
@@ -226,10 +336,11 @@ int jack_process(jack_nframes_t nframes, void *arg){
 		jack_midi_clear_buffer(midi_buffer);
 		if(data->endFlag){
 			/* send end of media message */
-			if(packet = (controlPacket *)jack_midi_event_reserve(midi_buffer, 0, 7)){
-				packet->type = cType_end | cPeer_player;	
+			if(packet = (controlPacket *)jack_midi_event_reserve(midi_buffer, 0, sizeof(controlPacket))){
+				packet->type = cType_end | cPeer_player;
 				packet->peer = htonl(data->ctlID);
 				packet->dataSize = 0;
+				encodeControlPacket(packet, NULL, NULL, NULL); // size = 0, no additional bytes returned.
 				/* NOTE: we keep sending this message until we receive a 
 				 * pause/stop back from arServer, then we clear the endFlag */
 			}
@@ -238,26 +349,31 @@ int jack_process(jack_nframes_t nframes, void *arg){
 			if(data->seek_enabled){
 				/* send pos control for current position (at start of this process cycle) time */
 				valuetype *val;
-				if(packet = (controlPacket *)jack_midi_event_reserve(midi_buffer, 0, 11)){
+				uint16_t dataSize = controlDataSizeFromRaw(sizeof(valuetype));
+				if(packet = (controlPacket *)jack_midi_event_reserve(midi_buffer, 0, sizeof(controlPacket) + dataSize)){
 					packet->type = cType_pos | cPeer_player;
 					packet->peer = htonl(data->ctlID);
-					packet->dataSize = htons(4);
-					val = (valuetype *)&packet->data;
+					packet->dataSize = htons(sizeof(valuetype));
+					val = (valuetype *)packet->data;
 					val->fVal = data->curPos;
 					val->iVal = htonl(val->iVal);
+					dataSize = sizeof(valuetype);
+					encodeControlPacket(packet, (char*)val, &dataSize, (char*)val+dataSize); // extraPtr is set for inline use: no additional bytes returned.
 				}
 			}else
 				data->posUpdate = FALSE;
 		}
 		
-		// Check tags (control queue) for non-realtime queued packets
+		// Check control queue for non-realtime queued packets
 		// to be sent, upto one per process cycle
-		cnt = jack_ringbuffer_peek(data->ctlqueue, (char*)&header, 7);
-		if(cnt == 7){
-			cnt = 7 + ntohs(header.dataSize);
-			if(jack_ringbuffer_read_space(data->ctlqueue) >= cnt){
-				if(packet = (controlPacket *)jack_midi_event_reserve(midi_buffer, 0, cnt)){
-					jack_ringbuffer_read(data->ctlqueue, (char*)packet, cnt);
+		cnt = jack_ringbuffer_peek(data->ctlqueue, (char*)&header, sizeof(controlPacket));
+		if(cnt == sizeof(controlPacket)){
+			if(decodeControlPacket(&header, 0)){
+				cnt = sizeof(controlPacket) + controlDataSizeFromRaw(ntohs(header.dataSize));
+				if(jack_ringbuffer_read_space(data->ctlqueue) >= cnt){
+					if(packet = (controlPacket *)jack_midi_event_reserve(midi_buffer, 0, cnt)){
+						jack_ringbuffer_read(data->ctlqueue, (char*)packet, cnt);
+					}
 				}
 			}
 		}
@@ -299,7 +415,7 @@ int jack_process(jack_nframes_t nframes, void *arg){
 		}
 	}
 	
-	/* notify midi in status change execution thread of requests */	
+	/* notify midi in status change execution thread of requests */
 	if(change_flag)
 		pthread_cond_broadcast(&data->changedSemaphore);
 	return 0;
@@ -527,14 +643,22 @@ void handle_message(CustomData *data, GstMessage *msg) {
 						// only pass track tags that come in while we are playing
 						size_t len;
 						len = strlen(jstr);
-						if((len <= 2048) && (jack_ringbuffer_write_space(data->ctlqueue) >= (len + 7))){
+						uint16_t encSize = controlDataSizeFromRaw(len);
+						if((encSize <= (2048 - sizeof(controlPacket))) && (jack_ringbuffer_write_space(data->ctlqueue) >= (encSize + sizeof(controlPacket)))){
 							// enque packet in midi/control queue ring buffer
+							encSize = len;
 							controlPacket header;
 							header.type = cPeer_player | cType_tags;
 							header.peer = htonl(data->ctlID);
 							header.dataSize = htons(len);
-							jack_ringbuffer_write(data->ctlqueue, (char*)&header, 7);
-							jack_ringbuffer_write(data->ctlqueue, jstr, len);
+							int8_t *extra = encodeControlPacket(&header, jstr, &encSize, NULL);
+							if(extra){
+								// don't send SysEx byte at header end.  This will be included in extra data
+								jack_ringbuffer_write(data->ctlqueue, (char*)&header, sizeof(controlPacket)-1); 
+								jack_ringbuffer_write(data->ctlqueue, jstr, len);
+								jack_ringbuffer_write(data->ctlqueue, extra, encSize);
+								free(extra);
+							}
 						}
 					}
 				}

@@ -3969,20 +3969,11 @@ unsigned char handle_list(ctl_session *session){
 	while(rec = (queueRecord *)getNextNode((LinkedListEntry *)rec)){
 		segInT = 0.0;
 		segOutT = 0.0;
+		curPos = 0.0;
 		status = getQueueRecStatus(rec, NULL);
 		Name = GetMetaData(rec->UID, "Name", 0);
 		dur =  GetMetaData(rec->UID, "Duration", 0);
 		type = GetMetaData(rec->UID, "Type", 0);
-		segOutT = GetMetaFloat(rec->UID, "SegOut", NULL);
-		if(segOutT == 0.0){
-			segOutT = atof(dur);
-		}
-		
-		fadeT = GetMetaFloat(rec->UID, "FadeOut", NULL);
-		if((fadeT > 0.0) && (fadeT < segOutT))
-			segOutT = fadeT;
-		
-		curPos = 0.0;
 		if(rec->player){
 			inChannel *instance;
 			if(checkPnumber(rec->player-1)){
@@ -3994,6 +3985,17 @@ unsigned char handle_list(ctl_session *session){
 					segOutT = instance->fadePos;
 			}
 		}
+		if(!segOutT){
+			segOutT = GetMetaFloat(rec->UID, "SegOut", NULL);
+			if(!segOutT)
+				segOutT = atof(dur);
+		}
+		
+		fadeT = GetMetaFloat(rec->UID, "FadeOut", NULL);
+		if((fadeT > 0.0) && (fadeT < segOutT))
+			segOutT = fadeT;
+		
+
 		if(segOutT > curPos)
 			segOutT = segOutT - curPos;
 		if((status & status_playing) != 0)

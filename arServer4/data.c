@@ -70,20 +70,20 @@ void freeDataLists(void){
 
 void createSettingsRecord(const char *version){
 	uidRecord *rec;
-
+	
 	pthread_rwlock_wrlock(&dataLock);
 	rec = newUIDRecord((uidRecord *)&metaList, 0, &releaseAllKV);    
 	rec->rev = 0;	// new record, revision zero
 	setValueForKey((keyValueRecord *)&rec->child, "Version", version);
 	setValueForKey((keyValueRecord *)&rec->child, "file_prefixes", DefPrefixList);
 	pthread_rwlock_unlock(&dataLock);
-}  
-    
+}
+
 uint32_t createMetaRecord(const char *url, uint32_t *reqID, unsigned char silent){
 	uint32_t theID;
 	static uint32_t lastID = 0;
 	uidRecord *rec = NULL;
-
+	
 	pthread_rwlock_wrlock(&dataLock);
 	if(reqID){
 		rec = newUIDRecord((uidRecord *)&metaList, *reqID, &releaseAllKV); 
@@ -120,9 +120,9 @@ void releaseMetaRecord(uint32_t uid){
 	/* freed and removed from list when reference count is zero */
 	uidRecord *rec;
 	unsigned char silent;
-
+	
 	pthread_rwlock_wrlock(&dataLock);
-    // find UID record
+	// find UID record
 	if(rec = (uidRecord *)findNode((LinkedListEntry *)&metaList, uid, NULL, NULL)){
 		silent = rec->silent;
 		if(releaseUIDRecord((uidRecord *)&metaList, rec)){
@@ -160,7 +160,7 @@ unsigned char MetaDoesKeyExist(uint32_t uid, const char *key){
 		// now find value for key
 		value = getValueForKey((keyValueRecord *)&rec->child, key);
 	pthread_rwlock_unlock(&dataLock);
-
+	
 	if(value)
 		return 1;
 	return 0;
@@ -241,7 +241,7 @@ unsigned char SetMetaData(uint32_t uid, const char *key, const char *value){
 		rec->rev++;
 	}
 	pthread_rwlock_unlock(&dataLock);
-
+	
 	if(rec){
 		if(uid == 0){
 			// update local vars associated with certain settings values
@@ -464,7 +464,7 @@ void resolveStringMacros(char **theStr, uint32_t uid){
 // unless noted otherwise
 queueRecord *createQueueRecord(uint32_t uid){
 	queueRecord *rec = NULL;
-
+	
 	if(rec = (queueRecord *)calloc(1, sizeof(queueRecord))){
 		rec->refCnt = 1;
 		rec->UID = uid;
@@ -475,7 +475,7 @@ queueRecord *createQueueRecord(uint32_t uid){
 unsigned char releaseQueueRecord(queueRecord *root, queueRecord *rec, unsigned char force){
 	queueRecord	*prev, *current; 
 	inChannel *instance = NULL;
-	uint32_t logID;	
+	uint32_t logID;
 	char *tmp;
 	// This function is an exception:  The queue lock must be 
 	// write locked prior to this function call.
@@ -542,7 +542,7 @@ unsigned char releaseQueueRecord(queueRecord *root, queueRecord *rec, unsigned c
 unsigned char releaseQueueEntry(uint32_t uid){
 	/* freed and removed from list when reference count is zero */
 	queueRecord *rec;
-
+	
 	pthread_rwlock_wrlock(&queueLock);
 	// find UID record
 	if(rec = (queueRecord *)findNode((LinkedListEntry *)&queueList, uid, NULL, NULL)){
@@ -564,7 +564,7 @@ unsigned char releaseQueueEntry(uint32_t uid){
 
 void retainQueueEntry(uint32_t uid){
 	queueRecord *rec;
-
+	
 	pthread_rwlock_wrlock(&queueLock);
 	// find UID record
 	if(rec = (queueRecord *)findNode((LinkedListEntry *)&queueList, uid, NULL, NULL))
@@ -600,7 +600,7 @@ unsigned int queueCount(void){
 } 
 
 unsigned char getQueuePos(uint32_t *ref){
-    // on entry *ref = meta-UID from the specified player
+	// on entry *ref = meta-UID from the specified player
 	LinkedListEntry *rec;
 	if(*ref){
 		pthread_rwlock_rdlock(&queueLock);
@@ -617,7 +617,7 @@ unsigned char getQueuePos(uint32_t *ref){
 unsigned int queueGetNextSegPos(int *thisP){
 	uint32_t i, count, pos;
 	queueRecord *rec;
-
+	
 	pos = 0;
 	if(thisP)
 		*thisP = -1;
@@ -665,13 +665,13 @@ double ItemEndTime(queueRecord *instance, double startTime, double lastStart, in
 	float fadeT;
 	uint32_t stat;
 	char *tmp;
-
+	
 	totalTime = startTime;
 	*priority = 0;
 	*error = 0.0;
 	if(instance){
 		stat = getQueueRecStatus(instance, &mixrec);
-
+		
 		segOutT = GetMetaFloat(instance->UID, "SegOut", NULL);
 		if(segOutT == 0.0)
 				segOutT = GetMetaFloat(instance->UID, "Duration", NULL);
@@ -694,7 +694,7 @@ double ItemEndTime(queueRecord *instance, double startTime, double lastStart, in
 		
 		if(mixrec && (segOutT > mixrec->pos))
 			segOutT = segOutT - mixrec->pos;
-
+			
 		if((stat & status_delete) == 0){  // not flaged for deletion
 			if((stat & status_playing) != 0){
 				totalTime = segOutT + (double)time(NULL);
@@ -746,7 +746,7 @@ void checkSwapReorder(itemGroupRec *firstGroup, itemGroupRec *nextGroup, double 
 	// select largest error
 	if(next_err > first_err)
 		first_err = next_err;
-	
+		
 	if(first_err){
 		// see if the largest error (after priority scaling) is lower the with groups swapped
 		firstDur = firstGroup->last_end_time - firstGroup->first_start_time;
@@ -760,7 +760,7 @@ void checkSwapReorder(itemGroupRec *firstGroup, itemGroupRec *nextGroup, double 
 		// select largest error
 		if(next_swap_err > first_swap_err)
 			first_swap_err = next_swap_err;
-						
+			
 		if((first_swap_err + 10) < first_err){
 			// swap group order in list if more than 10 seconds (after priority weighting)
 			// of target time hit improvement
@@ -810,7 +810,7 @@ unsigned char getNextMovableGroup(int PLsize, itemGroupRec *firstGroup, itemGrou
 	double cur_err, target, startTime, endTime;
 	int cur_prio;
 	uint32_t stat;
-			
+	
 	result = 0;
 	itemTog = strdup("");
 	lastTog = strdup("");
@@ -825,12 +825,12 @@ unsigned char getNextMovableGroup(int PLsize, itemGroupRec *firstGroup, itemGrou
 			result = 0;
 			goto finish;
 		}
-			
+		
 		if(item->UID){
 			free(itemTog);
 			itemTog = GetMetaData(item->UID, "Together", 0);
 		}
-				
+		
 		endTime = ItemEndTime(item, firstGroup->first_start_time, last_start_time, i, &cur_err, &cur_prio, &target);
 		item->endTime = endTime;
 		
@@ -861,7 +861,7 @@ unsigned char getNextMovableGroup(int PLsize, itemGroupRec *firstGroup, itemGrou
 		startTime = firstGroup->last_end_time;
 		curGroup = firstGroup;
 		nextGroup->highest_priority_value = -1;
-
+		
 		while(++i < PLsize){
 			// find next loop
 			if((item = (queueRecord *)getNthNode((LinkedListEntry *)&queueList, i+1)) == NULL){
@@ -944,14 +944,13 @@ void UpdateQueueEndTimes(unsigned char sort){
 	// This function is an exception:  The queue lock must be 
 	// either read or write locked if sort is false and write locked
 	// if sort is true, prior to calling this function.
-
+	
 	queueRecord *rec, *nextr;
 	int i;
 	double startTime, fillTime, locFillTime, lastStartTime, targetTime;
 	int size;
 	uint32_t flags, stat;
 	itemGroupRec first, next;
-	char *tmp;
 	
 	flags = status_hasPlayed | status_cueing | status_remove | status_delete;
 	
@@ -974,7 +973,7 @@ void UpdateQueueEndTimes(unsigned char sort){
 			if(rec = (queueRecord *)getNthNode((LinkedListEntry *)&queueList, i)){
 				stat = getQueueRecStatus(rec, NULL);
 				if(!(stat  & flags)){
-					// instance hasn't played or isn't flagged to delete/remove			
+					// instance hasn't played or isn't flagged to delete/remove
 					if(i > 1){
 						if(nextr = (queueRecord *)getNthNode((LinkedListEntry *)&queueList, i-1))
 							startTime = nextr->endTime;
@@ -989,8 +988,13 @@ void UpdateQueueEndTimes(unsigned char sort){
 						// target time set to 10 or more minutes BEFORE now... delete!
 						// Deleting is OK because we are itterating through the list from end to start,
 						// so he previous item (next) will still be there after we delete this one.
+						char buf[256];
+						char *tmp;
+						tmp = GetMetaData(rec->UID, "Name", false);
+						snprintf(buf, sizeof buf, "[data] UpdateQueueEndTimes-Item deleted: UID=%08x, Name=%s, Target time too older.", (unsigned int)rec->UID, tmp);
+						free(tmp);
+						serverLogMakeEntry(buf);
 						releaseQueueRecord((queueRecord *)&queueList, rec, 0);
-
 					}else if((locFillTime > 0) && (fillTime > locFillTime)){
 						if(fillTime < startTime){
 							// Again, Deleting is OK because we are itterating backwards through the list.
@@ -1009,7 +1013,7 @@ time_t queueGetEndTime(void){
 	time_t	endTime;
 	int	listSize;
 	queueRecord *rec;
-
+	
 	pthread_rwlock_rdlock(&queueLock);
 	listSize = countNodesAfter((LinkedListEntry *)&queueList);
 	// update end time estimates

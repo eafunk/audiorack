@@ -120,24 +120,12 @@ typedef union {
 	int8_t			cVal[4];
 } valuetype;
 
-typedef struct __attribute__((packed)){		
-						/* Structure of contol packet: used to control/communicate with recorders and players
-						 * NOTE: packets passed as midi data via jackaudio midi API, even though the data format
-						 * is not midi.  Jack is fine with this, but don't try to connect the arserver control midi
-						 * ports to other applications that are expecting actual midi data. */
-	uint8_t				type;
-	uint32_t			peer;		// network byte order - player input number [0,N] or recorder UID.
-	uint16_t			dataSize;	// network byte order - size, in bytes, of the data, if any.
-	int8_t				data[1];	// network byte order or text.  Text need NOT to be null terminated
-									// due to the size (length) specified above.
-}controlPacket;
-
 typedef struct __attribute__((packed)){		/* top level structure of notify packet */
 	int8_t				marker;	// NULL value as a packet marker in session text stream
 	int8_t				type;
-	uint16_t			dataSize;	// excluding the 4 bytes of this header
+	uint16_t				dataSize;	// excluding the 4 bytes of this header
 	int8_t				data[1];
-}notifyConatiner;
+} notifyConatiner;
 
 typedef struct __attribute__((packed)){	
 	uint32_t			senderID;
@@ -147,31 +135,31 @@ typedef struct __attribute__((packed)){
 		int32_t			iVal;
 		uint8_t			cVal[4];
 	} value;
-}notifyData;
+} notifyData;
 
 typedef struct __attribute__((packed)){
 	// values are saclar magnitude
 	uint8_t			count;	// number of vuInstances in data
 	int8_t			data[1];
-}vuNContainer;
+} vuNContainer;
 
 typedef struct __attribute__((packed)){		/* data structures inside of vuNContainer */
 	uint32_t uid;	// 0 for output buses or uid of player, recorder, etc.
 	uint8_t	count;		// number of channels in vuData array... sequencial from 0
 	int8_t	data[1];	
-}vuNInstance;
+} vuNInstance;
 
 typedef struct __attribute__((packed)){		/* data structures for each channel inside of vuInstance */
 	// values are saclar magnitude
 	uint8_t	peak;		// value is 255 times the sqrt of scalar magnitude (VU metere like scaling)
 	uint8_t	avr;		// value is 255 times the sqrt of scalar magnitude (VU metere like scaling)
-}vuNData; 
+} vuNData; 
 
 typedef struct {		/* entry in notify queue */
 	void *next;			// next record in list, or NULL for end
 	int32_t				spare;
 	notifyConatiner		container;
-}notifyEntry;
+} notifyEntry;
 
 /* Global Variables */
 extern const char *versionStr;	// set in main.c
