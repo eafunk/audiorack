@@ -1558,7 +1558,6 @@ unsigned char queueControlOutPacket(mixEngineRecPtr mixRef, char type, uint32_t 
 		}else
 			jack_ringbuffer_write(mixRef->ctlOutQueue, (char*)&header, sizeof(controlPacket));
 		pthread_mutex_unlock(&mixRef->ctlOutQueueMutex);
-		pthread_mutex_unlock(&mixRef->ctlOutQueueMutex);
 		return 1;
 	}else{
 		pthread_mutex_unlock(&mixRef->ctlOutQueueMutex);
@@ -1586,8 +1585,8 @@ void *controlQueueInWatcher(void *refCon){
 			now = time(NULL);
 			// packet data is not decoded... this is stored in the ring buffer just as a raw MIDI SysEx event
 			size = jack_ringbuffer_peek(mixEngine->ctlInQueue, (char*)&header, sizeof(controlPacket));
-			if(decodeControlPacket(&header, 1) && (size == sizeof(controlPacket))){
-				size = controlDataSizeFromRaw(htons(header.dataSize)) + sizeof(controlPacket);
+			if((size == sizeof(controlPacket) && decodeControlPacket(&header, 1))){
+				size = controlDataSizeFromRaw(ntohs(header.dataSize)) + sizeof(controlPacket);
 				if(jack_ringbuffer_read_space(mixEngine->ctlInQueue) >= size){
 					if(packet = calloc(1, size)){ // NULL termination if needed will over-write SysEx end flag byte
 						jack_ringbuffer_read(mixEngine->ctlInQueue, (char*)packet, size);
@@ -1659,7 +1658,6 @@ void *controlQueueInWatcher(void *refCon){
 								(packet->dataSize) && ((packet->type & cPeer_MASK) == cPeer_recorder)){
 							// recorders send an announcement at lease once every 10 seconds
 							cJSON *parent, *item;
-							packet->data[packet->dataSize] = 0; // null terminate data
 							if(parent = cJSON_Parse(packet->data)){
 								if((item = cJSON_GetObjectItem(parent, "Name")) && (item->valuestring)){
 									tmp = GetMetaData(packet->peer, "Name", 0);
@@ -1771,7 +1769,7 @@ void *controlQueueInWatcher(void *refCon){
 								}
 								vuRecord->count = 1;
 								instance = (vuNInstance *)vuRecord->data;
-								instance->uid = htonl(packet->peer);
+								instance->uid = ntohl(packet->peer);
 								instance->count = chanCnt;
 								memcpy(instance->data, packet->data, packet->dataSize);
 								size = packet->dataSize + (sizeof(vuNInstance) + sizeof(vuNContainer) - 2);
@@ -1828,7 +1826,7 @@ char *encodeControlData(char *data, uint16_t *size, char *extraPtr){
 	char *byte = data;
 	*extra = 0;
 	while(rem){
-		if(bit > 7){
+		if(bit >= 7){
 			bit = 0;
 			extra++;
 			*extra = 0;

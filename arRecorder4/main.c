@@ -480,7 +480,7 @@ uint16_t controlDataSizeFromRaw(uint16_t byteCount){
 }
 
 char *encodeControlData(char *data, uint16_t *size, char *extraPtr){
-	// size on entry is size of data in bytes.  On return, the size of additional bytes encoded, including sysex stop byte
+	// size on entry is size of data in bytes.  On return, the size of additional bytes encoded.
 	// Result is additional data bytes needed to 7 bit rncode 8 bit data. if result is not null, the memory must be freed.
 	// If extraPtr is not NULL on entry, no axtra bytes are allocated or returned, and the extar data is writen to this pointer.
 	if(!size || (*size == 0))
@@ -495,7 +495,7 @@ char *encodeControlData(char *data, uint16_t *size, char *extraPtr){
 	char *byte = data;
 	*extra = 0;
 	while(rem){
-		if(bit > 7){
+		if(bit >= 7){
 			bit = 0;
 			extra++;
 			*extra = 0;
@@ -551,7 +551,7 @@ unsigned char decodeControlPacket(controlPacket *packet, char headerOnly){
 }
 
 char *encodeControlPacket(controlPacket *header, char *data, uint16_t *size, char *extraPtr){
-	// size on entry is size of data in bytes.  On return, the size of additionall bytes returned.
+	// size on entry is size of data in bytes.  On return, the size of additional bytes returned.
 	// Result is additional bytes needed to 7 bit rncode 8 bit data. if result is not null, the memory must be freed.
 	// if extraPtr is not NULL, extra data will be stored in this location, and result will be NULL (No new memory 
 	// allocated needing to be freed)  NOTE: extraPtr must point to enouch memory to store the extra data.
@@ -663,6 +663,14 @@ void jack_shutdown_callback(void *arg){
 	pthread_cond_broadcast(&data->pushSemaphore);
 }
 
+/*
+void hexDump(uint8_t *dataPtr, size_t size){
+	while(size--)
+		fprintf(stderr, "%02x ", *(dataPtr++));
+	fprintf(stderr, "\n");
+}
+*/
+
 static int jack_process(jack_nframes_t nframes, void *arg){
 	jack_nframes_t origFrames = nframes;
 	CustomData *data = (CustomData *)arg;
@@ -700,10 +708,12 @@ static int jack_process(jack_nframes_t nframes, void *arg){
 	// to be sent, upto one per proc cycle: settings, VU, etc.
 	cnt = jack_ringbuffer_peek(data->ctlsendqueue, (char*)&header, sizeof(controlPacket));
 	if(cnt == sizeof(controlPacket)){
-		cnt = sizeof(controlPacket) + controlDataSizeFromRaw(ntohs(header.dataSize));
-		if(jack_ringbuffer_read_space(data->ctlsendqueue) >= cnt){
-			if(packet = (controlPacket *)jack_midi_event_reserve(midi_bufferOut, 0, cnt)){
-				jack_ringbuffer_read(data->ctlsendqueue, (char*)packet, cnt);
+		if(decodeControlPacket(&header, 1)){
+			cnt = sizeof(controlPacket) + controlDataSizeFromRaw(ntohs(header.dataSize));
+			if(jack_ringbuffer_read_space(data->ctlsendqueue) >= cnt){
+				if(packet = (controlPacket *)jack_midi_event_reserve(midi_bufferOut, 0, cnt)){
+					jack_ringbuffer_read(data->ctlsendqueue, (char*)packet, cnt);
+				}
 			}
 		}
 	}
@@ -899,7 +909,7 @@ static int jack_process(jack_nframes_t nframes, void *arg){
 			// flag audio dropout error
 			data->status = data->status | rec_err_keepup;
 	}
-	/* notify midi in status change execution thread of requests */	
+	/* notify midi in status change execution thread of requests */
 	if(change_flag){
 		data->settingsChanged = TRUE;
 		pthread_cond_broadcast(&data->ctlSemaphore);
@@ -1060,81 +1070,83 @@ void* handleCtlQueues(void *refCon){
 		/* check inqueue for tags */
 		len = jack_ringbuffer_peek(data->ctlrecvqueue, (char*)&header, sizeof(controlPacket));
 		if(len == sizeof(controlPacket)){
-			len = ntohs(header.dataSize);
-			uint16_t encSize = controlDataSizeFromRaw(len) + sizeof(controlPacket);
-			if(jack_ringbuffer_read_space(data->ctlrecvqueue) >= encSize){
-				if(packet = (controlPacket *)calloc(1, encSize)){
-					jack_ringbuffer_read(data->ctlrecvqueue, (char*)packet, encSize);
-					decodeControlPacket(packet, 0);
-					packet->data[len] = 0;
-					if(obj = cJSON_Parse(packet->data)){
-						if(item = obj->child){ 
-							tags = gst_tag_list_new_empty();
-							gst_tag_list_set_scope(tags, GST_TAG_SCOPE_GLOBAL);
-							memset(&logRec, 0, sizeof(ProgramLogRecord));
-							do{
-								if(item->child && item->string){
-									if(jstr = cJSON_PrintUnformatted(item)){
-										str_insertstr(&jstr, "=", 0);
-										str_insertstr(&jstr, item->string, 0);
-										gst_tag_list_add(tags, GST_TAG_MERGE_REPLACE, "extended-comment", jstr, NULL);
-										free(jstr);
+			if(decodeControlPacket(&header, 1)){
+				len = ntohs(header.dataSize);
+				uint16_t encSize = controlDataSizeFromRaw(len) + sizeof(controlPacket);
+				if(jack_ringbuffer_read_space(data->ctlrecvqueue) >= encSize){
+					if(packet = (controlPacket *)calloc(1, encSize)){
+						jack_ringbuffer_read(data->ctlrecvqueue, (char*)packet, encSize);
+						decodeControlPacket(packet, 0);
+						packet->data[len] = 0;
+						if(obj = cJSON_Parse(packet->data)){
+							if(item = obj->child){ 
+								tags = gst_tag_list_new_empty();
+								gst_tag_list_set_scope(tags, GST_TAG_SCOPE_GLOBAL);
+								memset(&logRec, 0, sizeof(ProgramLogRecord));
+								do{
+									if(item->child && item->string){
+										if(jstr = cJSON_PrintUnformatted(item)){
+											str_insertstr(&jstr, "=", 0);
+											str_insertstr(&jstr, item->string, 0);
+											gst_tag_list_add(tags, GST_TAG_MERGE_REPLACE, "extended-comment", jstr, NULL);
+											free(jstr);
+										}
+									}else if(!strcasecmp(item->string, "Name")){
+										if(item->valuestring && (strlen(item->valuestring))){
+											gst_tag_list_add(tags, GST_TAG_MERGE_REPLACE, GST_TAG_TITLE, item->valuestring, NULL);
+											logRec.name = item->valuestring;
+										}
+									}else if(!strcasecmp(item->string, "Artist")){
+										if(item->valuestring && (strlen(item->valuestring))){
+											gst_tag_list_add(tags, GST_TAG_MERGE_REPLACE, GST_TAG_ARTIST, item->valuestring, NULL);
+											logRec.artist = item->valuestring;
+										}
+									}else if(!strcasecmp(item->string, "Album")){
+										if(item->valuestring && (strlen(item->valuestring))){
+											gst_tag_list_add(tags, GST_TAG_MERGE_REPLACE, GST_TAG_ALBUM, item->valuestring, NULL);
+											logRec.album = item->valuestring;
+										}
+									}else if(!strcasecmp(item->string, "Track")){
+										if(jstr = ustr(item->valueint)){
+											gst_tag_list_add(tags, GST_TAG_MERGE_REPLACE, GST_TAG_TRACK_NUMBER, jstr, NULL);
+											free(jstr);
+										}
+									}else if(!strcasecmp(item->string, "ISRC")){
+										if(item->valuestring && (strlen(item->valuestring))){
+											gst_tag_list_add(tags, GST_TAG_MERGE_REPLACE, GST_TAG_ISRC, item->valuestring, NULL);
+										}
 									}
-								}else if(!strcasecmp(item->string, "Name")){
-									if(item->valuestring && (strlen(item->valuestring))){
-										gst_tag_list_add(tags, GST_TAG_MERGE_REPLACE, GST_TAG_TITLE, item->valuestring, NULL);
-										logRec.name = item->valuestring;
+								}while(item = item->next);
+								gst_send_tag_event(data->asrc, tags);
+								
+								if(data->ascPlayList && (data->status & rec_running)){
+									if(ar = cJSON_GetObjectItem(obj, "AR")){
+										if((item = cJSON_GetObjectItem(ar, "ID")) && (item->valueint))
+											logRec.ID = item->valueint;
+										if((item = cJSON_GetObjectItem(ar, "FP")) && (item->valueint))
+											logRec.fingerprint = item->valueint;
+										if((item = cJSON_GetObjectItem(ar, "OwnerID")) && (item->valueint))
+											logRec.ownerID = item->valueint;
+										if((item = cJSON_GetObjectItem(ar, "ArtistID")) && (item->valueint))
+											logRec.artistID = item->valueint;
+										if((item = cJSON_GetObjectItem(ar, "AlbumID")) && (item->valueint))
+											logRec.albumID = item->valueint;
+										if((item = cJSON_GetObjectItem(ar, "Owner")) && (item->valuestring))
+											logRec.owner = item->valuestring;
+										if((item = cJSON_GetObjectItem(ar, "Source")) && (item->valuestring))
+											logRec.source = item->valuestring;
+										if((item = cJSON_GetObjectItem(ar, "Comment")) && (item->valuestring))
+											logRec.comment = item->valuestring;
 									}
-								}else if(!strcasecmp(item->string, "Artist")){
-									if(item->valuestring && (strlen(item->valuestring))){
-										gst_tag_list_add(tags, GST_TAG_MERGE_REPLACE, GST_TAG_ARTIST, item->valuestring, NULL);
-										logRec.artist = item->valuestring;
-									}
-								}else if(!strcasecmp(item->string, "Album")){
-									if(item->valuestring && (strlen(item->valuestring))){
-										gst_tag_list_add(tags, GST_TAG_MERGE_REPLACE, GST_TAG_ALBUM, item->valuestring, NULL);
-										logRec.album = item->valuestring;
-									}
-								}else if(!strcasecmp(item->string, "Track")){
-									if(jstr = ustr(item->valueint)){
-										gst_tag_list_add(tags, GST_TAG_MERGE_REPLACE, GST_TAG_TRACK_NUMBER, jstr, NULL);
-										free(jstr);
-									}
-								}else if(!strcasecmp(item->string, "ISRC")){
-									if(item->valuestring && (strlen(item->valuestring))){
-										gst_tag_list_add(tags, GST_TAG_MERGE_REPLACE, GST_TAG_ISRC, item->valuestring, NULL);
-									}
+									AddFPLEntryFromProgramLogStruct(data->ascPlayList, 
+														(double)gst_util_uint64_scale_int(data->curPos, 10, GST_SECOND) * 0.1,
+														&logRec, &data->fpFilePos);
 								}
-							}while(item = item->next);
-							gst_send_tag_event(data->asrc, tags);
-							
-							if(data->ascPlayList && (data->status & rec_running)){
-								if(ar = cJSON_GetObjectItem(obj, "AR")){
-									if((item = cJSON_GetObjectItem(ar, "ID")) && (item->valueint))
-										logRec.ID = item->valueint;
-									if((item = cJSON_GetObjectItem(ar, "FP")) && (item->valueint))
-										logRec.fingerprint = item->valueint;
-									if((item = cJSON_GetObjectItem(ar, "OwnerID")) && (item->valueint))
-										logRec.ownerID = item->valueint;
-									if((item = cJSON_GetObjectItem(ar, "ArtistID")) && (item->valueint))
-										logRec.artistID = item->valueint;
-									if((item = cJSON_GetObjectItem(ar, "AlbumID")) && (item->valueint))
-										logRec.albumID = item->valueint;
-									if((item = cJSON_GetObjectItem(ar, "Owner")) && (item->valuestring))
-										logRec.owner = item->valuestring;
-									if((item = cJSON_GetObjectItem(ar, "Source")) && (item->valuestring))
-										logRec.source = item->valuestring;
-									if((item = cJSON_GetObjectItem(ar, "Comment")) && (item->valuestring))
-										logRec.comment = item->valuestring;
-								}
-								AddFPLEntryFromProgramLogStruct(data->ascPlayList, 
-													(double)gst_util_uint64_scale_int(data->curPos, 10, GST_SECOND) * 0.1,
-													&logRec, &data->fpFilePos);
 							}
+							cJSON_Delete(obj);
 						}
-						cJSON_Delete(obj);
+						free(packet);
 					}
-					free(packet);
 				}
 			}
 		}
@@ -1311,7 +1323,7 @@ void mainloop(int next_arg, char *argv[], int apl_arg, unsigned char persist, lo
 	mlock(data.ringbuffer, rbsize);
 	
 	if((data.ctlsendqueue = jack_ringbuffer_create(queueSizeBytes)) == NULL){
-		g_printerr("\nERROR: control queue send (settings, VU, etc.) ring buffer allocation failed.\n");
+		g_printerr("\nERROR: control queue send (settings, etc.) ring buffer allocation failed.\n");
 		goto finish;
 	}
 	mlock(data.ctlsendqueue, queueSizeBytes);
@@ -1599,7 +1611,7 @@ int main(int argc, char *argv[]){
 			return 0;
 		}
 	}
-	fprintf(stderr, "arRecorder version 4.0.0\n\n"); 
+	fprintf(stderr, "arRecorder version 4.1.0\n\n"); 
 	fprintf(stderr, "Usage: (optional, in front of required) [required - in order]\n"); 
 	fprintf(stderr, "%s (-p) (-a file-path) (-s unix-start-time) (-l time-limit-seconds) (-b tags-bus-bit-number) [our unique Jack name] [control client name] [ctlUID] [jack port connection list] [gstreamer-pipline]\n\n", argv[0]);
 	fprintf(stderr, "-p optionaly enables jack connection persistance, causing arRecorder to keep running when jack connections are lost\n");

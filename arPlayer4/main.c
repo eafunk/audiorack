@@ -178,7 +178,7 @@ char *encodeControlData(char *data, uint16_t *size, char *extraPtr){
 	char *byte = data;
 	*extra = 0;
 	while(rem){
-		if(bit > 7){
+		if(bit >= 7){
 			bit = 0;
 			extra++;
 			*extra = 0;
@@ -292,7 +292,7 @@ int jack_process(jack_nframes_t nframes, void *arg){
 				uint32_t peer = htonl(data->ctlID);
 				if(((header.type & cPeer_MASK) == cPeer_player) && (header.peer == peer)){
 					char type = header.type & cType_MASK;
-					cnt = htons(header.dataSize);
+					cnt = ntohs(header.dataSize);
 					if(type == cType_posack){
 						/* handle realtime pos change ack packet */
 						data->posUpdate = FALSE;
@@ -368,7 +368,7 @@ int jack_process(jack_nframes_t nframes, void *arg){
 		// to be sent, upto one per process cycle
 		cnt = jack_ringbuffer_peek(data->ctlqueue, (char*)&header, sizeof(controlPacket));
 		if(cnt == sizeof(controlPacket)){
-			if(decodeControlPacket(&header, 0)){
+			if(decodeControlPacket(&header, 1)){
 				cnt = sizeof(controlPacket) + controlDataSizeFromRaw(ntohs(header.dataSize));
 				if(jack_ringbuffer_read_space(data->ctlqueue) >= cnt){
 					if(packet = (controlPacket *)jack_midi_event_reserve(midi_buffer, 0, cnt)){
@@ -962,7 +962,7 @@ finish:
 int main(int argc, char *argv[]){
 	unsigned int chCount;
 	if(argc != 6){
-		fprintf(stderr, "arPlayer version 4.0.0\n\n"); 
+		fprintf(stderr, "arPlayer version 4.1.0\n\n"); 
 		fprintf(stderr, "Usage: (optional) [required]\n");
 		fprintf(stderr, "%s [(-u playURL) or (-p gstreamer-pipline)] [Jack client name] [ctlIDNumber] [jack port connection list]\n\n", argv[0]);
 		fprintf(stderr, "where client name is the Jack name for an arServer instance to which we will connect our control ports,\n");

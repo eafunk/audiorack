@@ -798,7 +798,7 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 					}else{
 						if(thisIn->segNext){
 							// unhook any segue times that have been set if the list is not running
-							thisIn->segNext = -1;
+							thisIn->segNext = 0;
 						}
 					}
 				}

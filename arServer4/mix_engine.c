@@ -193,12 +193,10 @@ int process(jack_nframes_t nframes, void *arg){
 	event_count = jack_midi_get_event_count(midi_buffer);
 	for(c=0; c<event_count; c++){
 		jack_midi_event_get(&in_event, midi_buffer, c);
-//fprintf(stderr, "midiIn=%lu\n", in_event.size);
 		packet = (controlPacket *)in_event.buffer;
 		if(in_event.size >= sizeof(controlPacket)){
 			header = *packet; // copy header portion, for header decoding
 			if(decodeControlPacket(&header, 1)){
-//fprintf(stderr, "sysex: b=%b, t=%x, s=%d, p=%x\n", header.topBits, header.type, htons(header.dataSize), ntohl(header.peer));
 				handled = 0;
 				if((header.type & cPeer_MASK) == cPeer_player){
 					i = ntohl(header.peer);
@@ -206,7 +204,7 @@ int process(jack_nframes_t nframes, void *arg){
 						inchrec = &mixEngineRef->ins[i];
 						if(inchrec->status){
 							char type = header.type & 0x0f;
-							size = htons(header.dataSize);
+							size = ntohs(header.dataSize);
 							if(type == cType_end){
 								// handle end of media message
 								inchrec->status = inchrec->status | status_finished;
@@ -266,7 +264,6 @@ int process(jack_nframes_t nframes, void *arg){
 	midi_buffer = jack_port_get_buffer(mixEngineRef->ctlOutPort, nframes);
 	jack_midi_clear_buffer(midi_buffer);
 	
-//fprintf(stderr, "midiout space=%lu\n", jack_midi_max_event_size(midi_buffer));
 	/* Talkback Control bits update */
 	tbBits = (uint32_t)mixEngineRef->reqTalkBackBits << 29;
 	activeBus = tbBits;  // activeBus bit may be modified as we loop through channels, tbBit will not.
