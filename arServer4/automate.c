@@ -1170,10 +1170,12 @@ void AutomatorTask(void){
 		}else{ 
 			SchedulerInserter(&lastSchedTime, 1);
 		}
-	}else{
+	}
+/*	Code below disabled so to preserve insertion between items that may have been manually added while automation was off
+	else{
 		// not doing schedule checks...
 		lastSchedTime = 0;
-	}
+	} */
 
 	// Target Time adjustments
 	if((autoState == auto_unatt) || (autoState == auto_live && (flags & live_target))){
