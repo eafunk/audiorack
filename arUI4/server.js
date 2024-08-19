@@ -37,9 +37,13 @@ const extract = require('extract-zip');
 var sse = require('./sse.js');
 var lib = require('./library');
 var studio = require('./studio');
+var sipproxy = require('./sipWsProxy');
 
 var httpServer = false;
 var httpsServer = false;
+var wss;	// secure websocket server instance for sip/websocket proxy
+var ws;	// nonSSL websocket server instance for sip/websocket proxy
+var udp;	// UDP socket for sip/websocket proxy
 var config = false;
 var tmpDirIntervalObj = false;
 var storage = false;
@@ -159,7 +163,10 @@ function checkPwdHash(salt, clearpw, hashedpw){
 		"https_certfile": "/path/to/ssl/certfile",	// optional: required for enabling https server
 		"https_keyfile": "/path/to/ssl/keyfile",	// optional: required for enabling https server
 		"https_port": 8888,	// optional: required for enabling https server
-		"ses_secret": ""	// session storage secret for client encryption.  Will be set randomy and saved if missing.
+		"ses_secret": "",	// session storage secret for client encryption.  Will be set randomy and saved if missing.
+		"sipproxy_websocket_id": "some ip address", // client facing ip address for http and https servers above, if used for sip websocket proxy. Blank to disable.
+		"sipproxy_udp_port": 5050 // UDP interface port number for the sip/webRTC gateway, 0 to let OS choose.
+		"sipproxy_udp_id": "some ip address", // client facing ip address for the UDP interface used for a sip websocket proxy. Blank to disable.
 	},
 	"files": {
 		"prefixes": ["prefixpattern1", "prefixpattern2", "prefixpattern3"],	// optional to override the default prefix patterns for the OS
@@ -373,12 +380,13 @@ function applySettingsToApp(conf){
 								httpsServer.listen(conf.http.https_port);
 							console.log("https server listening on port "+conf.http.https_port);
 						}
+						wss = sipproxy.initializeProxyWS(httpsServer, wss, conf.http.sipproxy_websocket_id);
 					}
 				});
 			}
 		});
 	}else{
-		httpsServer = false;
+		sipproxy.initializeProxyWS(false, wss);
 		console.log("no parameters for https server");
 	}
 	
@@ -403,7 +411,9 @@ function applySettingsToApp(conf){
 			}
 			console.log("http server listening on port "+conf.http.http_port);
 		}
+		ws = sipproxy.initializeProxyWS(httpServer, ws, conf.http.sipproxy_websocket_id);
 	}else{
+		ws = sipproxy.initializeProxyWS(false, ws);
 		httpServer = false;
 		console.log("no parameters for http server");
 	}
@@ -417,6 +427,9 @@ function applySettingsToApp(conf){
 		resave: false,
 		saveUninitialized: false
 	});	// this sets/changes the sessionUse dynamic var referenced in the initial session setup
+	
+	//	UDP socket setup for SIP websocket proxy, if any.
+	udp = sipproxy.initializeProxyUDP(conf.http.sipproxy_udp_port, udp, conf.http.sipproxy_udp_id)
 }
 
 function handleConfigChanges(conf){
@@ -550,7 +563,7 @@ function getConf(request, response){
 			if(i > 3)
 				// flatten results past level 3, with id = directory name as the specified id
 				parKey = dirs[dirs.length-1];
-			if(request.session.permission == "admin"){
+			if((request.session.permission == "admin") || ((dirs[dirs.length-3] == "studios") && (parKey == "host"))){
 				// full property access
 				restObjectRequest(request, response, obj, false, parKey);
 			}else{
@@ -1120,6 +1133,26 @@ app.get('/nav', async function(request, response){
 			}
 			html += `</div>`;
 			
+			// live remote 
+			html += `<button class="tabitem" onclick="dropClick(event)" data-childdiv="remotediv">Live Remote
+							<i class="fa fa-caret-down"></i>
+						</button>
+						<div id="remotediv" class="dropdown-container">
+							<div id="remstatusmsg">Not Connected</div>
+							<label for="remstu">To Studio:</label>
+							<select id="remstu">`;
+						
+			if(studios){
+				let keys = Object.keys(studios);
+				for(let i = 0; i < keys.length; i++){
+					html += `<option val="`+keys[i]+`">`+keys[i]+`</option>`;
+				}
+			}
+			html += `	</select>
+							<audio id="remotesound" autoplay></audio>
+							Name: <input id="remotename" type="text" size="8" value="Remote">
+							<center><button class="editbutton" id="RemConBtn" onclick="remCallAction()">Connect</button></center>
+						</div>`;
 		}
 		
 		if(['admin', 'manager', 'production', 'traffic'].includes(request.session.permission)){

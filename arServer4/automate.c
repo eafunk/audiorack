@@ -949,8 +949,8 @@ void SchedulerInserter(time_t *lastSchedTime, unsigned char highOnly){
 	lastPriority = 0;
 	localtime_r(&endTime, &endTimeRec);
 	localtime_r(lastSchedTime, &lastTimeRec);
-	if(lastTimeRec.tm_min != endTimeRec.tm_min){
-		// minutes of time last and end are different... check for schedule inserts
+	if((lastTimeRec.tm_hour != endTimeRec.tm_hour) || (lastTimeRec.tm_min != endTimeRec.tm_min)){
+		// hour or minutes of time last and end are different... check for schedule inserts
 		dbresult = NULL;
 		while(item = dbGetNextScheduledItem(&dbresult, &target, &priority, *lastSchedTime, endTime, highOnly)){
 			// item priorities of 8 or greater will supress all lesser priority items targeted for the same time from being added

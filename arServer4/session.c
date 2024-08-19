@@ -2329,7 +2329,7 @@ unsigned char handle_unload(ctl_session *session){
 			return rError;
 		}
 
-		// handle possibvle sip player transfer on close
+		// handle sip player transfer on close
 		if(instance->UID){
 			type = GetMetaData(instance->UID, "Type", 0);
 			if(!strcmp(type, "sip")){
@@ -2365,8 +2365,8 @@ unsigned char handle_unload(ctl_session *session){
 			}
 			free(type);
 		}
-			 
-				
+		 
+		
 		session->lastPlayer = aInt;
 		if(instance->persist){
 			instance->persist = persistOff;
@@ -2399,7 +2399,8 @@ unsigned char handle_unload(ctl_session *session){
 				return rOK;
 			}
 			pLocks[aInt]->readUnlock();
-*/			
+		}
+*/
 	}
 	session->errMSG = "Missing parameter.\n";
 	return rError;

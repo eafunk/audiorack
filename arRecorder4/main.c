@@ -1117,7 +1117,6 @@ void* handleCtlQueues(void *refCon){
 										}
 									}
 								}while(item = item->next);
-								gst_send_tag_event(data->asrc, tags);
 								
 								if(data->ascPlayList && (data->status & rec_running)){
 									if(ar = cJSON_GetObjectItem(obj, "AR")){
@@ -1141,6 +1140,8 @@ void* handleCtlQueues(void *refCon){
 									AddFPLEntryFromProgramLogStruct(data->ascPlayList, 
 														(double)gst_util_uint64_scale_int(data->curPos, 10, GST_SECOND) * 0.1,
 														&logRec, &data->fpFilePos);
+								}else{
+									gst_send_tag_event(data->asrc, tags);
 								}
 							}
 							cJSON_Delete(obj);
@@ -1616,11 +1617,12 @@ int main(int argc, char *argv[]){
 	fprintf(stderr, "%s (-p) (-a file-path) (-s unix-start-time) (-l time-limit-seconds) (-b tags-bus-bit-number) [our unique Jack name] [control client name] [ctlUID] [jack port connection list] [gstreamer-pipline]\n\n", argv[0]);
 	fprintf(stderr, "-p optionaly enables jack connection persistance, causing arRecorder to keep running when jack connections are lost\n");
 	fprintf(stderr, "   attempting to reconnect to the ports specified in the jack port list if/when they become avalable again.\n");
-	fprintf(stderr, "-a optionally specifies a file path to log track tag data that is received from audiorack control port in audiorack .apl format.\n");
+	fprintf(stderr, "-a optionally specifies a file path to log track tag data to that is received from audiorack control port in audiorack .apl format.\n");
+	fprintf(stderr, "   When this is specified, the .fpl file will be the tag data destination, and not the gstreamer pipeline.\n");
 	fprintf(stderr, "   Note that the -b option (see below) must also be set for any tracks to actually be logged.\n");
 	fprintf(stderr, "-s optionaly enables recorder auto-starting at/after the specified unix-time value.\n");
 	fprintf(stderr, "-l optionaly enables recorder auto-stoping at/after the specified record duration, integer seconds, is reached.\n");
-	fprintf(stderr, "-b optionaly enables the passing of song tag data, received from the control port, to the gstreamer pipeline\n");
+	fprintf(stderr, "-b optionaly enables the passing of song tag data received from the control port, to either the gstreamer pipeline, or to a .fpl file if -a option is also specified.\n");
 	fprintf(stderr, "when the received tag play bus bits have the specified bit number [1..8] set (bit number + 1).\n");
 	fprintf(stderr, "Control client name is the Jack name for an arServer instance to which we will connect our control ports,\n");
 	fprintf(stderr, "and ctlUID is our recorder unique ID with which we will tag control messages we send, and watch for taged messages\n");

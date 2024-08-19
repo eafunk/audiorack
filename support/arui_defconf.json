@@ -10,7 +10,10 @@
       "https_keyfile": "",
       "https_port": 8888,
       "ses_secret": "Here is some random web session secret",
-      "ses_ttl": 86400
+      "ses_ttl": 86400,
+      "sipproxy_websocket_id": "127.0.0.1",
+      "sipproxy_udp_port": 5062,
+      "sipproxy_udp_id": "127.0.0.1"
    },
    "users": {
       "admin": {

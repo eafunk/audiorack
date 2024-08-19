@@ -3408,7 +3408,7 @@ async function getFileMeta(tmpDirFileName, fullpath){
 						full = false;
 					}
 					if(full){
-						full.Type = "playlist";	// change type to toc playlist so it displays in client
+						full.Type = "playlist";	// change type to library playlist so it displays in client
 						full.URL = URL;
 						return full;	// all results
 					}else
@@ -3678,7 +3678,7 @@ async function importFileIntoLibrary(fpath, params, fullpath){
 					setstr = buildInsValString(setstr, dur);
 					colstr += ", Added) ";
 					setstr += ", UNIX_TIMESTAMP());";
-
+					
 					try{
 						result = await asyncQuery(conn, insert+colstr+setstr);
 					}catch(err){
@@ -3830,7 +3830,7 @@ async function importFileIntoLibrary(fpath, params, fullpath){
 						conn.release();
 						pass.status = -1;
 						return pass;
-					}					
+					}
 				}else if(dupmode > 2){	// update existing duration
 					// 3 replace/delete old or 4 update if missing, missing already checked.
 					let query = "UPDATE "+locConf['prefix']+"toc SET Duration = "+meta.Duration+" WHERE ID = "+ID+";";

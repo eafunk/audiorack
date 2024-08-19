@@ -130,17 +130,18 @@ footer {
 	height: 100%;
 	float: left;
 	border: 1px solid #CCC;
+	padding: 4px;
 	background-color: #EEE;
 	width: 140px;
 	align-items: stretch;
 }
 
 /* Style the buttons that are used to open the tab content */
-.navtab button {
+.tabitem {
 	display: block;
 	background-color: inherit;
 	color: black;
-	padding: 10px 12px;
+	padding: 5px;
 	width: 100%;
 	border: none;
 	outline: none;
@@ -150,12 +151,12 @@ footer {
 }
 
 /* Change background color of buttons on hover */
-.navtab button:hover {
+.tabitem:hover {
 	background-color: #FFC;
 }
 
 /* Create an active/current "tab button" class */
-.navtab button.active {
+.tabitem.active {
 	background-color: #ccc;
 }
 
@@ -163,17 +164,22 @@ footer {
 .dropdown-container {
 	display: none;
 	background-color: #EEE;
-	padding-left: 16px;
+	padding: 4px 4px 4px 16px;
 	transition: 0.4s;
 }
 
-.dropdown-container select, 
+#remotediv {
+	font-size: 8px;
+	border-width: 1px;
+	border-style: inset;
+}
+
+/*.dropdown-container select, 
 .dropdown-container label {
 	background-color: #EEE;
 	font-size: 12px;
 	position: relative;
-	left: 12px;
-}
+}*/
 
 /* Optional: Style the caret down icon */
 .fa-caret-down {
@@ -231,7 +237,7 @@ footer {
 		"head head head head head"
 		"button time bus vu fade"
 		"button rem status vu fade";
-	grid-template-columns: 68px 120px 100px 1fr 1fr;
+	grid-template-columns: 75px 120px 100px 1fr 1fr;
 	grid-template-rows: 17px 17px 17px;
 }
 
@@ -252,7 +258,7 @@ footer {
 			"time vu"
 			"rem vu"
 			"button fade";
-		grid-template-columns: 68px 1fr;
+		grid-template-columns: 75px 1fr;
 		grid-template-rows:  17px 17px 17px 17px 34px;
 	}
 	

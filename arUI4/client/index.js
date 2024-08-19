@@ -37,6 +37,7 @@ class watchableValue {
 /***** Global Variables *****/
 
 includeScript("vumeter.js");
+includeScript("jssip-3.10.0.min.js");	// for live remote
 
 var infoWidth = "450px";
 var cred = false;
@@ -481,8 +482,7 @@ async function getLocList(){
 }
 
 async function getMediaLocs(){
-let resp;
-	resp = await fetchContent("getconf/files");
+	let resp = await fetchContent("getconf/files");
 	if(resp){
 		if(resp.ok){
 			let list = await resp.json();
@@ -3195,6 +3195,13 @@ async function saveItemInstance(evt){
 					is = 1;
 				else
 					is = 0;
+			}else if(item.name == "TargetTime"){
+				// was -> unitTime, is ->  JS date-time
+				if((is !== null && is.trim() !== "")){
+					// convert to unixtime from local ISO format 
+					is = Date.parse(is) / 1000;
+				}else
+					is = "";
 			}
 			if(was != is){
 				is = encodeURIComponent(is);
@@ -4264,14 +4271,14 @@ async function reloadItemSection(el, type){
 		inner += "</table>";
 
 		if(itemProps.canEdit){
-			inner += `Replace File With: <form id="replaceform" enctype="multipart/form-data">
-							<input type="file" id="replaceinput" class="editbutton" name="filestoupload" onchange="itemReplace(event)">
-						</form>
-						<label for="filereplacedest">To new Media Location:</label>
+			inner += `<label for="filereplacedest">Replace File to new Media Location:</label>
 						<select id="filereplacedest">
 							<option value="" onClick="getMediaLocs()">Reload List</option>
 							<option value="" selected>Default</option>
 						</select>
+						With this file: <form id="replaceform" enctype="multipart/form-data">
+							<input type="file" id="replaceinput" class="editbutton" name="filestoupload" onchange="itemReplace(event)">
+						</form>
 						<p><button id='savefilebut' onclick='saveItemFile(event)'>Save File Properties</button>`;
 		}
 		el.innerHTML = inner;
@@ -4421,14 +4428,20 @@ async function reloadItemSection(el, type){
 				inner += " Fade <input type='checkbox' id='instItemFade' name='fade'";
 			inner += ">";
 			inner += "</td>";
-			
+			inner += "<tr><td>Target Time</td><td><input id='instTargetTime' type='datetime-local' name='TargetTime' value='";
+			let val = Number(meta.TargetTime)
+			if(val){
+				let theDate = new Date(val * 1000);
+				inner += dateToISOLocal(theDate)+"'";
+			}else
+				inner += "'";
+			inner += "></input>";
 			inner += "<tr><td>Don't Log</td><td>";
 			if(meta.NoLog)
 				inner += "<input type='checkbox' name='NoLog' checked";
 			else
 				inner += "<input type='checkbox' name='NoLog'";
 			inner += ">";
-			
 			inner += "</table></form>";
 			inner += "</td>";
 			inner += "<p><button id='saveinstbut' name='submit' onclick='saveItemInstance(event)'>Apply Instance Properties</button></p>";
@@ -7245,8 +7258,11 @@ function queueHistoryHasID(itemID){
 function calcQueueTimeToNext(data){
 	if(data){
 		for(let n = (data.length - 1); n >= 0; n--){
-			if(data[n].status & 0x0C)	// has played or playing status flag is set
+			if(data[n].status & 0x0C){	// has played or playing status flag is set
+//!				if(data[n].segout <= 0.0)
+//!console.log("calcQTimeToNextTrap n=:"+n, data);
 				return data[n].segout;
+			}
 		}
 	}
 	return 0.0;
@@ -10084,7 +10100,8 @@ function stTBAction(evt, state, tb){
 //!
 async function debugSyncStudio(){
 	studioStateCache.queueRev = 0; // force reload
-	syncStudioStat(studioName);
+	await syncStudioStat(studioName);
+//!console.log(studioStateCache.queue);
 }
 
 async function syncStudioStat(studio){
@@ -10102,6 +10119,7 @@ async function syncStudioStat(studio){
 						value =  parseInt(value);
 						if(studioStateCache.queueRev < value){
 							// queue (list) has changed... issue list command to handle changes
+//!console.log("sycStudioStat qrev="+value);
 							studioStateCache.queueRev = value;
 							syncQueue(studio, value);
 						}
@@ -10189,6 +10207,7 @@ async function syncStudioMetalist(studio){
 					for(let n = 1; n < keys.length; n++){
 						let ref = keys[n];
 						if(refList.some(elem => elem == ref) == false){
+//!console.log("from syncStudioMetalist");
 							studioDelMeta(ref);
 						}
 					}
@@ -10400,6 +10419,10 @@ async function appendItemsToQueue(data){
 				if(item && (!item.stat || (item.stat != "Playing"))){
 					ref = parseInt(ref, 10);
 					let hexStr =  ("00000000" + ref.toString(16)).substr(-8);
+					// get auto state, then turn automation off
+					let curAutoStat = studioStateCache.autoStat;
+					if(curAutoStat)
+						await fetchContent("studio/"+studioName+"?cmd=autooff");
 					for(let n=0; n<data.length; n++){
 						let url = "";
 						if(data[n].ID)
@@ -10410,6 +10433,11 @@ async function appendItemsToQueue(data){
 							await fetchContent("studio/"+studioName+"?cmd=add%20"+hexStr+"%20"+url);
 						}
 					}
+					// restore auto state
+					if(curAutoStat == 2)
+						await fetchContent("studio/"+studioName+"?cmd=autoon");
+					else if(curAutoStat == 1)
+						await fetchContent("studio/"+studioName+"?cmd=autolive");
 				}
 				return;
 			}
@@ -10620,6 +10648,7 @@ async function syncQueue(studio, rev){
 			if(resp.ok){
 				let raw = await resp.text();
 				if(studioStateCache.queueRev != rev){
+//!console.log("syncQueue ignore rev "+rev);
 					return;
 				}
 				let lines = raw.split("\n");
@@ -10641,6 +10670,7 @@ async function syncQueue(studio, rev){
 				}
 				studioStateCache.queue = res;
 				// sync cached times
+//!console.log("syncQueue times rev "+rev);
 				studioStateCache.queueSec = calcQueueTimeToNext(res);
 				studioStateCache.queueDur = calcQueueTimeToEnd(res);
 				updateQueueLogDisplay(false);
@@ -10752,8 +10782,9 @@ function studioDelMeta(ref){
 		delete studioStateCache.meta[ref];
 		let el = queueElementFromRef(ref);
 		if(el){
-			// this meta record has an element in the queue... trigger an queue update
-			syncQueue(studioName);
+			// this meta record has an element in the queue... trigger an queue update via stat check, to capture the Queue rev.
+//!console.log("delMeta stat/queue sync");
+			syncStudioStat(studioName);
 		}
 		// check recorder list for update
 		for(let i=0; i<studioStateCache.encoders.length; i++){
@@ -11605,167 +11636,181 @@ function playerDropHandler(evt){
 	return false;
 }
 
+var syncPlayerSeq = 0;
 async function syncPlayers(studio){
 	// get players list
 	if(studio && studio.length){
 		let resp;
+		syncPlayerSeq++;
+		let thisSeq = syncPlayerSeq;
+//!console.log("syncPlayers seq="+thisSeq);
 		resp = await fetchContent("studio/"+studio+"?cmd=pstat&raw=1");
 		if(resp){
 			if(resp.ok){
-				let raw = await resp.text();
-				let lines = raw.split("\n");
-				lines.pop(); // remove last, blank line
-				let keys = lines[0].split("\t");
-				let count = lines.length;
-				if(count > 1){
-					let settings = studioStateCache.meta[0];
-					if(settings){
-						let vis = settings.client_players_visible;
-						if(vis && count > vis)
-							count = parseInt(vis)+1;
-					}
-					let mixer = document.getElementById("mixergrid");
-					// check grid size against list size
-					while(count-1 < mixer.childElementCount){
-						// remove columns
-						mixer.removeChild(mixer.lastChild);
-					}
-					while(count-1 > mixer.childElementCount){
-						// add columns
-						let p = document.createElement("div");
-						p.setAttribute("data-pnum", mixer.childElementCount);
-						p.draggable = false;
-						p.className = "player";
-						p.id = "player" + mixer.childElementCount;
-						p.addEventListener("dragstart", playerDragAllow);
-						p.addEventListener("dragenter", playerDropAllow);
-						p.addEventListener("dragover", playerDropAllow);
-						p.addEventListener("dragleave", playerDropAllow);
-						p.addEventListener("drop", playerDropHandler);
-						mixer.appendChild(p);
-					}
-					for(let n = 1; n < count; n++){
-						let obj = {};
-						if(lines[n].length){
-							let fields = lines[n].split("\t");
-							let cnt = fields.length;
-							if(cnt > keys.length) 
-								cnt = keys.length;
-							for(let i = 0; i < cnt; i++)
-								obj[keys[i]] = fields[i];
+//!console.log("syncPlayers this="+thisSeq+" recent="+syncPlayerSeq);
+				if(syncPlayerSeq == thisSeq){
+					let raw = await resp.text();
+					let lines = raw.split("\n");
+					lines.pop(); // remove last, blank line
+					let keys = lines[0].split("\t");
+					let count = lines.length;
+					if(count > 1){
+						let settings = studioStateCache.meta[0];
+						if(settings){
+							let vis = settings.client_players_visible;
+							if(vis && count > vis)
+								count = parseInt(vis)+1;
 						}
-						let ref = obj["meta-UID"];
-						let meta = undefined;
-						let pnum = n-1;
-						if(ref){
-							ref = parseInt(ref, 16);
-							obj["meta-UID"] = ref;
-							meta = studioStateCache.meta[ref];
-						}else{
-							ref = queueRefFromPlayer(pnum);
-							ref = parseInt(ref, 16);
+						let mixer = document.getElementById("mixergrid");
+						// check grid size against list size
+						while(count-1 < mixer.childElementCount){
+							// remove columns
+							mixer.removeChild(mixer.lastChild);
+						}
+						while(count-1 > mixer.childElementCount){
+							// add columns
+							let p = document.createElement("div");
+							p.setAttribute("data-pnum", mixer.childElementCount);
+							p.draggable = false;
+							p.className = "player";
+							p.id = "player" + mixer.childElementCount;
+							p.addEventListener("dragstart", playerDragAllow);
+							p.addEventListener("dragenter", playerDropAllow);
+							p.addEventListener("dragover", playerDropAllow);
+							p.addEventListener("dragleave", playerDropAllow);
+							p.addEventListener("drop", playerDropHandler);
+							mixer.appendChild(p);
+						}
+						let updateTimes = false;
+						for(let n = 1; n < count; n++){
+							let obj = {};
+							if(lines[n].length){
+								let fields = lines[n].split("\t");
+								let cnt = fields.length;
+								if(cnt > keys.length) 
+									cnt = keys.length;
+								for(let i = 0; i < cnt; i++)
+									obj[keys[i]] = fields[i];
+							}
+							let ref = obj["meta-UID"];
+							let meta = undefined;
+							let pnum = n-1;
 							if(ref){
+								ref = parseInt(ref, 16);
 								obj["meta-UID"] = ref;
 								meta = studioStateCache.meta[ref];
-								obj.status = 0;
-								pnum = -1;
-							}
-						}
-						// update queue status if in queue
-						if(meta){
-							meta.pNum = pnum;
-							meta.stat = queueStatusText(obj.status);
-							// update queue item properties too, if in queue
-							let idx = queueIdxFromUID(ref);
-							if(idx > -1){
-								let qitem = studioStateCache.queue[idx];
-								if(qitem){
-									obj.seg = parseFloat(obj.seg);
-									if(obj.seg)
-										qitem.segout = obj.seg;
-									else
-										qitem.segout = parseFloat(obj.dur);
-									qitem.segout = qitem.segout - parseFloat(obj.pos);
-									qitem.status = obj.status;
-								}
-							}
-							let el = queueElementFromRef(ref);
-							if(el)
-								updateQueueElement(el.el, meta);
-						}
-						// check for UI change update
-						let prev = studioStateCache.ins[n-1];
-						if(!prev || (prev.status != obj.status)){
-//						if((!prev && obj.status) || (prev && (prev.status != obj.status))){
-							let player = document.getElementById("player" + (n-1));
-							if(obj.status == 0){
-								while(player.hasChildNodes())
-									player.removeChild(player.lastChild);
-								player.title = "";
-								player.draggable = false;
 							}else{
-								if(!player.hasChildNodes()){
-									// copy player template
-									let clone = pTemplate.content.cloneNode(true);
-									let el = clone.querySelector("#pLabel"); 
-									el.setAttribute("id", "pLabel"+(n-1));
-									el.setAttribute("data-pnum", n-1);
-									el.draggable = true;
-									el.innerText = n.toString();
-									el = clone.querySelector("#pType"); 
-									el.setAttribute("id", "pType"+(n-1));
-									if(meta)
-										el.innerText = meta.Type;
-									else
-										el.innerText = "";
-									el = clone.querySelector("#pName"); 
-									el.setAttribute("id", "pName"+(n-1));
-									if(meta)
-										el.innerText = meta.Name;
-									else
-										el.innerText = "";
-									el = clone.querySelector("#pTime"); 
-									el.setAttribute("id", "pTime"+(n-1));
-									el = clone.querySelector("#pRem"); 
-									el.setAttribute("id", "pRem"+(n-1));
-									el = clone.querySelector("#pPos"); 
-									el.setAttribute("id", "pPos"+(n-1));
-									el = clone.querySelector("#pVU"); 
-									el.setAttribute("id", "pVU"+(n-1));
-									el = clone.querySelector("#pBusSel"); 
-									el.setAttribute("id", "pBusSel"+(n-1));
-									el.setAttribute("data-childdiv", "pBusList"+(n-1));
-									el = clone.querySelector("#pBusList"); 
-									el.setAttribute("id", "pBusList"+(n-1));
-									el = clone.querySelector("#pCue"); 
-									el.setAttribute("id", "pCue"+(n-1));
-									el.setAttribute("data-idx", n-1);
-									el = clone.querySelector("#pBal"); 
-									el.setAttribute("id", "pBal"+(n-1));
-									el = clone.querySelector("#pFader"); 
-									el.setAttribute("id", "pFader"+(n-1));
-									el = clone.querySelector("#pGain"); 
-									el.setAttribute("id", "pGain"+(n-1));
-									el = clone.querySelector("#pPlay"); 
-									el.setAttribute("id", "pPlay"+(n-1));
-									el = clone.querySelector("#pStop"); 
-									el.setAttribute("id", "pStop"+(n-1));
-									el = clone.querySelector("#pUnload"); 
-									el.setAttribute("id", "pUnload"+(n-1));
-									
-									player.appendChild(clone);
-									player.draggable = true;
-									if(meta)
-										updatePlayerTitle(n-1, meta);
+								ref = queueRefFromPlayer(pnum);
+								ref = parseInt(ref, 16);
+								if(ref){
+									obj["meta-UID"] = ref;
+									meta = studioStateCache.meta[ref];
+									obj.status = 0;
+									pnum = -1;
 								}
-								updatePlayerUI(obj);
 							}
+							// update queue status if in queue
+							if(meta){
+								meta.pNum = pnum;
+								meta.stat = queueStatusText(obj.status);
+								// update queue item properties too, if in queue
+								let idx = queueIdxFromUID(ref);
+								if(idx > -1){
+									updateTimes = true;
+									let qitem = studioStateCache.queue[idx];
+									if(qitem){
+										obj.seg = parseFloat(obj.seg);
+										if(obj.seg)
+											qitem.segout = obj.seg;
+										else
+											qitem.segout = parseFloat(obj.dur);
+										qitem.segout = qitem.segout - parseFloat(obj.pos);
+										qitem.status = obj.status;
+//!										if(qitem.segout <= 0)
+//!console.log("syncPlayers "+n+" dump:", lines);
+									}
+								}
+								let el = queueElementFromRef(ref);
+								if(el)
+									updateQueueElement(el.el, meta);
+							}
+							// check for UI change update
+							let prev = studioStateCache.ins[n-1];
+							if(!prev || (prev.status != obj.status)){
+								let player = document.getElementById("player" + (n-1));
+								if(obj.status == 0){
+									while(player.hasChildNodes())
+										player.removeChild(player.lastChild);
+									player.title = "";
+									player.draggable = false;
+								}else{
+									if(!player.hasChildNodes()){
+										// copy player template
+										let clone = pTemplate.content.cloneNode(true);
+										let el = clone.querySelector("#pLabel"); 
+										el.setAttribute("id", "pLabel"+(n-1));
+										el.setAttribute("data-pnum", n-1);
+										el.draggable = true;
+										el.innerText = n.toString();
+										el = clone.querySelector("#pType"); 
+										el.setAttribute("id", "pType"+(n-1));
+										if(meta)
+											el.innerText = meta.Type;
+										else
+											el.innerText = "";
+										el = clone.querySelector("#pName"); 
+										el.setAttribute("id", "pName"+(n-1));
+										if(meta)
+											el.innerText = meta.Name;
+										else
+											el.innerText = "";
+										el = clone.querySelector("#pTime"); 
+										el.setAttribute("id", "pTime"+(n-1));
+										el = clone.querySelector("#pRem"); 
+										el.setAttribute("id", "pRem"+(n-1));
+										el = clone.querySelector("#pPos"); 
+										el.setAttribute("id", "pPos"+(n-1));
+										el = clone.querySelector("#pVU"); 
+										el.setAttribute("id", "pVU"+(n-1));
+										el = clone.querySelector("#pBusSel"); 
+										el.setAttribute("id", "pBusSel"+(n-1));
+										el.setAttribute("data-childdiv", "pBusList"+(n-1));
+										el = clone.querySelector("#pBusList"); 
+										el.setAttribute("id", "pBusList"+(n-1));
+										el = clone.querySelector("#pCue"); 
+										el.setAttribute("id", "pCue"+(n-1));
+										el.setAttribute("data-idx", n-1);
+										el = clone.querySelector("#pBal"); 
+										el.setAttribute("id", "pBal"+(n-1));
+										el = clone.querySelector("#pFader"); 
+										el.setAttribute("id", "pFader"+(n-1));
+										el = clone.querySelector("#pGain"); 
+										el.setAttribute("id", "pGain"+(n-1));
+										el = clone.querySelector("#pPlay"); 
+										el.setAttribute("id", "pPlay"+(n-1));
+										el = clone.querySelector("#pStop"); 
+										el.setAttribute("id", "pStop"+(n-1));
+										el = clone.querySelector("#pUnload"); 
+										el.setAttribute("id", "pUnload"+(n-1));
+										
+										player.appendChild(clone);
+										player.draggable = true;
+										if(meta)
+											updatePlayerTitle(n-1, meta);
+									}
+									updatePlayerUI(obj);
+								}
+							}
+							studioStateCache.ins[n-1] = obj;	
+							if(studioStateCache.control)
+								studioStateCache.control.setPStat(obj.status, n-1);
 						}
-						studioStateCache.ins[n-1] = obj;	
-						if(studioStateCache.control)
-							studioStateCache.control.setPStat(obj.status, n-1);
+						if(updateTimes){
+//!console.log("syncPlayers times seq="+thisSeq);
+							studioStateCache.queueDur = calcQueueTimeToEnd(studioStateCache.queue);
+							studioStateCache.queueSec = calcQueueTimeToNext(studioStateCache.queue);
+						}
 					}
-					studioStateCache.queueSec = calcQueueTimeToNext(studioStateCache.queue);
 				}
 			}else{
 				alert("Got an error fetching players from studio.\n"+resp.statusText);
@@ -11854,6 +11899,7 @@ function studioHandleNotice(data){
 			break;
 		case "metadel":		// metadata record deleted, ref=UID number, no val.
 			ref = data.uid;
+//!console.log("from metadel notice");
 			studioDelMeta(ref);
 			break;
 		case "outdly":			// output delay change, ref=output index, val=delay in seconds, 16 max.
@@ -12271,43 +12317,156 @@ function buffToUvObj(buffer){
 
 /**** startup and load functions *****/
 
+function credCompare(auth){
+	if(auth && cred)
+		if(auth.username == cred.username)
+			if(auth.permission == cred.permission)
+				return true;
+	return false;
+}
+
 async function startupContent(auth){
-	let err = await loadElement("nav", document.getElementById("navtab"));
-	if(!err){
-		if(typeof auth !== "undefined")
-			cred = auth;
-		else{
-			let res = await checkLogin();
-			if(res)
-				cred = res;
-			else
-				cred = false;
-			bc.postMessage({type:"authChange", value:cred});
-		}
-		hideUnauthDiv(cred);
-		let el = document.getElementById('fileimportbox');
-		if(cred){
-			showTabElement(document.getElementById('navabout'), 'about');
-			if(['admin', 'manager', 'library', 'programming'].includes(cred.permission))
-				el.style.display = "block";
-			else
-				el.style.display = "none";
-		}else{
-			showTabElement(document.getElementById('navlogin'), 'login');
-			el.style.display = "none"
-		}
-		getLocList();
-		getCatList();
-		getMediaLocs();
-	}
-	await loadElement("stadmin", document.getElementById("studioAdmin"));
-	let el = document.getElementById("conCommand");
-	if(el){
-		el.addEventListener("keyup", function(event) {
-			if(event.key === "Enter"){
-				stConsSend();
+	if(credCompare(auth) == false){
+		let err = await loadElement("nav", document.getElementById("navtab"));
+		if(!err){
+			if(typeof auth !== "undefined")
+				cred = auth;
+			else{
+				let res = await checkLogin();
+				if(res)
+					cred = res;
+				else
+					cred = false;
+				bc.postMessage({type:"authChange", value:cred});
 			}
-		});
+			hideUnauthDiv(cred);
+			let el = document.getElementById('fileimportbox');
+			if(cred){
+				showTabElement(document.getElementById('navabout'), 'about');
+				if(['admin', 'manager', 'library', 'programming'].includes(cred.permission))
+					el.style.display = "block";
+				else
+					el.style.display = "none";
+			}else{
+				showTabElement(document.getElementById('navlogin'), 'login');
+				el.style.display = "none"
+			}
+			getLocList();
+			getCatList();
+			getMediaLocs();
+		}
+		await loadElement("stadmin", document.getElementById("studioAdmin"));
+		let el = document.getElementById("conCommand");
+		if(el){
+			el.addEventListener("keyup", function(event) {
+				if(event.key === "Enter"){
+					stConsSend();
+				}
+			});
+		}
+	}
+}
+
+var sipUa;
+var sipCall;
+
+function endRemoteCall(){
+	if(sipCall){
+		let tmp = sipCall;	// prevent recursion
+		sipCall = false;
+		tmp.terminate();
+	}
+	let btn = document.getElementById("RemConBtn");
+	let msg = document.getElementById("remstatusmsg");
+	btn.textContent = "Connect";
+	btn.disabled = false;
+}
+
+async function remCallAction(){
+	if(document.getElementById("remotediv")){
+		let btn = document.getElementById("RemConBtn");
+		let msg = document.getElementById("remstatusmsg");
+		if(sipCall){
+			// call in progress
+			endRemoteCall();
+		}else{
+			// new call
+			let name = document.getElementById("remotename").value;
+			let configuration = {
+				sockets  : [ new JsSIP.WebSocketInterface('wss://'+window.location.host) ],
+				register : false,
+				uri      : 'sip:'+name+'@invalid',
+				display_name: name
+			};
+			if(!sipUa){
+				sipUa = new JsSIP.UA(configuration); // remote name may have changed.
+				sipUa.start();
+			if(sipUa){
+				sipUa.set("display_name", name);
+				remstatusmsg.innerText = "Connecting...";
+				btn.disabled = true;
+				sipUa.on('newRTCSession', function(data) {
+					remstatusmsg.innerText = "RTC session started...";
+					sipCall = data.session; 
+					if(sipCall.direction === "outgoing") {
+						//Register for various call session events:
+						sipCall.on('progress', function(e) { 
+console.log("Setting up call...");
+							remstatusmsg.innerText = "Setting up call...";
+						});
+						sipCall.on('failed', function(e) {
+console.log("Call failed", e);
+							remstatusmsg.innerText = "Call failed";
+							sipCall = false;
+							endRemoteCall();
+						});
+						sipCall.on('confirmed', function(e) {
+console.log("Connected");
+							remstatusmsg.innerText = "Connected";
+							btn.textContent = "Disconnect";
+							btn.disabled = false;
+						});
+						sipCall.on('ended', function(e) {
+console.log("Call ended");
+							remstatusmsg.innerText = "Call ended";
+							sipCall = false;
+							endRemoteCall();
+						});
+						
+						//Note: 'connection' is the RTCPeerConnection instance - set after calling ua.call().
+						//    From this, use a WebRTC API for registering event handlers.
+						sipCall.connection.addEventListener("track", (e) => { 
+console.log('add outgoing audio track');
+							remotesound.srcObject = e.streams[0]; //!! use for rx vu too
+							remotesound.play();
+						});
+						
+						//Handle Browser not allowing access to mic and speaker
+						sipCall.on('getusermediafailed', function(DOMError) {
+console.log('Get User Media Failed Call Event ' + DOMError );
+							remstatusmsg.innerText = "No browser media access";
+						});
+					}
+				});
+				let studioName = document.getElementById("remstu").value;
+				let host = false;
+				let resp = await fetchContent("getconf/studios/"+studioName+"/host");
+				if(resp){
+					if(resp.ok){
+						let hostconf = await resp.json();
+						if(hostconf.length)
+							host = hostconf[0].value;
+					}
+				}
+				if(host && host.length)
+					sipCall = sipUa.call('sip:'+studioName+'@'+host+':5060', { 'mediaConstraints' : { 'audio': true, 'video': false } } );
+				else{
+					btn.textContent = "Connect";
+					btn.disabled = false;
+					remstatusmsg.innerText = "No browser media access";
+				}
+			}
+		}
 	}
 }
 

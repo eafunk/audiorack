@@ -185,6 +185,7 @@ void *sipSessionWatcher(void *refCon){
 	int lineno = 0;
 	int len;
 	char established;
+	char audiostart;
 	char block[256]; /* receive data buffer */
 	char line[4096]; /* receive data buffer */
 	char *fragment, *ptr, *remains;
@@ -195,6 +196,7 @@ void *sipSessionWatcher(void *refCon){
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 	lastRegCheck = 0;
 	established = 0;
+	audiostart = 0;
 	while(dispRun){
 		if(sip_ctl_sock > -1){
 			// connection open -- this is the only thread that reads from sip_ctl_sock, so no mutex is needed
@@ -232,6 +234,8 @@ void *sipSessionWatcher(void *refCon){
 						}
 					}else if(strstr(line, "Call established: ")){
 						established = 1;
+					}else if(src && dst && strstr(line, "audio: start")){
+						audiostart = 1;
 					}else if(strstr(line, "call: answering call")){
 						if(tmp = strstr(line, "on line ")){
 							lineno = atoi(tmp+8);
@@ -265,7 +269,7 @@ void *sipSessionWatcher(void *refCon){
 						str_setstr(&dst, tmp);
 					}
 					
-					if(established && lineno && src && dst){
+					if(established && audiostart && lineno && src && dst){
 						// setup new call
 						LoadSipPlayer(name, src, dst);
 						if(name)
@@ -279,6 +283,7 @@ void *sipSessionWatcher(void *refCon){
 						src = NULL;
 						lineno = 0;
 						established = 0;
+						audiostart = 0;
 					}
 					// clear line
 					*line = 0;

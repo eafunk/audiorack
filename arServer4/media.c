@@ -1044,7 +1044,6 @@ void GetURLMetaData(uint32_t UID, const char *url){
 		}else
 			GetGstDiscoverMetaData(UID, url);
 	}
-
 	if(type)
 		free(type);
 }
@@ -1107,6 +1106,8 @@ uint32_t LoadSipPlayer(const char *name, const char *src, const char *dst){
 	if((val == 0.0) || (val > 10)) 
 		val = def_vol;
 	instance->vol = val;
+	
+	sleep(2); // Extra delay for baresip to get it's jack ports running
 	
 	/* make jack connections to mixer input */
 	isConnected = 0;
