@@ -1134,10 +1134,20 @@ app.get('/nav', async function(request, response){
 			html += `</div>`;
 			
 			// live remote 
-			html += `<button class="tabitem" onclick="dropClick(event)" data-childdiv="remotediv">Live Remote
+			html += `<button class="tabitem" onclick="dropClick(event)" data-childdiv="remotediv" data-showcb="setupAudioContext">Live Remote
 							<i class="fa fa-caret-down"></i>
 						</button>
 						<div id="remotediv" class="dropdown-container">
+							<div id="remChSelMatrix">
+								<label for="remLeftSource">L </label><select id="remLeftSource" onchange="remoteInChgAction()"></select>
+								<label for="remRightSource">R </label><select id="remRightSource" onchange="remoteInChgAction()"></select>
+							</div>
+							<input id="remSrcGain" type="range" min="-20" max="20" value="0" step="0.05" style=" width: 100px; height: 12px;" 
+								oninput="remoteGainAction(event);"></input><br>
+							<div id="remInVU"></div>
+							Compressor<input id="remCompChk" type="checkbox" onchange="remCompEnable(event)"><meter id="remGainRedEl" high="0" max="20" value="0"></meter><br>
+							PlayTru<input id="remPTChk" type="checkbox" onchange="remPTEnable(event)">Dim <input id="remPTTrackChk" type="checkbox" onchange="remPTTrackEnable(event)" disabled="disabled">
+							<hr>
 							<div id="remstatusmsg">Not Connected</div>
 							<label for="remstu">To Studio:</label>
 							<select id="remstu">`;
@@ -1149,7 +1159,6 @@ app.get('/nav', async function(request, response){
 				}
 			}
 			html += `	</select>
-							<audio id="remotesound" autoplay></audio>
 							Name: <input id="remotename" type="text" size="8" value="Remote">
 							<center><button class="editbutton" id="RemConBtn" onclick="remCallAction()">Connect</button></center>
 						</div>`;

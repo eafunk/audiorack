@@ -1107,7 +1107,7 @@ uint32_t LoadSipPlayer(const char *name, const char *src, const char *dst){
 		val = def_vol;
 	instance->vol = val;
 	
-	sleep(2); // Extra delay for baresip to get it's jack ports running
+	sleep(2); // Extra delay for baresip to get it's jack ports running (trial by error: 2 seconds works reliably)
 	
 	/* make jack connections to mixer input */
 	isConnected = 0;
