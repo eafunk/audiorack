@@ -1,4 +1,4 @@
-Updated Oct. 12, 2023
+Updated Aug. 29, 2024
 
 *** WHAT IS AUDIORACK4? ***
 
@@ -62,7 +62,7 @@ well.
 
 The old GUI applications have been replaced with a single web-base GUI.
 This package included a node-js GUI server, which then hosts a javascript
-GUI application to a client web browser. This is how you would usa and
+GUI application to a client web browser. This is how you would use and
 manage audiorack.
 
 Documentation is nonexistant other than the source code, and the "help" 
@@ -172,7 +172,12 @@ machines, with yet another machine running the GUI server to bring
 control of all the pieces together, as long as all machines can 
 see eachother on a local network. For starters, it will be assumed 
 that everything exept possibly trhe database is running on one 
-machine, the machine which audiorack was installed on.  
+machine, the machine which audiorack was installed on. In order for
+the various machines that will make up your Audiorack system to be
+consistently reachable by each other, you should make sure the
+machines running arServer(s), the database server, and the GUI 
+server(s) all have static IP addresses on your inside/private network 
+that the machines reach each other through.
 
 The easiest way to get things running once jack and a MySQL 
 database server are running is to use the node-js GUI server 
@@ -183,12 +188,15 @@ with this command:
 /opt/audiorack/bin/keepalive node /option/audiorack/bin/arui/server.js
 
 The same command can be used to create a startup on login application 
-on your particular OS.  For example, on Ubuntu 23.04, the program to 
+on your particular OS.  For example, on Ubuntu 24.04, the program to 
 configure startup items is called Startup Application Preferences, from 
 which you would create a new startup item and with a name and comment 
 to your liking, with the command set to the above comand.
 
-Then, open http://localhost:3000 in a web browser to access the GUI. 
+Then, open http://localhost:3000 in a web browser to access the GUI.
+Or http://ThePrivateAddressOfTheMachineRunningTheGUIServer:3000 if
+you want to access the GUI from a different computer.
+
 Use the following default credentials to log in for the first time:
 default user name: admin
 default password: configure
@@ -207,7 +215,8 @@ beyond the scope of this document, but it is recomended you place .pem
 (key file) and .crt (cert file) files in the .audiorack directory in 
 the user account the GUI server is running in, and set the paths in 
 this configuration accordingly. NOTE: that webmidi for client control 
-surface use and WebRTC require secure http to be configured.
+surface use and WebRTC for live remotes require secure https to be 
+configured with valid or selfsigned certificates.
 
 File settings is the next bar to expand and configure.  Here you must 
 set up a "tmpMediaDir" which is accessible from the GUI server and any 
@@ -385,7 +394,6 @@ busses this signal will be routed to when playing, and what mute group
 live.  Each input can also have a mix-minus feed, for implementing
 phone interfaces, talkbacks, etc.
 
-
 Library setting can mostly be filled in by clicking the Copy & Apply 
 from Library Settings button (that would be copy from the GUI settings 
 for the library).  You will need to set a Library location for the
@@ -441,7 +449,7 @@ holdoff level.
 VoIP settings control how arServer integrates with the baresip VoIP client.
 See the later section in this document called OPTIONAL SIP VoIP integartion 
 for details on how to set up baresip to work with arServer.  This panel 
-controls teh arServer side of this integration. The first item sets the 
+controls the arServer side of this integration. The first item sets the 
 control port that arServer uses to connect to baresip to monitor and control
 calles that come into baresip.  Again, see the OPTIONAL SIP VoIP integartion
 section for details.  All the other ists in this settings tab set up specific
@@ -561,19 +569,41 @@ Audiorack4 requires basesip version 1.0 or later, as changes were made to
 baresip in this version to help it play nicely with audiorack. Configuring 
 baresip to work with your telephone system is beyond the scope of this 
 document. Baresip must be running on the same computer as arServer in order
-for audio to be shared via jack-audio. Configuration for audiorack4 integration 
-involves the following:
+for audio to be shared via jack-audio. Configuration for audiorack4 
+integration involves the following:
 
-1. Ensure the folowing baresip modules are enabled (not commented out).  
+1. Create an account/phone line with your VOIP provider or server
+and configure baresip to register with that provider. Edit the baresip 
+accounts file (usually found at ~/.baresip/accounts), adding the 
+following line with the registeration information.
+
+<sip:LineID@VOIPProviderServerAddress>;auth_pass=VOIPServerSuperSecretPassWord;answermode=auto
+
+... where LineID is the account user/line identification for this line, 
+VOIPProviderServerAddress is the domain name or address of the VOIP provider 
+or server, and VOIPServerSuperSecretPassWord is the password the provider requires
+for registration.
+
+2. Ensure the folowing baresip modules are enabled (not commented out).  
 Edit the baresip configuration file (usually found at ~/.baresip/config) 
 either changing the settings show, or creating them if they do not already 
 exist in the file. See baresip documentation for details.
 
 module			jack.so
 module			cons.so
+module			ice.so
+module			srtp.so
+module			dtls_srtp.so
+module			opus.so		# for WebRTC live remote
+module			g711.so		# standard SIP telephony encoding
 
-2. Ensure baresip has the following audio setting to work with arServer:
+module_tmp		uuid.so
+module_tmp		account.so
 
+3. Ensure baresip has the following audio setting to work with arServer:
+
+sip_listen		0.0.0.0:5060	# Set a static SIP port so the WebRTC  
+										# interface knows how to reach this studio 
 audio_player		jack
 audio_source		jack
 ausrc_srate			48000		# Agree with jack-audio session sample rate
@@ -582,24 +612,27 @@ ausrc_channels		2			# The arServer input channel width (2 for stereo)
 auplay_channels	2			# The arServer input channel width (2 for stereo)
 ausrc_format		float		# s16, float, ..
 auplay_format		float		# s16, float, ..
+auenc_format		s16		# s16, float, ..
+audec_format		s16		# s16, float, ..
+ice_turn		no
 
-3. Ensure that the baresip console module is configured to be reachable
+4. Ensure that the baresip console module is configured to be reachable
 on the local computer so arServer4 can connect to it.  Note the port
 used for connection, in the example below (the default), port 5555:
 
 cons_listen		0.0.0.0:5555
 
-4. Set baresip to NOT auto-connect calls to the default sound devices.
+5. Set baresip to NOT auto-connect calls to the default sound devices.
 We want arServer to manage jack connections.
 
 jack_connect_ports	no
 
-5. It's a good idea to limit the number of calls that baresip will accept
+6. It's a good idea to limit the number of calls that baresip will accept
 at a any one time.
 
 call_max_calls		2	# two calls at a time max.
 
-6. Set the arServer setting "sip_ctl_port" to the port noted above.
+7. Set the arServer setting "sip_ctl_port" to the port noted above.
 This is the TCP port on the local computer that arServer will connect 
 to to manage jack-audio connections and calls from baresip. As mentioned
 above, baresip must be running on the same computer with arServer, therefore, 
@@ -611,18 +644,19 @@ file, for recall on next arServer startup as well.
 set sip_ctl_port 5555
 saveset
 
-7. Run baresip.  arServer is already assumed to be running.  You can uncomment 
-a line in the ars_startup.conf which will cause arServer to run baresip via 
-the runifnot script, which is commented out by default, to have arServer run 
-baresip when arServer starts up.  Just search for baresip in the file to find it. 
-The run path for baresip specified in the line may need to be adjusted to the
-install location of baresip in your particular operating system.
+OR use the Web GUI studio setting VOIP tab when logged in as admin to set this.
+
+8. Run baresip.  arServer is already assumed to be running.  You can uncomment 
+a line in the ~/.audiorack/ars_startup.conf which will cause arServer to run 
+baresip via the runifnot script, which is commented out by default, to have 
+arServer run baresip when arServer starts up.  Just search for baresip in the 
+file to find it. The run path for baresip specified in the line may need to be 
+adjusted to the install location of baresip in your particular operating system.
 
 Note that this will run baresip via the runifnot script, which assumes that if 
 baresip is already running, it was run via that script.  So if you ran baresip 
 manually, you will want to quit it before you restart arServer and let arServer
 run it.
-
 
 Calls received by baresip should now be answered by arServer and routed to
 an free arServer mixer input. The arServer console command "stat" will show 
@@ -630,6 +664,78 @@ you if arServer is connected to baresip, and baresip's registeration status
 with the SIP server you (presumably) have configured baresip to talk to. Again, 
 configuration of baresip to talk to your telephone system is beyond the scope 
 of this document.
+
+*** OPTIONAL WebRTC live remote functionality ***
+
+The WebRTC live remote capability is designed to work entirely on an private
+network, like all other aspects of Audiorack.  If you want to use this feature 
+from outside via the public internet, which seems to be the obvious application,
+you will need to set up a VPN to your inside private network giving authorized 
+outside users access to your private network.  If you make any part of Audiorack 
+system accessable from the public Internet 
+
+Live remotes are implemented using web browser WebRTC functionality, which is
+accessable via the Live Remote left tab in the Audiorack web GUI, when you are 
+logged in as a user with studio access permission. The browser will connect to 
+a WebSocket-to-UDP-SIP bridge built into the GUI server. This bridge in turn 
+will connect to the baresip application associated with the studio the WebRTC 
+instance is trying to reach. 
+
+For all this to work, the GUI server must have it's WebSocket-to-UDP-SIP bridge
+configured, and baresip must have an account set up from which it will accept
+calls from the WebRTC instance via the bridge.
+
+1. Additional baresip configuration:
+You must alread have baresip configured and running (as above) for each arServer
+(studio instance) you want to be able to do a live remote to. Additionally, 
+baresip needs an account configured for accepting WebRTC calls. 
+Edit the baresip accounts file (usually found at ~/.baresip/accounts), adding the 
+following line.
+
+<sip:StudioName@localhost>;regint=0;mediaenc=dtls_srtp;medianat=ice;answermode=auto
+
+... where StudioName is the exact name given to the corrisponding studio in the 
+GUI server studio configuration. Important:  The name must match exactly because 
+the web GUI will use that name to dial the call. 
+ 
+You will need to restart baresip for the new account to take affect.
+
+2. WebSocket-to-UDP-SIP bridge configuration:
+Use the web GUI (log in as a user with  admin permissions) to set the following 
+three items found on the configure panel under "HTTP Settings" tab:
+
+sipproxy_udp_port: 5062 
+
+This is the UDP port number that the bridge will send and receive SIP packets to/from
+when translating packet from/to the WebSocket interface. Any non-zero port will wenable 
+the WebSocket-to-UDP-SIP bridge, but 5062 is a good number to use since it is the 
+standard  SIP port number of 5060 plus 1.  Notethat baresip was previously configured 
+to take the 5060 port number.  When enabled, the WebSocket-to-UDP-SIP bridge will
+use the existing web GUI http and HTTPS server ports for the web socket side of the 
+bridge.  IMPORTANT:  WebRTC only works with a secure web connection, so you MUST have 
+Secure HTTPS already set up (with appropriet certificates, etc.) on the web GUI server.
+
+sipproxy_udp_id: <Local IP Address of the machine running the web GUI>
+
+Set this to the private network IP address of the computer running the web GUI. The 
+bridge will modify all SIP packets passing through it to include this address in the
+packet routing information, so the client (baresip) on the other end knows to respond 
+through this bridge and not try to reply directly to the WebRTC client.
+
+sipproxy_websocket_id: <Local IP Address of the machine running the web GUI>
+
+Set this to the private network IP address of the computer running the web GUI. The 
+bridge will modify all SIP packets passing through it to include this address in the
+packet routing information, so the client (WebRTC session) on the other end knows to respond 
+through this bridge and not try to reply directly to the WebRTC client.
+
+Note that sipproxy_udp_id and sipproxy_websocket_id are usually set to the same address but
+are two different settings just incase the machine running the web GUI has two different 
+network interfaces and you want to split Web Socket and UDP-SIP between them.
+
+You should now be able to "call in" to a studio via the Live Remote tab in the hosted web 
+GUI when you connect to the web GUI server via a secure web connection (https) on the port
+configured on the web GUI server for Secure HTTP.
 
 *** OPTIONAL Carla integartion ***
 
@@ -663,15 +769,15 @@ optional pipewire-jack package is installed along with pipewire itself. The pw-j
 program then allows the launch of programs with the library change made via run 
 environmental variables.  Unfortuantly, arServer itself runs additonal programs 
 (like arPlayer and arRecorder) which do not inherit the environmental variable set 
-by pw-jack.  So here is how you can get most linux OSs to change the library from jack
-to the pipewir implementation by default, with out actually removing the native jack 
+by pw-jack. So here is how you can get most linux OSs to change the library from jack
+to the pipewire implementation by default, with out actually removing the native jack 
 libraries:
 
-This is for pipewire version 0.3, and would likely need to be modified for future 
+This is for pipewire version 1.0, and would likely need to be modified for future 
 versions of pipewire, and assumes your OS uses glibc at it's base for library loading.
 
 You need to create the file /etc/ld.so.conf.d/pipewire-jack-x86_64-linux-gnu.conf as 
-the root user, with the following contents for Ubuntu 22.10.  Other operating systems 
+the root user, with the following contents for Ubuntu 24.04.  Other operating systems 
 may have the library files for jack in a different location:
 
 /usr/lib/x86_64-linux-gnu/pipewire-0.3/jack/
@@ -679,3 +785,6 @@ may have the library files for jack in a different location:
 Then run sudo ldconfig. This overrides the default linker search path so that
 every program that runs and tries to use the jack client libraries, will instead 
 load the pipewire implimentation.
+
+If you want way to do this with out making use of the linux shell, I recommend 
+installing UbuntuStudio, which provides a nice interfeace to do these things.
