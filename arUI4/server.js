@@ -477,7 +477,12 @@ function handleConfigChanges(conf){
 }
 
 function loadConfiguration(){
-	fs.readFile(path.join(os.homedir(), '.audiorack', 'arui_config.json'), function(err, data){ 
+	let confPath = path.join(os.homedir(), '.audiorack');
+	if(!fs.existsSync(confPath)){
+		console.log("Creating configuaration directory at "+ confPath);
+		fs.mkdirSync(confPath);
+	}
+	fs.readFile(path.join(confPath, 'arui_config.json'), function(err, data){ 
 		// Check for errors 
 		if(!err){
 			// Converting to JSON 
