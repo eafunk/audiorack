@@ -2365,7 +2365,6 @@ unsigned char handle_unload(ctl_session *session){
 			}
 			free(type);
 		}
-		 
 		
 		session->lastPlayer = aInt;
 		if(instance->persist){

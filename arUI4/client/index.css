@@ -24,7 +24,17 @@ html, body {
 	transition: 0.5s; /* 0.5 second transition effect to slide in the */
 }
 
-.panel {
+#showscripttabobtn {
+	display: block;
+	padding: 5px; 
+	position: absolute;
+	bottom: 5px;
+	right: 60px;
+	z-index: 10; /* Stay on top */
+	transition: 0.5s; /* 0.5 second transition effect to slide in the */
+}
+
+.Rpanel {
 	flex-flow: column;
 	height: 100%; /* 100% Full-height */
 	width: 0px; /* 0 width - change this with JavaScript */
@@ -33,6 +43,20 @@ html, body {
 	top: 0px; /* Stay at the top */
 	right: 0px;
 	background-color: #888; 
+	overflow-x: hidden; /* Disable horizontal scroll */
+	padding-top: 5px; /* Place content 5px from the top */
+	transition: 0.5s; /* 0.5 second transition effect to slide in the */
+}
+
+.Bpanel {
+	flex-flow: column;
+	width: 700px;
+	height: 0px; /* 0px height - change this with JavaScript */
+	position: fixed; /* Stay in place */
+	z-index: 20; /* Stay on top */
+	bottom: 0px; /* Stay at the bottom */
+	right: 0px; /* Stay at the left side */
+	background-color: #eee; 
 	overflow-x: hidden; /* Disable horizontal scroll */
 	padding-top: 5px; /* Place content 5px from the top */
 	transition: 0.5s; /* 0.5 second transition effect to slide in the */
@@ -168,18 +192,17 @@ footer {
 	transition: 0.4s;
 }
 
-#remotediv {
-	font-size: 8px;
-	border-width: 1px;
-	border-style: inset;
+iframe{
+//	font-size: 8px;
+//	border-width: 1px;
+//	border-style: inset;
+	display: block;
+	margin-left: auto;
+	margin-right: auto;
+	padding: 5px;
+//	justify-content: center;
+//	align-items: center;
 }
-
-/*.dropdown-container select, 
-.dropdown-container label {
-	background-color: #EEE;
-	font-size: 12px;
-	position: relative;
-}*/
 
 /* Optional: Style the caret down icon */
 .fa-caret-down {

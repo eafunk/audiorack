@@ -17,7 +17,7 @@
 				<button id="custdialCanc" onclick="custQueryDialogCanc(event)">Cancel</button>
 				<button id="custdialOK" onclick="custQueryDialogOK(event)">OK</button>
 			</div>
-			<div class="panel" id="infopane">
+			<div class="Rpanel" id="infopane">
 				<button style="float:right;" onclick="closeInfo(event)">&gt;</button>
 				<div id="infodata" class="scroll" style="text-align: left;">
 					<p>Info Panel</p>
@@ -225,6 +225,12 @@
 				</div>
 			</div>
 			<div id="studio" class="tabcontent">
+				<button id="showscripttabobtn" class="editbutton" onclick="showScriptTab(event)">DJ Scripts<i class="fa fa-caret-up"></i></button>
+				<div class="Bpanel" id="scriptpane">
+					<button class="editbutton" style="position:absolute; right:60px; float:top;" onclick="closeScriptTab(event)">DJ Scripts<i class="fa fa-caret-down"></i></button>
+					<div id="scriptContent" class="scroll" style="text-align: left;">
+					</div>
+				</div>
 				<div id="studiodiv" class="scroll">
 					<div id="studiogrid" class="stGrid">
 						<div id="studioStat" class="stStatus">
@@ -375,7 +381,40 @@
 				</div>
 			</div>
 			<div id="cust" class="tabcontent">
-				<p>Radio is fun...</p>
+				<div class="boxed">
+					<legend>Ad Customer Search</legend>
+					<div class="boxed" style="display: flex; flex-direction:row; justify-content:center; align-items:center;">
+						<fieldset style="display: flex; flex-direction:row; justify-content:center; align-items:center;">
+							<ul id="custDateType" style="list-style-type:none; text-align: left; " onchange="custListRefresh(event)">
+							<legend>Order Date</legend>
+							<li><input type="radio" id="custDateActive" name="custDateType" value="Active" checked><label for="custDateActive">Active In year (YYYY)</label>
+							<li><input type="radio" id="custDatePosted" name="custDateType" value="Posted" ><label for="custDatePosted">Posted In year </label>
+							</ul>
+							<input type="text" id="custDateYear" value="" size="4" pattern="^\d{4}$" onchange="custListRefresh(event)">
+							<select id="custDateMon" onchange="custListRefresh(event)">
+								<option value='0'>Any</option>
+								<option selected value='01'>January</option>
+								<option value='2'>February</option>
+								<option value='3'>March</option>
+								<option value='4'>April</option>
+								<option value='5'>May</option>
+								<option value='6'>June</option>
+								<option value='7'>July</option>
+								<option value='8'>August</option>
+								<option value='9'>September</option>
+								<option value='10'>October</option>
+								<option value='11'>November</option>
+								<option value='12'>December</option>
+							</select>
+						</fieldset>
+						<label for="custNameMatch">Name contains:</label><input type="text" id="custNameMatch" value="" size="30" onchange="custListRefresh(event)">
+					</div>
+					<button id="custNewbtn" onclick="custCreateNew(event)">New Customer</button>
+					<div class="scroll" id="custListDiv" style="height: 200px;">
+					</div>
+				</div>
+				<div class="scroll" id="custRecordDiv">
+				</div>
 			</div>
 			<div id="campaign" class="tabcontent">
 				<p>Radio is fun...</p>

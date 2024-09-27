@@ -440,7 +440,7 @@ int process(jack_nframes_t nframes, void *arg){
 				inchrec->status = inchrec->status & ~status_talkback;
 			if(busbits & 2){
 				/* when in cue, disable mixing into all other buses */
-				busbits = 2;
+				busbits = 0x01000002;
 				if((inchrec->sourceType == sourceTypeLive) && (inchrec->status & status_standby) && !(inchrec->status & status_loading)){
 					// live sources activeate cue mute bus even when not playing
 					activeBus = activeBus | 0x01000002;

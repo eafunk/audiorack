@@ -604,7 +604,9 @@ void setSegTimes(inChannel *thisp, inChannel *nextp, int nextNum){
 			if(segoutT < 0.0)
 				segoutT = 0.0;
 		}
-	}
+	}else
+		serverLogMakeEntry("[automation] setSegTimes-:zero duration bug!");
+		
 	if(segoutT > dur)
 		segoutT = dur;
 	//get segin time of the next item
@@ -618,6 +620,9 @@ void setSegTimes(inChannel *thisp, inChannel *nextp, int nextNum){
 	if(segoutT < 0.0) 
 		segoutT = 0.0;
 		
+	if(!segoutT)
+		serverLogMakeEntry("[automation] setSegTimes-:segout time set to zero bug!");
+
 	n_priority = GetMetaInt(nextp->UID, "Priority", NULL);
 	t_priority = GetMetaInt(thisp->UID, "Priority", NULL);
 	if((n_priority > 9) && (t_priority < n_priority)){ // priority 10 or higher forces fade into next at exact time
@@ -639,21 +644,26 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 	uint32_t status, busses;
 	double targetTime, dur;
 	unsigned char force;
-	char *tmp, *type;
+	char *type;
+	static time_t curTime;
 	
 	*firstp = -1;
 	force = 0;
 	next = NULL;
 	priority = 0;
 	targetTime = 0.0;
-		
+	
+	if(curQueRec == (queueRecord *)&queueList)
+		curTime = time(NULL); // get time now if this is the root (start) of itteration through the queue
+	
 	instance = (queueRecord *)getNextNode((LinkedListEntry *)curQueRec);
+	
 	if(instance == NULL)
 		return;		// bad item or end of list trap
-		
+	
+	type = GetMetaData(instance->UID, "Type", 0);
 	if(curQueRec == (queueRecord *)&queueList){
-		tmp = GetMetaData(instance->UID, "Type", 0);
-		if(!strcmp(tmp, "stop")){
+		if(!strcmp(type, "stop")){
 			// it's a playlist stop item... stop the playlist and delete it!
 			plRunning = 0;
 			releaseQueueRecord((queueRecord *)&queueList, instance, 0);
@@ -663,10 +673,9 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 			data.senderID = getSenderID();
 			data.value.iVal = 0;
 			notifyMakeEntry(nType_status, &data, sizeof(data));
-			free(tmp);
+			free(type);
 			return;
 		}
-		free(tmp);
 	}
 	
 	// our current item has not been deleted... continue
@@ -675,16 +684,22 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 		busses = thisIn->busses;
 	else
 		busses = 0;
+	targetTime = GetMetaFloat(instance->UID, "TargetTime", NULL);
+	
 	if(!checkPnumber(instance->player-1) || (((status & status_playing) == 0) && ((busses & 2L) == 0))){
 		// not in a player or in a player and not playing
 		// check the next one to see if it is playing
-		if(next = (queueRecord *)getNextNode((LinkedListEntry *)instance)){
-			if(checkPnumber(next->player-1)){
-				status = getQueueRecStatus(next, &nextIn);
-				if((nextIn && nextIn->managed) && (status & status_playing) && ((nextIn->busses & 2L) == 0)){
-					// next item IS playing, and IS NOT in cue... and it WAS NOT put there manually - delete this item
-					releaseQueueRecord((queueRecord	*)&queueList, instance, 0);
-					return;
+		// if this type != item or has target time > than 10 min. old, do the following 
+		if(strcmp(type, "item") || ((targetTime + 600.0) < curTime)){
+			if(next = (queueRecord *)getNextNode((LinkedListEntry *)instance)){
+				if(checkPnumber(next->player-1)){
+					status = getQueueRecStatus(next, &nextIn);
+					if((nextIn && nextIn->managed) && (status & status_playing) && ((nextIn->busses & 2L) == 0)){
+						// next item IS playing, and IS NOT in cue... and it WAS NOT put there manually - delete this item
+						releaseQueueRecord((queueRecord	*)&queueList, instance, 0);
+						free(type);
+						return;
+					}
 				}
 			}
 		}
@@ -694,7 +709,6 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 	// special case for priority > 9 items...
 	priority = GetMetaInt(instance->UID, "Priority", NULL);
 	if(priority > 9){
-		targetTime = GetMetaFloat(instance->UID, "TargetTime", NULL);
 		if(targetTime != 0){ 
 			// High priority (fade previous for exact time)
 			// if previous item is loaded, force this one to load too regardless of the amount of time previously cued!
@@ -708,8 +722,8 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 		// Not in a player... load the item if needed
 		if(force || (*sbtime < 60)){
 			// less than 60 seconds cued up in players... load this items too
-			tmp = GetMetaData(instance->UID, "Type", 0);
-			if(strlen(tmp)){
+			// if type != item or has target time > than 10 min. old, do the following 
+			if(strlen(type) && (strcmp(type, "item") || ((targetTime + 600.0) < curTime))){
 				result = LoadItem(0, instance);
 				if(result < 0){
 					if(result == -1){
@@ -718,17 +732,16 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 					}else if(result == -2){
 						// can't load it... delete
 						releaseQueueRecord((queueRecord*)&queueList, instance, 0);
-						free(tmp);
+						free(type);
 						return;
 					} 
 					// -3 or less, leave it alone
 				}else{
 					// exit after loading - times are invalid now.
-					free(tmp);
+					free(type);
 					return;
 				}
 			}
-			free(tmp);
 		}
 	} 
 	
@@ -742,6 +755,7 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 					// has played but is now either finished or has zero duration and has been stoped
 					releaseQueueRecord((queueRecord *)&queueList, instance, 0);
 					*firstp = -1;
+					free(type);
 					return;
 				}else{
 					*isPlaying = 1;
@@ -776,11 +790,13 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 	
 	NextListItem(status, instance, &nextp, sbtime, remtime, isPlaying);
 	
-	type = GetMetaData(instance->UID, "Type", 0);
-	if(!strcmp(type, "task")){
-		// If this is a task, skip it... use the the next returned current player as the returned current player 
+	if(*firstp == -1)
 		*firstp = nextp;
-	}
+		
+//	if(!strcmp(type, "task")){
+//		// If this is a task, skip it... use the the next returned current player as the returned current player 
+//		*firstp = nextp;
+//	}
 	
 	// set seg times into next item, if next item is loaded
 	if(checkPnumber(nextp)){
@@ -1218,13 +1234,14 @@ void QueManagerTask(unsigned char *stop){
 	int firstp;
 	float sbtime;
 	char *tmp;
+	unsigned char npwait;
 	inChannel *instance;
 	struct timespec abstime;
 	ProgramLogRecord *entryRec;
 	taskRecord *prevt, *trec;
 
 	lastState = 0;
-
+	npwait = 2;
 	initAutomator();
 
 	// loop until stop
@@ -1258,6 +1275,20 @@ void QueManagerTask(unsigned char *stop){
 		pthread_rwlock_wrlock(&queueLock);
 		// recursively iterate through each playlist item doing what need to be done with each
 		NextListItem(status_standby, (queueRecord *)&queueList, &firstp, &sbtime, 0.0, &isPlaying);
+		if(plRunning){
+			if(isPlaying)
+				npwait = 2;
+			else{
+				if(npwait)
+					npwait--;
+				// nothing is playing!  after waiting one itteration of this loop, Get going...
+				if(!npwait && checkPnumber(firstp)){
+					instance = &mixEngine->ins[firstp];
+					instance->requested = instance->requested | change_play;
+					serverLogMakeEntry("[automation] -:Nothing playing.  Starting first loaded player.");
+				}
+			}
+		}
 		pthread_rwlock_unlock(&queueLock);
 
 		if(!plRunning){
@@ -1303,7 +1334,7 @@ void QueManagerTask(unsigned char *stop){
 					}
 					lastState = 1;
 				}
-				if(!isPlaying){
+/*				if(!isPlaying){
 					// nothing is playing!  Get going...
 					// it's possible that firstp may have changed by another thread.
 					// if so, we will start the wrong player.  Oh well.  No crash.
@@ -1311,7 +1342,7 @@ void QueManagerTask(unsigned char *stop){
 						instance = &mixEngine->ins[firstp];
 						instance->requested = instance->requested | change_play;
 					}
-				}
+				}*/
 			}
 		}else{
 

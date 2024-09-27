@@ -2549,6 +2549,45 @@ function searchFor(request, response, params, dirs){
 						from = buildFromString(from, false, parts.subquery);
 					where = parts.where;
 					from += ") ";
+				}else if(type == 'cust'){
+/*//!vvv
+SELECT DISTINCT ar_client.name AS Label, ar_client.id AS id 
+FROM ar_client 
+RIGHT JOIN ar_invoices ON (ar_invoices.customer = ar_client.id 
+	AND YEAR(ar_invoices.posted) = '2024' AND MONTH(ar_invoices.posted) = 1
+) 
+LEFT JOIN ar_orders ON (ar_orders.invoice = ar_invoices.id AND ar_orders.location = 1
+	AND (YEAR(ar_orders.date) = '2024' AND MONTH(ar_orders.date) = 1) OR ((ar_orders.dp_start BETWEEN '2024-01-00' AND '2024-02-00') OR
+	('2024-01-00' BETWEEN ar_orders.dp_start AND DATE_ADD(ar_orders.dp_start, INTERVAL ar_orders.dp_range DAY))) 
+)
+WHERE name LIKE 'Te%'
+*/
+					table = "client"
+					if(!sort)
+						sort = "Label";
+					select = "SELECT DISTINCT "+locConf['prefix']+"client.name AS Label, ";
+					select += locConf['prefix']+"client.id AS ID ";
+					from = buildFromString(from, "client");
+					if(params.match){ 
+						where = buildWhereString(where, "client", "name", params.match);
+						delete params.match;
+					}
+					
+					let parts = {from: from, where: where};
+					let added = includeSearchKeys(parts, params);
+					if(added){
+						from = parts.from;
+						where = parts.where;
+						// if there are seach fields, we don't show all, only those that match
+						from = buildFromString(from, "toc");
+						from = buildFromString(from, "category_item");
+						if(parts.subquery && parts.subquery.length)
+							from = buildFromString(from, false, parts.subquery);
+						where += "AND "+locConf['prefix']+"category_item.Item = "+locConf['prefix']+"toc.ID ";
+						where += "AND "+locConf['prefix']+"category.ID = "+locConf['prefix']+"category_item.Category "; 
+					}
+					from += ") ";
+//!^^^
 				}else{
 					response.status(400);
 					response.end();

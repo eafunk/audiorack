@@ -214,7 +214,7 @@ void *sipSessionWatcher(void *refCon){
 				remains = block;
 				while(fragment = strpbrk(remains, "\n\r")){
 					if(*fragment == '\r'){
-						// echod back key... clear line
+						// echoed back key... clear line
 						remains = fragment+1;
 						*line = 0;
 						continue;
@@ -234,7 +234,7 @@ void *sipSessionWatcher(void *refCon){
 						}
 					}else if(strstr(line, "Call established: ")){
 						established = 1;
-					}else if(src && dst && strstr(line, "audio: start")){
+					}else if(src && dst && strstr(line, "audio: ") && strstr(line, "started with sample format ")){
 						audiostart = 1;
 					}else if(strstr(line, "call: answering call")){
 						if(tmp = strstr(line, "on line ")){

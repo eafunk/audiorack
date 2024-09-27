@@ -1137,12 +1137,18 @@ app.get('/nav', async function(request, response){
 				}
 			}
 			html += `</div>`;
-			
 			// live remote 
+			html += `<button class="tabitem" onclick="dropClick(event)" data-childdiv="remotediv" data-showcb="loadRemoteTab">Live Remote
+						<i class="fa fa-caret-down"></i>
+					</button>
+					<div id="remotediv"></div>`;
+
+/*
 			html += `<button class="tabitem" onclick="dropClick(event)" data-childdiv="remotediv" data-showcb="setupAudioContext">Live Remote
 							<i class="fa fa-caret-down"></i>
 						</button>
-						<div id="remotediv" class="dropdown-container">
+						<div id="remotediv" class="dropdown-container">'
+						
 							<div id="remChSelMatrix">
 								<label for="remLeftSource">L </label><select id="remLeftSource" onchange="remoteInChgAction()"></select>
 								<label for="remRightSource">R </label><select id="remRightSource" onchange="remoteInChgAction()"></select>
@@ -1156,7 +1162,7 @@ app.get('/nav', async function(request, response){
 							<div id="remstatusmsg">Not Connected</div>
 							<label for="remstu">To Studio:</label>
 							<select id="remstu">`;
-						
+
 			if(studios){
 				let keys = Object.keys(studios);
 				for(let i = 0; i < keys.length; i++){
@@ -1167,6 +1173,7 @@ app.get('/nav', async function(request, response){
 							Name: <input id="remotename" type="text" size="8" value="Remote">
 							<center><button class="editbutton" id="RemConBtn" onclick="remCallAction()">Connect</button></center>
 						</div>`;
+*/
 		}
 		
 		if(['admin', 'manager', 'production', 'traffic'].includes(request.session.permission)){
@@ -1177,7 +1184,7 @@ app.get('/nav', async function(request, response){
 						<div id="trafdiv" class="dropdown-container">
 							<button class="tabitem" onclick="showTab(event, 'cust')">Customers</button>
 							<button class="tabitem" onclick="showTab(event, 'campaign')">Campaign</button>
-							<button class="tabitem" onclick="showTab(event, 'invoice')">Invoices</button>
+							<button class="tabitem" onclick="showTab(event, 'invoice')">Orders</button>
 							<button class="tabitem" onclick="showTab(event, 'trafsched')">Schedule</button>
 							<button class="tabitem" onclick="showTab(event, 'trafdp')">Dayparts</button>
 						</div>`;
@@ -1364,6 +1371,18 @@ app.get('/sserem/\*', function(req, res){
 app.get('/', function(request, response){
 	response.redirect('/index.html');
 	response.end();
+});
+
+app.get('/remote.html', function(request, response){
+	if(request.session.loggedin){
+		if((request.session.permission == "admin") || (request.session.permission == "manager") || (request.session.permission == "studio") || (request.session.permission += "programming")){
+			response.set('Origin-Agent-Cluster', '?1');
+			response.sendFile(__dirname + '/client/remote.html');
+			return;
+		}
+	}
+	response.status(401);
+	response.end("Not autherized");
 });
 
 // for loading control surface mapping js modules

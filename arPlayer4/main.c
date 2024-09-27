@@ -1,5 +1,5 @@
 /*
- Copyright (c) 2019 Ethan Funk
+ Copyright (c) 2019-2024 Ethan Funk
  
  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
  documentation files (the "Software"), to deal in the Software without restriction, including without limitation 
@@ -962,7 +962,7 @@ finish:
 int main(int argc, char *argv[]){
 	unsigned int chCount;
 	if(argc != 6){
-		fprintf(stderr, "arPlayer version 4.1.0\n\n"); 
+		fprintf(stderr, "arPlayer version 4.1.1\n\n"); 
 		fprintf(stderr, "Usage: (optional) [required]\n");
 		fprintf(stderr, "%s [(-u playURL) or (-p gstreamer-pipline)] [Jack client name] [ctlIDNumber] [jack port connection list]\n\n", argv[0]);
 		fprintf(stderr, "where client name is the Jack name for an arServer instance to which we will connect our control ports,\n");

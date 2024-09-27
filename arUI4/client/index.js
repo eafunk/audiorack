@@ -40,6 +40,7 @@ includeScript("vumeter.js");
 includeScript("jssip-3.10.0.min.js");	// for live remote
 
 var infoWidth = "450px";
+var scriptHeight = "350px";
 var cred = false;
 var locName = new watchableValue(false);
 var locationID;
@@ -5705,7 +5706,7 @@ function loadConfigTypeTable(el, type){
 	if(type === "confusers"){
 		hidden = {salt: false};
 		actions = `<button class="editbutton" onclick="updateConf(event, '`+type+`')">Update</button>
-						<button class="editbutton" onclick="delConf(event, '`+type+`')">-</button>`;
+						<button class="editbutton" onclick="delConf(event, '`+type+`')">-</button>`;getconf/studioAutoMode
 		haction = `<button class="editbutton" onclick="newConf(event, '`+type+`')">+</button>`;
 		fields = {id: "<input type='text' name='id' value='$val'/>", 
 					password: "<input type='text' name='password' value='' placeholder='New Password'></input>",
@@ -6767,7 +6768,6 @@ function browseQuery(evt){
 		if(resp instanceof Response){
 			if(resp.ok){
 				resp.json().then((data) => {
-					browseData = data;
 					let actions = false;
 					let hactions = false;
 					if(cred && ['admin', 'manager', 'library'].includes(cred.permission)){
@@ -7210,6 +7210,8 @@ async function studioChangeCallback(value, who){
 		await syncStudioStat(value);
 		await syncPlayers(value);
 		await refreshOutGroups();
+		// close scripts
+		closeScriptTab();
 		// close right tabs
 		let div = document.getElementById('studioSide');
 		if(div)
@@ -10649,7 +10651,6 @@ async function syncQueue(studio, rev){
 			if(resp.ok){
 				let raw = await resp.text();
 				if(studioStateCache.queueRev != rev){
-//!console.log("syncQueue ignore rev "+rev);
 					return;
 				}
 				let lines = raw.split("\n");
@@ -10671,7 +10672,6 @@ async function syncQueue(studio, rev){
 				}
 				studioStateCache.queue = res;
 				// sync cached times
-//!console.log("syncQueue times rev "+rev);
 				studioStateCache.queueSec = calcQueueTimeToNext(res);
 				studioStateCache.queueDur = calcQueueTimeToEnd(res);
 				updateQueueLogDisplay(false);
@@ -11644,11 +11644,9 @@ async function syncPlayers(studio){
 		let resp;
 		syncPlayerSeq++;
 		let thisSeq = syncPlayerSeq;
-//!console.log("syncPlayers seq="+thisSeq);
 		resp = await fetchContent("studio/"+studio+"?cmd=pstat&raw=1");
 		if(resp){
 			if(resp.ok){
-//!console.log("syncPlayers this="+thisSeq+" recent="+syncPlayerSeq);
 				if(syncPlayerSeq == thisSeq){
 					let raw = await resp.text();
 					let lines = raw.split("\n");
@@ -11727,8 +11725,6 @@ async function syncPlayers(studio){
 											qitem.segout = parseFloat(obj.dur);
 										qitem.segout = qitem.segout - parseFloat(obj.pos);
 										qitem.status = obj.status;
-//!										if(qitem.segout <= 0)
-//!console.log("syncPlayers "+n+" dump:", lines);
 									}
 								}
 								let el = queueElementFromRef(ref);
@@ -11807,7 +11803,6 @@ async function syncPlayers(studio){
 								studioStateCache.control.setPStat(obj.status, n-1);
 						}
 						if(updateTimes){
-//!console.log("syncPlayers times seq="+thisSeq);
 							studioStateCache.queueDur = calcQueueTimeToEnd(studioStateCache.queue);
 							studioStateCache.queueSec = calcQueueTimeToNext(studioStateCache.queue);
 						}
@@ -11900,7 +11895,6 @@ function studioHandleNotice(data){
 			break;
 		case "metadel":		// metadata record deleted, ref=UID number, no val.
 			ref = data.uid;
-//!console.log("from metadel notice");
 			studioDelMeta(ref);
 			break;
 		case "outdly":			// output delay change, ref=output index, val=delay in seconds, 16 max.
@@ -12212,6 +12206,38 @@ function studioVuUpdate(data){
 	}
 }
 
+function showScriptTab(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let el = document.getElementById("showscripttabobtn");
+	el.style.display = "none";
+	el = document.getElementById("scriptpane");
+	// show scripts found in current meta data, in queue order
+	let metaList = studioStateCache.meta;
+	if(metaList){
+		let keys = Object.keys(studioStateCache.meta);
+		for(let n = 1; n < keys.length; n++){
+			let ref = keys[n];
+			let obj = studioStateCache.meta[ref];
+			let script = obj["Script"];
+			if(script){
+				let TT = obj["TargetTime"];
+				let name = obj["Name"];
+				let lid = obj["logID"];
+				console.log(ref, lid, name, TT, script);
+			}
+		}
+	}
+	el.style.height = scriptHeight;
+}
+
+function closeScriptTab(){
+	let el = document.getElementById("scriptpane");
+	el.style.height = "0px";
+	el = document.getElementById("showscripttabobtn");
+	el.style.display = "block";
+}
+
 /***** Server Side Events/Worker/Messages functions *****/
 
 const sseWorker = new SharedWorker("sseWorker.js");
@@ -12316,6 +12342,72 @@ function buffToUvObj(buffer){
 	return result;
 }
 
+/***** Ad manager functions *****/
+
+function custListRefresh(evt){
+//!!
+	let dtype = document.querySelector('input[name="custDateType"]:checked').value
+	let el = document.getElementById("custDateYear");
+	let year = parseInt(el.value);
+	let month = 0;
+	el = document.getElementById("custDateMon");
+	if(year > 1900){
+		el.disabled = false;
+		month = parseInt(el.value);
+	}else
+		el.disabled = true;
+	el = document.getElementById("custNameMatch");
+	let match = el.value;
+	el = document.getElementById("custListDiv");
+
+	genPopulateTableFromArray(false, el);
+	
+	let post = {type:"cust", datetype:dtype, dyear:year, dmon:month};
+	if(match && match.length)
+		post.match = "%"+match+"%";
+	post.sortBy = "Label";
+	el.innerHTML = "<div class='center'><i class='fa fa-circle-o-notch fa-spin' style='font-size:48px'></i></div>";
+	
+	fetchContent("library/browse", {
+		method: 'POST',
+		body: JSON.stringify(post),
+		headers: {
+			"Content-Type": "application/json",
+			"Accept": "application/json"
+		}
+	}).then((resp) => {
+		if(resp instanceof Response){
+			if(resp.ok){
+				resp.json().then((data) => {
+					let actions = false;
+					let hactions = false;
+					if(cred && ['admin', 'manager', 'library'].includes(cred.permission)){
+						// include edit ability
+						if(data.length && ['artist', 'album', 'category'].includes(post.type))
+							// $i will be replaced by the row index number by the genPopulateTableFromArray() function
+							actions = `<button class="editbutton" data-index="$i" onclick="browseEditItem(event)">Edit</button>`;
+						if(data.length && ['playlist', 'task', 'artist', 'album', 'category'].includes(post.type))
+							hactions = `<button class="editbutton" onclick="browseNewItem(event, '`+post.type+`')">+</button>`;
+					}
+					let colWidth = {action:"25px", Duration:"70px"};
+					genPopulateTableFromArray(data, el, {id: false, qtype: false, tocID: false}, browseRowClick, browseCellClick, browseSort, actions, hactions, false, colWidth, true);
+				});
+				return;
+			}
+		}
+		// handle failure
+		genPopulateTableFromArray(false, el);
+		if(resp)
+			alert("Got an error fetching data from server.\n"+resp);
+		else
+			alert("Failed to fetch data from the server.");  
+	});
+}
+
+function custCreateNew(EVT){
+	
+}
+
 /**** startup and load functions *****/
 
 function credCompare(auth){
@@ -12368,340 +12460,35 @@ async function startupContent(auth){
 	}
 }
 
-var sipUa;
-var sipCall;
-var audioContext;
-var remSrc;
-var gainNode;
-var ptLevel;
-var compressor;
-var peerDest;
-var chanSplitter;
-var chanJoiner;
-var analyserNodes = [];
-
-async function setupAudioContext(){
-	let el;
-	if(!audioContext && document.getElementById("remotediv")){
-		let stream = await navigator.mediaDevices.getUserMedia({ 
-			audio: {
-				noiseSuppression: false,
-				echoCancellation: false,
-				autoGainControl: false
-			}, 
-			video: false 
-		});
-		let tracks = stream.getAudioTracks();
-		let trackSettings = tracks[0].getSettings();
-console.log(trackSettings);
-		let SrcChNum = trackSettings.channelCount;
-		if(SrcChNum < 2){
-			// disable channel selection options
-			el = document.getElementById("remChSelMatrix");
-			el.hidden = true;
-		}else{
-			el = document.getElementById("remChSelMatrix");
-			el.hidden = false;
-		}
-		audioContext = new AudioContext();
-		peerDest = audioContext.createMediaStreamDestination();
-		var sourceNode = audioContext.createMediaStreamSource(stream);
-		gainNode = audioContext.createGain();
-		ptLevel = audioContext.createGain();
-		ptLevel.gain.value = 0.0;	// no input playthrough by default
-		chanSplitter = audioContext.createChannelSplitter(SrcChNum);
-		chanJoiner = audioContext.createChannelMerger(2);
-
-		compressor = new DynamicsCompressorNode(audioContext, {
-			threshold: -3, // knee = 0 and threshold = -3dB for limit only.
-			knee: 0,
-			ratio: 20,
-			attack: 0.01,	// 10 mS
-			release: 0.25	// 250 mS
-		});
-		el = document.getElementById("remCompChk");
-		remCompEnable({target:el});
-		
-		sourceNode.connect(gainNode);
-		gainNode.connect(chanSplitter);
-		el = document.getElementById("remLeftSource");
-		while(el.options.length) el.remove(0);
-		for(let c = 0; c < SrcChNum; c++){
-			let opt = document.createElement("option");
-			opt.text = "IN"+c;
-			el.options.add(opt);
-		}
-		el.selectedIndex = 0;
-		analyserNodes[0] = audioContext.createAnalyser();
-		
-		el = document.getElementById("remRightSource");
-		while(el.options.length) el.remove(0);
-		for(let c = 0; c < SrcChNum; c++){
-			let opt = document.createElement("option");
-			opt.text = "IN"+c;
-			el.options.add(opt);
-		}
-		if(SrcChNum > 1)
-			el.selectedIndex = 1;
-		else
-			el.selectedIndex = 0;
-		analyserNodes[1] = audioContext.createAnalyser();
-		
-		remoteInChgAction();	// make input channel connections
-		
-		let vu = document.getElementById("remInVU");
-		while(vu.hasChildNodes())
-			vu.removeChild(vu.lastChild);
-		vu.vumeters = [];
-		for(let c = 0; c < 2; c++){
-			canv = document.createElement("canvas");
-			canv.setAttribute('width',100);
-			canv.setAttribute('height',8);
-			vu.appendChild(canv);
-			let meter = new vumeter(canv, {
-				"boxCount": 24,
-				"boxCountRed": 6,
-				"boxCountYellow": 6,
-				"boxGapFraction": 0.25,
-				"max": 255,
-				"rotate": true
-			});
-			meter.lastavr = 0;
-			meter.lastpk = 0;
-			vu.vumeters.push(meter);
-		}
-		
-		chanJoiner.connect(compressor);
-		compressor.connect(ptLevel);
-		compressor.connect(peerDest);
-		ptLevel.connect(audioContext.destination);
-		
-		window.requestAnimationFrame(remLevelsRender);
-	}
-}
-
-function ftovu(linMag){
-	// convert linMag to 1.7 fixed point format
-	let scale;
-	// linMag is assumed to be magnitude squared!
-	scale = 255.0;
-	linMag = Math.sqrt(linMag);		// un-squares the value passed in
-	linMag = scale * Math.sqrt(linMag);	// square root again to make the vu scale close to an analog meter
-	if(linMag > 255.0)
-		return 255;
-	else
-		return linMag;
-}
-
-let secondsPassed;
-let oldTimeStamp;
-let fps;
-
-function remLevelsRender(timeStamp){
-	let el = document.getElementById("remInVU");
+function loadRemoteTab(evt){
+	let el = document.getElementById("remotediv");
 	if(el){
-		if(oldTimeStamp){
-			secondsPassed = (timeStamp - oldTimeStamp) / 100; // 10th seconds passes
-			fps = Math.round(1 / secondsPassed);
-		}else
-			fps = 1.0;
-		oldTimeStamp = timeStamp;
-
-		for(let n=0; n<analyserNodes.length; n++){
-			let pcmData = new Float32Array(analyserNodes[n].fftSize);
-			let pk = 0.0;
-			let avr = 0.0;
-			let sq;
-			analyserNodes[n].getFloatTimeDomainData(pcmData);
-			for(const amplitude of pcmData){ 
-				sq = amplitude * amplitude;
-				avr += sq; 
-				if(sq > pk)
-					pk = sq;
-			}
-			let meter = el.vumeters[n];
-			if(meter && fps){
-				avr = ftovu(avr / pcmData.length);
-				pk = ftovu(pk);
-				avr = meter.lastavr + ((avr - meter.lastavr) / fps);	// 10 Hz filter
-				let fpk = meter.lastpk + ((pk - meter.lastpk) / (fps * 5)); // 2 Hz filter 
-				if(pk < fpk)
-					pk = fpk;
-				meter.vuSetValue(avr, pk);
-				meter.lastpk = pk;
-				meter.lastavr = avr;
-			}
-		}
-	}
-	el = document.getElementById("remGainRedEl");
-	el.value = -compressor.reduction;
-	window.requestAnimationFrame(remLevelsRender);
-}
-
-function remoteInChgAction(){
-	chanSplitter.disconnect();	// disconnect all chanSplitter output
-	let el = document.getElementById("remLeftSource");
-	chanSplitter.connect(analyserNodes[0], el.selectedIndex);
-	chanSplitter.connect(chanJoiner, el.selectedIndex, 0);
-	el = document.getElementById("remRightSource");
-	chanSplitter.connect(analyserNodes[1], el.selectedIndex);
-	chanSplitter.connect(chanJoiner, el.selectedIndex, 1);
-}
-
-function remPTEnable(evt){
-	let trk = document.getElementById("remPTTrackChk");
-	if(evt.target.checked){
-		trk.disabled = false;
-		ptLevel.gain.value = 1.0;
-	}else{
-		trk.disabled = true;
-		ptLevel.gain.value = 0.0;	// no input playthrough
-	}
-}
-
-function remPTTrackEnable(evt){
-	//! work to do here
-	if(evt.target.checked){
-		ptLevel.gain.value = 0.1;
-	}else{
-		ptLevel.gain.value = 1.0;
-	}
-}
-
-function remCompEnable(evt){
-	if(evt.target.checked){
-		compressor.knee.value = 12;
-		compressor.threshold.value = -15;
-	}else{
-		compressor.knee.value = 0;
-		compressor.threshold.value = -3;
-	}
-}
-
-function remoteGainAction(evt){
-	let val = parseFloat(evt.target.value);
-	val = Math.pow(10, (val / 20.0));
-	gainNode.gain.value = val;
-}
-
-function endRemoteCall(){
-	if(sipCall){
-		let tmp = sipCall;	// prevent recursion
-		sipCall = false;
-		tmp.terminate();
-	}
-	let btn = document.getElementById("RemConBtn");
-	let msg = document.getElementById("remstatusmsg");
-	btn.textContent = "Connect";
-	btn.disabled = false;
-}
-
-async function remCallAction(){
-	if(document.getElementById("remotediv")){
-		let btn = document.getElementById("RemConBtn");
-		let msg = document.getElementById("remstatusmsg");
-		if(sipCall){
-			// call in progress
-			endRemoteCall();
-		}else{
-			// new call
-			let name = document.getElementById("remotename").value;
-			let configuration = {
-				sockets  : [ new JsSIP.WebSocketInterface('wss://'+window.location.host) ],
-				register : false,
-				uri      : 'sip:'+name+'@invalid',
-				display_name: name
-			};
-			if(!sipUa){
-				sipUa = new JsSIP.UA(configuration); // remote name may have changed.
-				sipUa.start();
-			}
-			if(sipUa){
-				sipUa.set("display_name", name);
-				remstatusmsg.innerText = "Connecting...";
-				btn.disabled = true;
-				sipUa.on('newMessage', function(data) {
-					let msg = data.message;
-					if(msg.direction == "incoming"){
-						msg.accept();
-console.log(msg);
-					}
+		if(!el.firstChild){
+			// no iframe loaded yet... run remote in it's own iframe
+			// so the web audio components have a separate processes from this page's UI
+			// NOTE: must call getUserMedia to get media access on the main window befor loading
+			// the iframe, so it will have media access too.
+			navigator.mediaDevices.getUserMedia({ 
+					audio: {
+						noiseSuppression: false,
+						echoCancellation: false,
+						autoGainControl: false
+					}, 
+					video: false 
+				}).then(function(result){
+					let iframe = document.createElement("iframe");
+					iframe.src = "remote.html";
+					iframe.width = "125";
+					iframe.height = "180";
+					iframe.setAttribute("allow","microphone");
+					el.appendChild(iframe);
 				});
-
-				sipUa.on('newRTCSession', function(data) {
-					remstatusmsg.innerText = "RTC session started...";
-					sipCall = data.session;
-					if(sipCall.direction === "outgoing") {
-						//Register for various call session events:
-						sipCall.on('progress', function(e) { 
-console.log("Setting up call...");
-							remstatusmsg.innerText = "Setting up call...";
-						});
-						sipCall.on('failed', function(e) {
-console.log("Call failed", e);
-							remstatusmsg.innerText = "Call failed";
-							sipCall = false;
-							endRemoteCall();
-						});
-						sipCall.on('confirmed', function(e) {
-console.log("Connected");
-							remstatusmsg.innerText = "Connected";
-							btn.textContent = "Disconnect";
-							btn.disabled = false;
-						});
-						sipCall.on('ended', function(e) {
-console.log("Call ended");
-							remstatusmsg.innerText = "Call ended";
-							if(remSrc) remSrc.disconnect();
-							sipCall = false;
-							endRemoteCall();
-						});
-						//Note: 'connection' is the RTCPeerConnection instance - set after calling ua.call().
-						//      From this, use a WebRTC API for registering event handlers.
-						let senderList = sipCall.connection.getSenders();
-						for(let i = 0; i < senderList.length; i++)
-							sipCall.connection.removeTrack(senderList[i]);
-						// add destination track
-console.log('add audio track to peer');
-						let tracks = peerDest.stream.getAudioTracks();
-						sipCall.connection.addTrack(tracks[0]);
-						sipCall.connection.addEventListener("track", (e) => { 
-console.log('add audio track from peer');
-							if(remSrc) remSrc.disconnect();
-							remSrc = audioContext.createMediaStreamSource(e.streams[0]);
-							remSrc.connect(audioContext.destination);
-						});
-						
-						//Handle Browser not allowing access to mic and speaker
-						sipCall.on('getusermediafailed', function(DOMError) {
-console.log('Get User Media Failed Call Event ' + DOMError );
-							remstatusmsg.innerText = "No browser media access";
-						});
-					}
-				});
-				let studioName = document.getElementById("remstu").value;
-				let host = false;
-				let resp = await fetchContent("getconf/studios/"+studioName+"/host");
-				if(resp){
-					if(resp.ok){
-						let hostconf = await resp.json();
-						if(hostconf.length)
-							host = hostconf[0].value;
-					}
-				}
-				if(host && host.length)
-					sipCall = sipUa.call('sip:'+studioName+'@'+host+':5060', { 'mediaConstraints' : { 'audio': true, 'video': false } } );
-				else{
-					btn.textContent = "Connect";
-					btn.disabled = false;
-					remstatusmsg.innerText = "No browser media access";
-				}
-			}
 		}
 	}
 }
 
 document.onclick = function(event){
+	// close info panel when anything outside of it is clicked
 	if(!document.getElementById("infopane").contains(event.target)){
 		if(event.target.parentNode)
 			closeInfo(event);

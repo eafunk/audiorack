@@ -5,6 +5,9 @@
 # subsequent parameters form the command to execute
 
 pidfile=$1
+
+trap 'rm $pidfile' 2
+
 if [ -f $1 ]; then
 	exit
 fi

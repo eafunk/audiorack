@@ -1,5 +1,5 @@
 /*
- Copyright (c) 2019 Ethan Funk
+ Copyright (c) 2019-2024 Ethan Funk
  
  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
  documentation files (the "Software"), to deal in the Software without restriction, including without limitation 
@@ -1118,30 +1118,32 @@ void* handleCtlQueues(void *refCon){
 									}
 								}while(item = item->next);
 								
-								if(data->ascPlayList && (data->status & rec_running)){
-									if(ar = cJSON_GetObjectItem(obj, "AR")){
-										if((item = cJSON_GetObjectItem(ar, "ID")) && (item->valueint))
-											logRec.ID = item->valueint;
-										if((item = cJSON_GetObjectItem(ar, "FP")) && (item->valueint))
-											logRec.fingerprint = item->valueint;
-										if((item = cJSON_GetObjectItem(ar, "OwnerID")) && (item->valueint))
-											logRec.ownerID = item->valueint;
-										if((item = cJSON_GetObjectItem(ar, "ArtistID")) && (item->valueint))
-											logRec.artistID = item->valueint;
-										if((item = cJSON_GetObjectItem(ar, "AlbumID")) && (item->valueint))
-											logRec.albumID = item->valueint;
-										if((item = cJSON_GetObjectItem(ar, "Owner")) && (item->valuestring))
-											logRec.owner = item->valuestring;
-										if((item = cJSON_GetObjectItem(ar, "Source")) && (item->valuestring))
-											logRec.source = item->valuestring;
-										if((item = cJSON_GetObjectItem(ar, "Comment")) && (item->valuestring))
-											logRec.comment = item->valuestring;
+								if(data->status & rec_running){
+									if(data->ascPlayList){
+										if(ar = cJSON_GetObjectItem(obj, "AR")){
+											if((item = cJSON_GetObjectItem(ar, "ID")) && (item->valueint))
+												logRec.ID = item->valueint;
+											if((item = cJSON_GetObjectItem(ar, "FP")) && (item->valueint))
+												logRec.fingerprint = item->valueint;
+											if((item = cJSON_GetObjectItem(ar, "OwnerID")) && (item->valueint))
+												logRec.ownerID = item->valueint;
+											if((item = cJSON_GetObjectItem(ar, "ArtistID")) && (item->valueint))
+												logRec.artistID = item->valueint;
+											if((item = cJSON_GetObjectItem(ar, "AlbumID")) && (item->valueint))
+												logRec.albumID = item->valueint;
+											if((item = cJSON_GetObjectItem(ar, "Owner")) && (item->valuestring))
+												logRec.owner = item->valuestring;
+											if((item = cJSON_GetObjectItem(ar, "Source")) && (item->valuestring))
+												logRec.source = item->valuestring;
+											if((item = cJSON_GetObjectItem(ar, "Comment")) && (item->valuestring))
+												logRec.comment = item->valuestring;
+										}
+										AddFPLEntryFromProgramLogStruct(data->ascPlayList, 
+															(double)gst_util_uint64_scale_int(data->curPos, 10, GST_SECOND) * 0.1,
+															&logRec, &data->fpFilePos);
+									}else{
+										gst_send_tag_event(data->asrc, tags);
 									}
-									AddFPLEntryFromProgramLogStruct(data->ascPlayList, 
-														(double)gst_util_uint64_scale_int(data->curPos, 10, GST_SECOND) * 0.1,
-														&logRec, &data->fpFilePos);
-								}else{
-									gst_send_tag_event(data->asrc, tags);
 								}
 							}
 							cJSON_Delete(obj);
@@ -1612,7 +1614,7 @@ int main(int argc, char *argv[]){
 			return 0;
 		}
 	}
-	fprintf(stderr, "arRecorder version 4.1.0\n\n"); 
+	fprintf(stderr, "arRecorder version 4.1.1\n\n"); 
 	fprintf(stderr, "Usage: (optional, in front of required) [required - in order]\n"); 
 	fprintf(stderr, "%s (-p) (-a file-path) (-s unix-start-time) (-l time-limit-seconds) (-b tags-bus-bit-number) [our unique Jack name] [control client name] [ctlUID] [jack port connection list] [gstreamer-pipline]\n\n", argv[0]);
 	fprintf(stderr, "-p optionaly enables jack connection persistance, causing arRecorder to keep running when jack connections are lost\n");
