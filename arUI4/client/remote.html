@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Remote</title>
+	<link rel="stylesheet" href="index.css">
+</head>
+<body style="font-size: 8px;">
+	<div id="remChSelMatrix">
+		<label for="remLeftSource">L </label><select id="remLeftSource" onchange="remoteInChgAction()"></select>
+		<label for="remRightSource">R </label><select id="remRightSource" onchange="remoteInChgAction()"></select>
+	</div>
+	<input id="remSrcGain" type="range" min="-20" max="20" value="0" step="0.05" style=" width: 100px; height: 12px;" 
+		oninput="remoteGainAction(event);"></input><br>
+	<div id="remInVU"></div>
+	Compressor<input id="remCompChk" type="checkbox" onchange="remCompEnable(event)"><meter id="remGainRedEl" high="0" max="20" value="0"></meter><br>
+	PlayTru<input id="remPTChk" type="checkbox" onchange="remPTEnable(event)">Dim <input id="remPTTrackChk" type="checkbox" onchange="remPTTrackEnable(event)" disabled="disabled">
+	<hr>
+	<div id="remstatusmsg">Not Connected</div>
+	<label for="remstu">To Studio:</label>
+	<select id="remstu">
+	</select>
+	Name: <input id="remotename" type="text" size="8" value="Remote">
+	<center><button class="editbutton" id="RemConBtn" onclick="remCallAction()">Connect</button></center>
+</body>
+</html>
+
+<script type="text/javascript">
+
+	includeScript("vumeter.js");
+	includeScript("jssip-3.10.0.min.js");
+
+	var sipUa;
+	var sipCall;
+	var audioContext;
+	var remSrc;
+	var gainNode;
+	var ptLevel;
+	var compressor;
+	var peerDest;
+	var chanSplitter;
+	var chanJoiner;
+	var analyserNodes = [];
+	
+	function includeScript(file){
+		let script  = document.createElement('script');
+		script.src  = file;
+		script.type = 'text/javascript';
+		script.defer = true;
+		document.getElementsByTagName('head').item(0).appendChild(script);
+	}
+
+	async function fetchContent(url, options){
+		let response;
+		try{
+			response = await fetch(url, options);
+		}catch(err){
+			return err;
+		}
+		if(response.ok)
+			return response;
+		return false;
+	}
+	
+	async function populateStudioMenu(){
+		let el = document.getElementById("remstu");
+		let resp = await fetchContent("getconf/studios"); // id is name
+		if(resp){
+			if(resp.ok){
+				let studios = await resp.json();
+				if(studios && studios.length){
+					for(let i = 0; i < studios.length; i++){
+						let option = document.createElement("option");
+						option.text = studios[i].id;
+						el.add(option);
+					}
+				}
+			}
+		}
+	}
+
+	async function setupAudioContext(){
+		let el;
+		if(!audioContext){
+			try{
+console.log(navigator);
+console.log(navigator.mediaDevices);
+				let stream = await navigator.mediaDevices.getUserMedia({ 
+					audio: {
+						noiseSuppression: false,
+						echoCancellation: false,
+						autoGainControl: false
+					}, 
+					video: false 
+				});
+				let tracks = stream.getAudioTracks();
+				let trackSettings = tracks[0].getSettings();
+				let SrcChNum = trackSettings.channelCount;
+				if(SrcChNum < 2){
+					// disable channel selection options
+					el = document.getElementById("remChSelMatrix");
+					el.hidden = true;
+				}else{
+					el = document.getElementById("remChSelMatrix");
+					el.hidden = false;
+				}
+				audioContext = new AudioContext();
+				peerDest = audioContext.createMediaStreamDestination();
+				var sourceNode = audioContext.createMediaStreamSource(stream);
+				gainNode = audioContext.createGain();
+				ptLevel = audioContext.createGain();
+				ptLevel.gain.value = 0.0;	// no input playthrough by default
+				chanSplitter = audioContext.createChannelSplitter(SrcChNum);
+				chanJoiner = audioContext.createChannelMerger(2);
+
+				compressor = new DynamicsCompressorNode(audioContext, {
+					threshold: -3, // knee = 0 and threshold = -3dB for limit only.
+					knee: 0,
+					ratio: 20,
+					attack: 0.01,	// 10 mS
+					release: 0.25	// 250 mS
+				});
+				el = document.getElementById("remCompChk");
+				remCompEnable({target:el});
+				
+				sourceNode.connect(gainNode);
+				gainNode.connect(chanSplitter);
+				el = document.getElementById("remLeftSource");
+				while(el.options.length) el.remove(0);
+				for(let c = 0; c < SrcChNum; c++){
+					let opt = document.createElement("option");
+					opt.text = "IN"+c;
+					el.options.add(opt);
+				}
+				el.selectedIndex = 0;
+				analyserNodes[0] = audioContext.createAnalyser();
+				
+				el = document.getElementById("remRightSource");
+				while(el.options.length) el.remove(0);
+				for(let c = 0; c < SrcChNum; c++){
+					let opt = document.createElement("option");
+					opt.text = "IN"+c;
+					el.options.add(opt);
+				}
+				if(SrcChNum > 1)
+					el.selectedIndex = 1;
+				else
+					el.selectedIndex = 0;
+				analyserNodes[1] = audioContext.createAnalyser();
+				
+				remoteInChgAction();	// make input channel connections
+				
+				let vu = document.getElementById("remInVU");
+				while(vu.hasChildNodes())
+					vu.removeChild(vu.lastChild);
+				vu.vumeters = [];
+				for(let c = 0; c < 2; c++){
+					canv = document.createElement("canvas");
+					canv.setAttribute('width',100);
+					canv.setAttribute('height',8);
+					vu.appendChild(canv);
+					let meter = new vumeter(canv, {
+						"boxCount": 24,
+						"boxCountRed": 6,
+						"boxCountYellow": 6,
+						"boxGapFraction": 0.25,
+						"max": 255,
+						"rotate": true
+					});
+					meter.lastavr = 0;
+					meter.lastpk = 0;
+					vu.vumeters.push(meter);
+				}
+				
+				chanJoiner.connect(compressor);
+				compressor.connect(ptLevel);
+				compressor.connect(peerDest);
+				ptLevel.connect(audioContext.destination);
+				
+				window.requestAnimationFrame(remLevelsRender);
+			}catch(err){
+console.log(err);
+				let btn = document.getElementById("RemConBtn");
+				btn.textContent = "Disabled";
+				btn.disabled = true;
+				remstatusmsg.innerText = "Browser Audio Disabled";
+			}
+		}
+	}
+
+	function ftovu(linMag){
+		// convert linMag to 1.7 fixed point format
+		let scale;
+		// linMag is assumed to be magnitude squared!
+		scale = 255.0;
+		linMag = Math.sqrt(linMag);		// un-squares the value passed in
+		linMag = scale * Math.sqrt(linMag);	// square root again to make the vu scale close to an analog meter
+		if(linMag > 255.0)
+			return 255;
+		else
+			return linMag;
+	}
+
+	let secondsPassed;
+	let oldTimeStamp;
+	let fps;
+
+	function remLevelsRender(timeStamp){
+		let el = document.getElementById("remInVU");
+		if(el){
+			if(oldTimeStamp){
+				secondsPassed = (timeStamp - oldTimeStamp) / 100; // 10th seconds passes
+				fps = Math.round(1 / secondsPassed);
+			}else
+				fps = 1.0;
+			oldTimeStamp = timeStamp;
+
+			for(let n=0; n<analyserNodes.length; n++){
+				let pcmData = new Float32Array(analyserNodes[n].fftSize);
+				let pk = 0.0;
+				let avr = 0.0;
+				let sq;
+				analyserNodes[n].getFloatTimeDomainData(pcmData);
+				for(const amplitude of pcmData){ 
+					sq = amplitude * amplitude;
+					avr += sq; 
+					if(sq > pk)
+						pk = sq;
+				}
+				let meter = el.vumeters[n];
+				if(meter && fps){
+					avr = ftovu(avr / pcmData.length);
+					pk = ftovu(pk);
+					avr = meter.lastavr + ((avr - meter.lastavr) / fps);	// 10 Hz filter
+					let fpk = meter.lastpk + ((pk - meter.lastpk) / (fps * 5)); // 2 Hz filter 
+					if(pk < fpk)
+						pk = fpk;
+					meter.vuSetValue(avr, pk);
+					meter.lastpk = pk;
+					meter.lastavr = avr;
+				}
+			}
+		}
+		el = document.getElementById("remGainRedEl");
+		el.value = -compressor.reduction;
+		window.requestAnimationFrame(remLevelsRender);
+	}
+
+	function remoteInChgAction(){
+		chanSplitter.disconnect();	// disconnect all chanSplitter output
+		let el = document.getElementById("remLeftSource");
+		chanSplitter.connect(analyserNodes[0], el.selectedIndex);
+		chanSplitter.connect(chanJoiner, el.selectedIndex, 0);
+		el = document.getElementById("remRightSource");
+		chanSplitter.connect(analyserNodes[1], el.selectedIndex);
+		chanSplitter.connect(chanJoiner, el.selectedIndex, 1);
+	}
+
+	function remPTEnable(evt){
+		let trk = document.getElementById("remPTTrackChk");
+		if(evt.target.checked){
+			trk.disabled = false;
+			ptLevel.gain.value = 1.0;
+		}else{
+			trk.disabled = true;
+			ptLevel.gain.value = 0.0;	// no input playthrough
+		}
+	}
+
+	function remPTTrackEnable(evt){
+		//! work to do here
+		if(evt.target.checked){
+			ptLevel.gain.value = 0.1;
+		}else{
+			ptLevel.gain.value = 1.0;
+		}
+	}
+
+	function remCompEnable(evt){
+		if(evt.target.checked){
+			compressor.knee.value = 15;
+			compressor.threshold.value = -18;
+		}else{
+			compressor.knee.value = 0;
+			compressor.threshold.value = -3;
+		}
+	}
+
+	function remoteGainAction(evt){
+		let val = parseFloat(evt.target.value);
+		val = Math.pow(10, (val / 20.0));
+		gainNode.gain.value = val;
+	}
+
+	function endRemoteCall(){
+		if(sipCall){
+			let tmp = sipCall;	// prevent recursion
+			sipCall = false;
+			tmp.terminate();
+		}
+		let btn = document.getElementById("RemConBtn");
+		let msg = document.getElementById("remstatusmsg");
+		btn.textContent = "Connect";
+		btn.disabled = false;
+	}
+
+	async function remCallAction(){
+		let btn = document.getElementById("RemConBtn");
+		let remstatusmsg = document.getElementById("remstatusmsg");
+		if(sipCall){
+			// call in progress
+			endRemoteCall();
+		}else{
+			// new call
+			let name = document.getElementById("remotename").value;
+			let configuration = {
+				sockets  : [ new JsSIP.WebSocketInterface('wss://'+window.location.host) ],
+				register : false,
+				uri      : 'sip:'+name+'@invalid',
+				display_name: name
+			};
+			if(!sipUa){
+				sipUa = new JsSIP.UA(configuration); // remote name may have changed.
+				sipUa.start();
+			}
+			if(sipUa){
+				sipUa.set("display_name", name);
+				remstatusmsg.innerText = "Connecting...";
+				btn.disabled = true;
+				sipUa.on('newMessage', function(data) {
+					let msg = data.message;
+					if(msg.direction == "incoming"){
+						msg.accept();
+console.log(msg);
+					}
+				});
+
+				sipUa.on('newRTCSession', function(data) {
+					remstatusmsg.innerText = "RTC session started...";
+					sipCall = data.session;
+					if(sipCall.direction === "outgoing") {
+						//Register for various call session events:
+						sipCall.on('progress', function(e) { 
+console.log("Setting up call...");
+							remstatusmsg.innerText = "Setting up call...";
+						});
+						sipCall.on('failed', function(e) {
+console.log("Call failed", e);
+							remstatusmsg.innerText = "Call failed";
+							sipCall = false;
+							endRemoteCall();
+						});
+						sipCall.on('confirmed', function(e) {
+console.log("Connected");
+							remstatusmsg.innerText = "Connected";
+							btn.textContent = "Disconnect";
+							btn.disabled = false;
+						});
+						sipCall.on('ended', function(e) {
+console.log("Call ended");
+							remstatusmsg.innerText = "Call ended";
+							if(remSrc) remSrc.disconnect();
+							sipCall = false;
+							endRemoteCall();
+						});
+						//Note: 'connection' is the RTCPeerConnection instance - set after calling ua.call().
+						//      From this, use a WebRTC API for registering event handlers.
+						let senderList = sipCall.connection.getSenders();
+						for(let i = 0; i < senderList.length; i++)
+							sipCall.connection.removeTrack(senderList[i]);
+						// add destination track
+console.log('add audio track to peer');
+						let tracks = peerDest.stream.getAudioTracks();
+						sipCall.connection.addTrack(tracks[0]);
+						sipCall.connection.addEventListener("track", (e) => { 
+console.log('add audio track from peer');
+							if(remSrc) remSrc.disconnect();
+							remSrc = audioContext.createMediaStreamSource(e.streams[0]);
+							remSrc.connect(audioContext.destination);
+						});
+						
+						//Handle Browser not allowing access to mic and speaker
+						sipCall.on('getusermediafailed', function(DOMError) {
+console.log('Get User Media Failed Call Event ' + DOMError );
+							remstatusmsg.innerText = "No browser media access";
+						});
+					}
+				});
+				let studioName = document.getElementById("remstu").value;
+				let host = false;
+				let resp = await fetchContent("getconf/studios/"+studioName+"/host");
+				if(resp){
+					if(resp.ok){
+						let hostconf = await resp.json();
+						if(hostconf.length)
+							host = hostconf[0].value;
+					}
+				}
+				if(host && host.length)
+					sipCall = sipUa.call('sip:'+studioName+'@'+host+':5060', { 'mediaConstraints' : { 'audio': true, 'video': false } } );
+				else{
+					btn.textContent = "Connect";
+					btn.disabled = false;
+					remstatusmsg.innerText = "No browser media access";
+				}
+			}
+		}
+	}
+	
+	window.onload = function(){
+		populateStudioMenu();
+		setupAudioContext();
+	}
+</script>

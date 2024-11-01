@@ -203,6 +203,12 @@ function timeFormatNoDP(timesec){
 	return timeFormat(timesec, 1);
 }
 
+function financialFormat(val){
+	if(typeof val === 'undefined')
+		return ""; // empty string
+	return Number.parseFloat(val).toFixed(2);
+}
+
 function updateListDuration(plprops){
 	// plprops is a flat array of objects.
 	let duration = 0.0;
@@ -542,11 +548,11 @@ async function loginSubmit(event){
 
 function locMenuChange(event){
 	let element = event.currentTarget;
-	locName.setValue(element.value);
 	if(element.selectedOptions && element.selectedOptions.length){
 		locationID = element.selectedOptions[0].getAttribute("data-id");
 		setStorageLoc(locationID);
 	}
+	locName.setValue(element.value);
 }
 
 function clickAccordType(evt, cb, param){
@@ -800,6 +806,10 @@ function locMenuTrack(value){
 	if(element){
 		if(element.value != value){
 			element.value = value;
+			if(element.selectedOptions && element.selectedOptions.length){
+				locationID = element.selectedOptions[0].getAttribute("data-id");
+				setStorageLoc(locationID);
+			}
 		}
 	}
 }
@@ -819,6 +829,13 @@ function locMenuRefresh(value){
 		let inner = "";
 		for(let i=0; i < value.length; i++)
 			inner += "<option value='"+value[i].id+"' data-id='"+value[i].id+"'>"+value[i].id+" "+value[i].Name+"</option>";
+		element.innerHTML = inner;
+	}
+	element = document.getElementById("newOrderLoc");
+	if(element && value){
+		let inner = "";
+		for(let i=0; i < value.length; i++)
+			inner += "<option value='"+value[i].Name+"' data-id='"+value[i].id+"'>"+value[i].Name+"</option>";
 		element.innerHTML = inner;
 	}
 }
@@ -1225,7 +1242,7 @@ function genPopulateSchedTable(insert, fill, el, cellClick){
 	el.appendChild(table);
 } 
 
-function genPopulateTableFromArray(list, el, colMap, rowClick, headClick, sortVar, actions, haction, fieldTypes, colWidth, showCount){
+function genPopulateTableFromArray(list, el, colMap, rowClick, headClick, sortVar, actions, haction, fieldTypes, colWidth, showCount, noHeader, tblClass){
 	if(!el)
 		return;
 	if(!list && !haction){
@@ -1237,7 +1254,7 @@ function genPopulateTableFromArray(list, el, colMap, rowClick, headClick, sortVa
 	if(colMap){
 		for(let k in colMap){
 			if(colMap[k] && cols.indexOf(k) === -1)
-				// Push all keys to the array
+				// Push all keys to the array, in colMap order
 				cols.push(k);
 		}
 	}
@@ -1255,61 +1272,67 @@ function genPopulateTableFromArray(list, el, colMap, rowClick, headClick, sortVa
 	}
 	// Create a table element
 	let table = document.createElement("table");
-	table.className = "tableleftj";
+	if(tblClass)
+		table.className = tblClass;
+	else
+		table.className = "tableleftj";
 	// Create table row tr element of a table
-	let tr = table.insertRow(-1);
-	for(let i = 0; i < cols.length; i++) {
-		// Create the table header th elements
-		let theader = document.createElement("th");
-		if(headClick){
-			theader.className = "tselcell clickable";
-			theader.onclick = headClick;
-		}else
-			theader.className = "tselcell";
-		let rename = false;
-		if(colMap)
-			rename = colMap[cols[i]];
-		if(rename)
-			theader.innerHTML = rename;
-		else if(cols.length > i)
-			theader.innerHTML = cols[i];
-		else
-			theader.innerHTML = "";
-		if(sortVar){
-			//add sort direction icon
-			if(cols[i] === sortVar)
-				theader.innerHTML = "<i class='fa fa-sort-asc' aria-hidden='true'></i>" + theader.innerHTML;
-			if(("-"+cols[i]) === sortVar)
-				theader.innerHTML = "<i class='fa fa-sort-desc' aria-hidden='true'></i>" + theader.innerHTML;
+	if(!noHeader){
+		let tr = table.insertRow(-1);
+		for(let i = 0; i < cols.length; i++) {
+			// Create the table header th elements
+			let theader = document.createElement("th");
+			if(headClick){
+				theader.className = "tselcell clickable";
+				theader.onclick = headClick;
+			}else
+				theader.className = "tselcell";
+			let rename = false;
+			if(colMap)
+				rename = colMap[cols[i]];
+			if(rename)
+				theader.innerHTML = rename;
+			else if(cols.length > i)
+				theader.innerHTML = cols[i];
+			else
+				theader.innerHTML = "";
+			if(sortVar){
+				//add sort direction icon
+				if(cols[i] === sortVar)
+					theader.innerHTML = "<i class='fa fa-sort-asc' aria-hidden='true'></i>" + theader.innerHTML;
+				if(("-"+cols[i]) === sortVar)
+					theader.innerHTML = "<i class='fa fa-sort-desc' aria-hidden='true'></i>" + theader.innerHTML;
+			}
+			let width = "";
+			if(colWidth)
+				width = colWidth[cols[i]]; // example "25px" or "30%"
+			if(width && width.length)
+				theader.style.width = width;
+			// Append columnName to the table row
+			tr.appendChild(theader);
 		}
-		let width = "";
-		if(colWidth)
-			width = colWidth[cols[i]]; // example "25px" or "30%"
-		if(width && width.length)
-			theader.style.width = width;
-		// Append columnName to the table row
-		tr.appendChild(theader);
-	}
-	if(actions || haction){
-		// add heading/column for actions
-		let theader = document.createElement("th");
-		theader.className = "tselcell"; // non clickable
-		let width = "";
-		if(colWidth)
-			width = colWidth.action; // example "25px" or "30%"
-		if(width && width.length)
-			theader.style.width = width;
-		if(haction){
-			theader.innerHTML = haction;
-		}else{
-			theader.innerHTML = "";
+		if(actions || haction){
+			// add heading/column for actions
+			let theader = document.createElement("th");
+			theader.className = "tselcell"; // non clickable
+			let width = "";
+			if(colWidth)
+				width = colWidth.action; // example "25px" or "30%"
+			if(width && width.length)
+				theader.style.width = width;
+			if(haction){
+				theader.innerHTML = haction;
+			}else{
+				theader.innerHTML = "";
+			}
+			tr.appendChild(theader);
 		}
-		tr.appendChild(theader);
 	}
 	// Adding the data to the table
+	let extraDiv = false;
 	for(let i = 0; i < list.length; i++){
 		// Create a new row
-		trow = table.insertRow(-1);
+		let trow = table.insertRow(-1);
 		if(rowClick)
 			trow.onclick = rowClick;
 		if(cols.length)
@@ -1327,7 +1350,12 @@ function genPopulateTableFromArray(list, el, colMap, rowClick, headClick, sortVa
 					let val = list[i][cols[j]];
 					if(fieldTypes[cols[j]] instanceof Function){
 						// fieldType is a function... have the function process the value
-						inner = fieldTypes[cols[j]](val, list[i], i);
+						let result = fieldTypes[cols[j]](val, list[i], i);
+						if(typeof result === 'object'){
+							extraDiv = result.div;
+							inner = result.thisCell;
+						}else
+							inner = result;
 					}else{
 						inner = fieldTypes[cols[j]];
 						if(list[i][cols[j]] == true)
@@ -1401,6 +1429,15 @@ function genPopulateTableFromArray(list, el, colMap, rowClick, headClick, sortVa
 				cell.innerHTML = newac;
 			}else
 				cell.innerHTML = "";
+		}
+		if(extraDiv){
+			// some function call in the previous row's columns has requested a custom row be inserted next
+			trow = table.insertRow(-1);
+			let cell = trow.insertCell(-1); // first column should be empty -> this is a tree indent
+			cell = trow.insertCell(-1);
+			cell.colSpan = table.rows[0].cells.length-1
+			cell.appendChild(extraDiv);
+			extraDiv = false;
 		}
 	}
 	// Add the newely created table to the specified <div>
@@ -3345,21 +3382,19 @@ function itemAddRest(evt){
 function itemAddCust(evt){
 	evt.preventDefault();
 	evt.stopPropagation();
-	let rowel = evt.target.parentElement.parentElement;
 	let div = document.getElementById("itemcustlist");
 	// add row
 	let newRow = {Property: "", Value: "", RID: 0};
 	actions = `<button class="editbutton" onclick="itemRemoveRow(event)">-</button>`;
-	let fields = { Property: `<input type='text' size='14' data-rid='$RID' value="$attval" onblur="liveSearchList(event, '')" onkeyup="liveSearchList(event, this.value, getMetaPropsForParent, '`+itemProps.Type+`')"></input>
+	let fields = { Property: `<input type='text' size='20' data-rid='$RID' value="$attval" onblur="liveSearchList(event, '')" onkeyup="liveSearchList(event, this.value, getMetaPropsForParent, '`+itemProps.Type+`')"></input>
 											<div class="liveSearch"></div>`, 
-							Value: "<input type='text' size='14' value='$attval'</input>"};
+							Value: "<input type='text' size='20' value='$attval'</input>"};
 	insertTableRow(newRow, div, 1, {Property: "Property", Value: "Value", RID: false}, false, actions, fields);
 }
 
 function itemAddSched(evt){
 	evt.preventDefault();
 	evt.stopPropagation();
-	let rowel = evt.target.parentElement.parentElement;
 	let div = document.getElementById("itemschedlist");
 	// add row
 	let newRow = {Day: "0", Date: "0", Month: "0", Hour: "0", Minute: "0", Fill: false, Priority: "5", RID: ""};
@@ -4056,9 +4091,9 @@ async function reloadItemSection(el, type){
 		el.innerHTML = inner + "</form>";
 		let div = document.getElementById("itemcustlist");
 		let colWidth = {action:"18px"};
-		let fields = { Property: `<input type='text' size='14' data-rid='$RID' value="$attval" onblur="liveSearchList(event, '')" onkeyup="liveSearchList(event, this.value, getMetaPropsForParent, '`+itemProps.meta+`')"></input>
+		let fields = { Property: `<input type='text' size='20' data-rid='$RID' value="$attval" onblur="liveSearchList(event, '')" onkeyup="liveSearchList(event, this.value, getMetaPropsForParent, '`+itemProps.meta+`')"></input>
 											<div class="liveSearch"></div>`, 
-							Value: "<input type='text' size='14' value='$attval'</input>"};
+							Value: "<input type='text' size='20' value='$attval'</input>"};
 		genPopulateTableFromArray(itemProps.meta, div, {Property: "Property", Value: "Value", Parent: false, RID: false, id: false, tocID: false}, false, false, false, actions, haction, fields, colWidth);
 	}else if(type == "rest"){
 		let actions = false;
@@ -4450,7 +4485,7 @@ async function reloadItemSection(el, type){
 		}
 	}else{
 		// some other type... input, gst, URL, jack
-		let inner = "Hello";
+		let inner = "Type of item is "+type;
 		el.innerHTML = inner;
 		return;
 	}
@@ -6768,6 +6803,7 @@ function browseQuery(evt){
 		if(resp instanceof Response){
 			if(resp.ok){
 				resp.json().then((data) => {
+					browseData = data;
 					let actions = false;
 					let hactions = false;
 					if(cred && ['admin', 'manager', 'library'].includes(cred.permission)){
@@ -12206,13 +12242,61 @@ function studioVuUpdate(data){
 	}
 }
 
-function showScriptTab(evt){
+var studioScrList = [];
+
+async function readScriptAction(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let el = document.getElementById("scriptContent");
+	let idx = el.getAttribute("data-idx");
+	if(idx < 0)
+		return;
+	let obj = studioScrList[idx];
+	let dj = document.getElementById("scriptReadDJ").value;
+	if(obj && obj.ItemID && dj.length){
+		// log it
+		let resp = await fetchContent("library/logread/"+obj.ItemID, {
+			method: 'POST',
+			body: JSON.stringify({locID: locationID, readBy: dj}),
+			headers: {
+				"Content-Type": "application/json",
+				"Accept": "application/json"
+			}
+		});
+		if(resp){
+			if(resp.ok){
+				document.getElementById("scriptReadBtn").disabled = true;;
+				el.setAttribute("data-idx", -1);
+				el.innerText = "";
+				el = document.getElementById("scriptName");
+				el.innerText = "";
+				if(obj.UID){
+					// delete from queue
+					if(studioName && studioName.length){
+						let hexStr =  ("00000000" + obj.UID.toString(16)).substr(-8);
+						let resp = await fetchContent("studio/"+studioName+"?cmd=delete%20"+hexStr);
+					}
+				}
+			}else{
+				alert("Got an error fetching data from serverr.\n"+resp.statusText);
+			}
+		}else{
+			alert("Failed to fetch data from the server.");
+		}
+	}
+}
+
+async function showScriptTab(evt){
 	evt.preventDefault();
 	evt.stopPropagation();
 	let el = document.getElementById("showscripttabobtn");
 	el.style.display = "none";
 	el = document.getElementById("scriptpane");
+	el.style.display = "flex";
+	el.style.height = scriptHeight;
+
 	// show scripts found in current meta data, in queue order
+	studioScrList = []; 
 	let metaList = studioStateCache.meta;
 	if(metaList){
 		let keys = Object.keys(studioStateCache.meta);
@@ -12221,19 +12305,73 @@ function showScriptTab(evt){
 			let obj = studioStateCache.meta[ref];
 			let script = obj["Script"];
 			if(script){
-				let TT = obj["TargetTime"];
-				let name = obj["Name"];
-				let lid = obj["logID"];
-				console.log(ref, lid, name, TT, script);
+				let entry = {Script: script, Name: obj["Name"], ItemID: parseInt(obj.ID), UID: parseInt(ref)}
+				studioScrList.push(entry);
 			}
 		}
 	}
-	el.style.height = scriptHeight;
+	if(locationID){
+		let api = "library/bulkreads";
+			api += "/"+locationID;
+		let resp = await fetchContent(api, {
+			method: 'GET',
+			headers: {
+				"Content-Type": "application/json",
+				"Accept": "application/json"
+			}
+		});
+		if(resp){
+			if(resp.ok){
+				let repData = await resp.json();
+				if(repData && repData.length)
+					studioScrList = studioScrList.concat(repData);
+				el = document.getElementById("scriptReadBtn");
+				el.disabled = true;
+				el = document.getElementById("scriptContent");
+				el.setAttribute("data-idx", -1);
+				el.innerText = "";
+				el = document.getElementById("scriptName");
+				el.innerText = "";
+			}else{
+				alert("Got an error fetching data from serverr.\n"+resp.statusText);
+			}
+		}else{
+			alert("Failed to fetch data from the server.");
+		}
+	}
+	el = document.getElementById("scriptList");
+	//function genPopulateTableFromArray(list, el, colMap, rowClick, headClick, sortVar, actions, haction, fieldTypes, colWidth, showCount, noHeader)
+	genPopulateTableFromArray(studioScrList, el, {Script:false, ItemID:false, UID:false, LID:false}, selScriptRow, false, false, false, false, false, false, false, true);
+	if(studioScrList.length == 0)
+		el.innerText = "No Scripts to read at this time.";
+}
+
+function scriptReaderChange(){
+	el = document.getElementById("scriptReadBtn");
+	let idx = document.getElementById("scriptContent").getAttribute("data-idx");
+	if(idx >= 0){
+		if(document.getElementById("scriptReadDJ").value.length){
+			el.disabled = false;
+			return;
+		}
+	}
+	el.disabled = true;
+}
+
+function selScriptRow(evt){
+	let idx = evt.target.parentNode.rowIndex;
+	let el = document.getElementById("scriptName");
+	el.innerText = studioScrList[idx].Name;
+	el = document.getElementById("scriptContent");
+	el.innerText = decodeURIComponent(studioScrList[idx].Script);
+	el.setAttribute("data-idx", idx);
+	scriptReaderChange();
 }
 
 function closeScriptTab(){
 	let el = document.getElementById("scriptpane");
 	el.style.height = "0px";
+	el.style.display = "none";
 	el = document.getElementById("showscripttabobtn");
 	el.style.display = "block";
 }
@@ -12342,30 +12480,54 @@ function buffToUvObj(buffer){
 	return result;
 }
 
-/***** Ad manager functions *****/
+/***** Ad manager - Customer functions *****/
+var selCustID;
+var lastCustName = new watchableValue(false);
+var lastCustRec;
+var custSort;
 
 function custListRefresh(evt){
-//!!
 	let dtype = document.querySelector('input[name="custDateType"]:checked').value
 	let el = document.getElementById("custDateYear");
+	let lck = document.getElementById("custIgnoreLoc");
+	let ick = document.getElementById("custIgnoreInv");
+	if(dtype == "Ignore"){
+		el.disabled = true;
+		lck.disabled = true;
+		ick.disabled = true;
+	}else{
+		el.disabled = false;
+		lck.disabled = false;
+		ick.disabled =  false;
+	}
 	let year = parseInt(el.value);
 	let month = 0;
 	el = document.getElementById("custDateMon");
-	if(year > 1900){
-		el.disabled = false;
-		month = parseInt(el.value);
-	}else
+	if(dtype == "Ignore"){
 		el.disabled = true;
+	}else{
+		if(year > 1900){
+			el.disabled = false;
+			month = parseInt(el.value);
+		}else
+			el.disabled = true;
+	}
 	el = document.getElementById("custNameMatch");
 	let match = el.value;
 	el = document.getElementById("custListDiv");
-
 	genPopulateTableFromArray(false, el);
 	
 	let post = {type:"cust", datetype:dtype, dyear:year, dmon:month};
+	if(locationID && (document.getElementById("custIgnoreLoc").checked == false))
+		post.locID = locationID;
+	
+	if(locationID && (document.getElementById("custIgnoreInv").checked == false))
+		post.invID = lastInvNum.getValue();
+		
 	if(match && match.length)
 		post.match = "%"+match+"%";
-	post.sortBy = "Label";
+		
+	post.sortBy = custSort;
 	el.innerHTML = "<div class='center'><i class='fa fa-circle-o-notch fa-spin' style='font-size:48px'></i></div>";
 	
 	fetchContent("library/browse", {
@@ -12379,18 +12541,8 @@ function custListRefresh(evt){
 		if(resp instanceof Response){
 			if(resp.ok){
 				resp.json().then((data) => {
-					let actions = false;
-					let hactions = false;
-					if(cred && ['admin', 'manager', 'library'].includes(cred.permission)){
-						// include edit ability
-						if(data.length && ['artist', 'album', 'category'].includes(post.type))
-							// $i will be replaced by the row index number by the genPopulateTableFromArray() function
-							actions = `<button class="editbutton" data-index="$i" onclick="browseEditItem(event)">Edit</button>`;
-						if(data.length && ['playlist', 'task', 'artist', 'album', 'category'].includes(post.type))
-							hactions = `<button class="editbutton" onclick="browseNewItem(event, '`+post.type+`')">+</button>`;
-					}
-					let colWidth = {action:"25px", Duration:"70px"};
-					genPopulateTableFromArray(data, el, {id: false, qtype: false, tocID: false}, browseRowClick, browseCellClick, browseSort, actions, hactions, false, colWidth, true);
+					let fields = {Name: "<input type='hidden' name='Name' data-id='$ID'></input>$val"}
+					genPopulateTableFromArray(data, el, {ID: false}, custRowClick, custHeaderClick, custSort, false, false, fields, {lastOrder:"100px"}, true, false);
 				});
 				return;
 			}
@@ -12404,8 +12556,1632 @@ function custListRefresh(evt){
 	});
 }
 
-function custCreateNew(EVT){
+function custHeaderClick(event){	// this is only the headers cells, for sorting
+	if(event.target.textContent.length){
+		if(custSort === event.target.textContent)
+			custSort = "-"+event.target.textContent; // toggle: make decending
+		else
+			custSort = event.target.textContent;
+		custListRefresh();
+	}
+}
+
+function custCreateNew(){
+	selCustID = 0;
+	custLoadRecord();
+	lastCustName.setValue(false);
+}
+
+function custRowClick(evt){
+	let el = event.currentTarget.firstChild.firstChild;
+	selCustID = parseInt(el.getAttribute("data-id"));
+	custLoadRecord();
+}
+
+function custRecClose(evt){
+	selCustID = 0;
+	let el = document.getElementById("custSearchBox");
+	el.style.display = "block";
+		el = document.getElementById("custInfoBox");
+	el.style.display = "none";
+}
+
+function custLocValChange(){
+	let el = document.getElementById("custLocName");
+	let val = locName.getValue();
+	if(val && val.length)
+		el.innerText = val;
+	if(document.getElementById("trafdiv"))
+		custListRefresh();
+}
+
+function custInvValChange(){
+	let el = document.getElementById("custInvNum");
+	let val = lastInvNum.getValue();
+	if(val)
+		el.innerText = val;
+	if(document.getElementById("trafdiv"))
+		custListRefresh();
+}
+
+function custLoadRecord(){
+	let el = document.getElementById("custSearchBox");
+	el.style.display = "none";
+	el = document.getElementById("custInfoBox");
+	el.style.display = "block";
+	el = document.getElementById("custID");
+	if(selCustID){
+		// load existing record properties
+		el.innerText = selCustID;
+		fetchContent("library/get/client/"+selCustID, {
+			method: 'GET',
+			headers: {
+				"Content-Type": "application/json",
+				"Accept": "application/json"
+			}
+		}).then((resp) => {
+			if(resp instanceof Response){
+				if(resp.ok){
+					resp.json().then((data) => {
+						data = data[0]; // should be only one record
+						lastCustRec = data;
+						lastCustName.setValue(data.name);
+						document.getElementById("cust-name").value = data.name;
+						document.getElementById("cust-addr1").value = data.address1;
+						document.getElementById("cust-addr2").value = data.address2;
+						document.getElementById("cust-city").value = data.city;
+						document.getElementById("cust-state").value = data.state;
+						document.getElementById("cust-pcode").value = data.postcode;
+						document.getElementById("cust-phone").value = data.phone;
+						document.getElementById("cust-contact").value = data.contact;
+						document.getElementById("cust-email").value = data.email;
+						document.getElementById("cust-country").value = data.country;
+						document.getElementById("cust-rep").value = data.salesrep;
+					});
+					return;
+				}
+			}
+			// handle failure
+			if(resp)
+				alert("Got an error fetching data from server.\n"+resp);
+			else
+				alert("Failed to fetch data from the server.");  
+			custRecClose();
+		});
+	}else{
+		// load empty/new record properties
+		el.innerText = "";
+		lastCustRec = false;
+		document.getElementById("cust-name").value = "";
+		document.getElementById("cust-addr1").value = "";
+		document.getElementById("cust-addr2").value = "";
+		document.getElementById("cust-city").value = "";
+		document.getElementById("cust-state").value = "";
+		document.getElementById("cust-pcode").value = "";
+		document.getElementById("cust-phone").value = "";
+		document.getElementById("cust-contact").value = "";
+		document.getElementById("cust-email").value = "";
+		document.getElementById("cust-country").value = "";
+		document.getElementById("cust-rep").value = "";
+	}
+}
+
+async function custSaveRecord(evt){
+	evt.preventDefault();
+	let id = selCustID;
+	let obj ={};
+	let el = document.getElementById("cust-name");
+	if(!el.value.length){
+		alert("Client Name is a required field.");
+		return;
+	}
+	el = document.getElementById("cust-contact");
+	if(!el.value.length){
+		alert("Contact Person is a required field.");
+		return;
+	}
+	if((document.getElementById("cust-phone").value.length + document.getElementById("cust-email").value.length) == 0){
+		alert("Phone Numbe and/or email are a required fields.");
+		return;
+	}
+	let els = document.getElementById("custRecform").elements;
+	if(els && els.length){
+		for(let i=0; i<els.length; i++){
+			let item = els.item(i);
+			let name = item.name;
+			if(name){
+				let was = lastCustRec[name];
+				if(was === undefined) was = "";
+				if(was === null) was = "";
+				let is = item.value;
+				if(was != is){
+					obj[name] = is;
+				}
+			}
+		}
+	}
+	if(Object.keys(obj).length){	// only save if there are changes
+		let api = "library/set/client";
+		if(id)
+			api += "/"+id;
+		let resp = await fetchContent(api, {
+				method: 'POST',
+				body: JSON.stringify(obj),
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp){
+			if(resp.ok){
+				let repData = await resp.json();
+				if(repData.insertId){
+					selCustID = repData.insertId;
+					alert("Record has been created.");
+				}else
+					alert("Record has been updated.");
+				custLoadRecord();
+			}else{
+				alert("Got an error saving data to server.\n"+resp.statusText);
+			}
+		}else{
+			alert("Failed to save data to the server.");
+		}
+	}
+}
+
+/***** Ad manager - Campaign functions *****/
+
+var selCampID;
+var lastCampRec;
+var lastCampName = new watchableValue(false);
+var campSort;
+
+function campListRefresh(evt){
+	let dtype = document.querySelector('input[name="campDateType"]:checked').value
+	let el = document.getElementById("campDateYear");
+	let lck = document.getElementById("campIgnoreLoc");
+	let ick = document.getElementById("campIgnoreInv");
+	if(dtype == "Ignore"){
+		el.disabled = true;
+		lck.disabled = true;
+		ick.disabled = true;
+	}else{
+		el.disabled = false;
+		lck.disabled = false;
+		ick.disabled = false;
+	}
+	let year = parseInt(el.value);
+	let month = 0;
+	el = document.getElementById("campDateMon");
+	if(dtype == "Ignore"){
+		el.disabled = true;
+	}else{
+		if(year > 1900){
+			el.disabled = false;
+			month = parseInt(el.value);
+		}else
+			el.disabled = true;
+	}
+	el = document.getElementById("campNameMatch");
+	let match = el.value;
+	el = document.getElementById("campListDiv");
+	genPopulateTableFromArray(false, el);
 	
+	let post = {type:"camp", datetype:dtype, dyear:year, dmon:month};
+	if(locationID && (document.getElementById("campIgnoreLoc").checked == false))
+		post.locID = locationID;
+	if(selCustID && (document.getElementById("campIgnoreCust").checked == false))
+		post.custID = selCustID;
+	if(locationID && (document.getElementById("campIgnoreInv").checked == false))
+		post.invID = lastInvNum.getValue();
+		
+	if(match && match.length)
+		post.match = "%"+match+"%";
+	post.sortBy = campSort;
+
+	el.innerHTML = "<div class='center'><i class='fa fa-circle-o-notch fa-spin' style='font-size:48px'></i></div>";
+	
+	fetchContent("library/browse", {
+		method: 'POST',
+		body: JSON.stringify(post),
+		headers: {
+			"Content-Type": "application/json",
+			"Accept": "application/json"
+		}
+	}).then((resp) => {
+		if(resp instanceof Response){
+			if(resp.ok){
+				resp.json().then((data) => {
+					let fields = {Name: "<input type='hidden' name='Name' data-id='$ID'></input>$val"}
+					genPopulateTableFromArray(data, el, {ID: false}, campRowClick, campHeaderClick, campSort, false, false, fields, {lastOrder:"100px"}, true, false);
+				});
+				return;
+			}
+		}
+		// handle failure
+		genPopulateTableFromArray(false, el);
+		if(resp)
+			alert("Got an error fetching data from server.\n"+resp);
+		else
+			alert("Failed to fetch data from the server.");  
+	});
+}
+
+function campHeaderClick(event){	// this is only the headers cells, for sorting
+	if(event.target.textContent.length){
+		if(campSort === event.target.textContent)
+			campSort = "-"+event.target.textContent; // toggle: make decending
+		else
+			campSort = event.target.textContent;
+		campListRefresh();
+	}
+}
+
+function campCreateNew(){
+	selCampID = 0;
+	lastCampName.setValue(false);
+	campLoadRecord();
+}
+
+function campRowClick(evt){
+	let el = event.currentTarget.firstChild.firstChild;
+	selCampID = parseInt(el.getAttribute("data-id"));
+	campLoadRecord();
+}
+
+function campRecClose(evt){
+	selCampID = 0;
+	let el = document.getElementById("campSearchBox");
+	el.style.display = "block";
+		el = document.getElementById("campInfoBox");
+	el.style.display = "none";
+}
+
+function campLocValChange(){
+	let el = document.getElementById("campLocName");
+	let val = locName.getValue();
+	if(val && val.length)
+		el.innerText = val;
+	if(document.getElementById("trafdiv"))
+		campListRefresh();
+}
+
+function campCustValChange(){
+	let el = document.getElementById("campCustName");
+	let val = lastCustName.getValue();
+	if(val && val.length)
+		el.innerText = val;
+	if(document.getElementById("trafdiv"))
+		campListRefresh();
+	el = document.getElementById("campNewbtn");
+	if(val && val.length)
+		el.disabled = false;
+	else
+		el.disabled = true;
+}
+
+function campInvValChange(){
+	let el = document.getElementById("campInvNum");
+	let val = lastInvNum.getValue();
+	if(val)
+		el.innerText = val;
+	if(document.getElementById("trafdiv"))
+		campListRefresh();
+}
+
+function campItemInfo(evt){
+	evt.preventDefault();
+	let el = document.getElementById("camp-itemID");
+	let id = el.innerText;
+	if(id){
+		let item = {tocID: id};
+		if(cred && ['admin', 'manager', 'library'].includes(cred.permission))
+			showItem(item, true);
+		else
+			showItem(item, false);
+	}
+}
+
+function campShowCustProps(){
+	let list = JSON.parse(localStorage.getItem("trafficDefCampCustom"));
+	if(!list)
+		list = [];
+	document.getElementById("campDefCustom").hidden = false;
+	let div = document.getElementById("campDefCustList");
+	let actions = `<button class="editbutton" onclick="campRemovePropRow(event)">-</button>`;
+	let haction = `<button class="editbutton" onclick="campAddPropRow(event)">+</button>`;
+	let colWidth = {action:"18px"};
+	let fields = { Property: `<input type='text' size='20' value="$attval" onblur="liveSearchList(event, '')" onkeyup="liveSearchList(event, this.value, getMetaPropsForParent, 'toc')"></input>
+										<div class="liveSearch"></div>`, 
+						Value: "<input type='text' size='20' value='$attval'</input>"};
+	genPopulateTableFromArray(list, div, {Property: "Property", Value: "Value"}, false, false, false, actions, haction, fields, colWidth, false, false, "tablecenterj");
+}
+
+function campAddPropRow(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let div = document.getElementById("campDefCustList");
+	// add row
+	let newRow = {Property: "", Value: ""};
+	actions = `<button class="editbutton" onclick="campRemovePropRow(event)">-</button>`;
+	let fields = { Property: `<input type='text' size='20' value="$attval" onblur="campPropRowChange(event)" onkeyup="liveSearchList(event, this.value, getMetaPropsForParent, 'toc')"></input>
+											<div class="liveSearch"></div>`, 
+							Value: "<input type='text' size='20' value='$attval' onblur='campPropRowChange()'</input>"};
+	insertTableRow(newRow, div, 1, {Property: "Property", Value: "Value"}, false, actions, fields);
+}
+
+function campPropRowChange(evt){
+	if(evt)
+		liveSearchList(evt, '');
+	let div = document.getElementById("campDefCustList");
+	let tblrows = div.firstChild.firstChild.childNodes;
+	let list = [];
+	for(let i=1; i<tblrows.length; i++){
+		let row = tblrows[i];
+		let prop = row.childNodes[0].firstChild.value;
+		let val = row.childNodes[1].firstChild.value;
+		list.push({Property: prop, Value: val});
+	}
+	localStorage.setItem("trafficDefCampCustom", JSON.stringify(list));
+}
+
+function campRemovePropRow(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
+	let rowel = evt.target.parentElement.parentElement;
+	let tblel = rowel.parentElement.parentElement;
+	tblel.deleteRow(rowel.rowIndex);
+	campPropRowChange();
+}
+
+function campItemTypeChange(evt){
+	if(evt)
+		evt.preventDefault();
+	let val = document.getElementById("camp-itemType").value;
+	let el = document.getElementById("camp-itemID");
+	if(el.innerText.length){
+		// existing item, we have an ID
+		document.getElementById("campDefCat").hidden = true;
+		document.getElementById("campDefArt").hidden = true;
+		document.getElementById("campDefAlb").hidden = true;
+		document.getElementById("campDefCustom").hidden = true;
+		el = document.getElementById("camp-ItemRmFile");
+		if((val != "Audio") && lastCampRec && lastCampRec.item && (lastCampRec.item.Type == "file")){
+			el.hidden = false;
+		}else
+			el.hidden = true;
+	}else{
+		document.getElementById("campDefCat").hidden = false;
+		campShowCustProps();
+		recallCampCat();
+		// New item, no ID yet
+		el = document.getElementById("camp-itemType");
+		if(el.value == "Audio"){
+			document.getElementById("campDefArt").hidden = false;
+			document.getElementById("campDefAlb").hidden = false;
+			recallCampArt();
+			recallCampAlb();
+		}else{
+			document.getElementById("campDefArt").hidden = true;
+			document.getElementById("campDefAlb").hidden = true;
+		}
+	}
+	
+	if(val == "Audio")
+		document.getElementById("camp-itemDur").readOnly = true;
+	else
+		document.getElementById("camp-itemDur").readOnly = false;
+}
+
+
+async function refreshCampCats(evt){
+	if(evt && evt.preventDefault){
+		evt.preventDefault();
+		evt.stopPropagation();
+		await getCatList();
+	}else{
+		let div = document.getElementById("campCatList");
+		if(div){
+			buildSearchList(div, catListCache.getValue(), campCatSelect);
+			let el = document.getElementById("campCatFilterText");
+			filterSearchList({target: el});
+		}
+	}
+}
+
+function recallCampCat(){
+	let obj = JSON.parse(localStorage.getItem("trafficDefCampCat"));
+	let el = document.getElementById("campItemCatBtn");
+	if(obj){
+		el.setAttribute("data-id", obj.id);
+		el.innerText = obj.name;
+	}else{
+		el.setAttribute("data-id", "0");
+		el.innerText = "[None]";
+	}
+}
+
+function recallCampArt(){
+	let obj = JSON.parse(localStorage.getItem("trafficDefCampArt"));
+	let el = document.getElementById("campItemArtBtn");
+	if(obj){
+		el.setAttribute("data-id", obj.id);
+		el.innerText = obj.name;
+	}else{
+		el.setAttribute("data-id", "0");
+		el.innerText = "[None]";
+	}
+}
+
+function recallCampAlb(){
+	let obj = JSON.parse(localStorage.getItem("trafficDefCampAlb"));
+	let el = document.getElementById("campItemAlbBtn");
+	if(obj){
+		el.setAttribute("data-id", obj.id);
+		el.innerText = obj.name;
+	}else{
+		el.setAttribute("data-id", "0");
+		el.innerText = "[None]";
+	}
+}
+
+function clearCampCatSelect(evt){
+	evt.preventDefault();
+	let el = document.getElementById("campItemCatBtn");
+	el.setAttribute("data-id", "0");
+	el.innerText = "[None]";
+	// persistent setting in this browser
+	localStorage.setItem("trafficDefCampCat", JSON.stringify({id: 0, name: "[None]"}));
+}
+
+async function campCatSelect(evt){
+	// close search-list menu
+	let el = document.getElementById("campItemCatBtn");
+	toggleShowSearchList({target: el});
+	// set button text to selection and save catid
+	el.setAttribute("data-id", evt.target.getAttribute("data-id"));
+	el.innerText = evt.target.innerText;
+	// persistent setting in this browser
+	localStorage.setItem("trafficDefCampCat", JSON.stringify({id: evt.target.getAttribute("data-id"), name: evt.target.innerText}));
+}
+
+async function refreshCampArts(evt){
+	if(evt && evt.preventDefault){
+		evt.preventDefault();
+		evt.stopPropagation();
+		await getArtistList();
+	}else{
+		let div = document.getElementById("campArtList");
+		if(div){
+			buildSearchList(div, artListCache.getValue(), campArtSelect);
+			let el = document.getElementById("campArtFilterText");
+			filterSearchList({target: el});
+		}
+	}
+}
+
+function clearCampArtSelect(evt){
+	evt.preventDefault();
+	let el = document.getElementById("campItemArtBtn");
+	el.setAttribute("data-id", "0");
+	el.innerText = "[None]";
+	// persistent setting in this browser
+	localStorage.setItem("trafficDefCampArt", JSON.stringify({id: 0, name: "[None]"}));
+}
+
+async function campArtSelect(evt){
+	// close search-list menu
+	let el = document.getElementById("campItemArtBtn");
+	toggleShowSearchList({target: el});
+	// set button text to selection and save catid
+	el.setAttribute("data-id", evt.target.getAttribute("data-id"));
+	el.innerText = evt.target.innerText;
+	// persistent setting in this browser
+	localStorage.setItem("trafficDefCampArt", JSON.stringify({id: evt.target.getAttribute("data-id"), name: evt.target.innerText}));
+}
+
+async function refreshCampAlbs(evt){
+	if(evt && evt.preventDefault){
+		evt.preventDefault();
+		evt.stopPropagation();
+		await getAlbumList();
+	}else{
+		let div = document.getElementById("campAlbList");
+		if(div){
+			buildSearchList(div, albListCache.getValue(), campAlbSelect);
+			let el = document.getElementById("campAlbFilterText");
+			filterSearchList({target: el});
+		}
+	}
+}
+
+function clearCampAlbSelect(evt){
+	evt.preventDefault();
+	let el = document.getElementById("campItemAlbBtn");
+	el.setAttribute("data-id", "0");
+	el.innerText = "[None]";
+	// persistent setting in this browser
+	localStorage.setItem("trafficDefCampAlb", JSON.stringify({id: 0, name: "[None]"}));
+}
+
+async function campAlbSelect(evt){
+	// close search-list menu
+	let el = document.getElementById("campItemAlbBtn");
+	toggleShowSearchList({target: el});
+	// set button text to selection and save catid
+	el.setAttribute("data-id", evt.target.getAttribute("data-id"));
+	el.innerText = evt.target.innerText;
+	// persistent setting in this browser
+	localStorage.setItem("trafficDefCampAlb", JSON.stringify({id: evt.target.getAttribute("data-id"), name: evt.target.innerText}));
+}
+
+async function campLoadRecord(){
+	let el = document.getElementById("campSearchBox");
+	el.style.display = "none";
+	el = document.getElementById("campInfoBox");
+	el.style.display = "block";
+	el = document.getElementById("campID");
+	if(selCampID){
+		// load existing record properties
+		el.innerText = selCampID;
+		let resp = await fetchContent("library/get/campaign/"+selCampID, {
+				method: 'GET',
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp instanceof Response){
+			if(resp.ok){
+				data = await resp.json();
+				if(data && data.length){
+					data = data[0]; // should be only one record
+					lastCampRec = data;
+					if(!data.client){
+						alert("Campaign is missing an associated customer.\n"+resp);
+						campRecClose();
+						return;
+					}
+					if(!data.aritem){
+						alert("Campaign is missing an associated AudioRack item.\n"+resp);
+						campRecClose();
+						return;
+					}
+					resp = await fetchContent("library/get/client/"+data.client, {
+						method: 'GET',
+						headers: {
+							"Content-Type": "application/json",
+							"Accept": "application/json"
+						}
+					});
+					if(resp instanceof Response){
+						if(resp.ok){
+							let data = await resp.json();
+							if(data && data.length){
+								data = data[0]; // should be only one record
+								lastCampRec.customer = data;
+								resp = await fetchContent("library/get/toc/"+lastCampRec.aritem, {
+									method: 'GET',
+									headers: {
+										"Content-Type": "application/json",
+										"Accept": "application/json"
+									}
+								});
+								if(resp instanceof Response){
+									if(resp.ok){
+										let data = await resp.json();
+										if(data && data.length){
+											data = data[0]; // should be only one record
+											lastCampRec.item = data;
+											lastCampName.setValue(data.Name);
+											if(data.Type && (data.Type == "file")){
+												resp = await fetchContent("library/get/file/"+lastCampRec.aritem, {
+													method: 'GET',
+													headers: {
+														"Content-Type": "application/json",
+														"Accept": "application/json"
+													}
+												});
+												if(resp instanceof Response){
+													if(resp.ok){
+														let data = await resp.json();
+														if(data && data.length){
+															lastCampRec.item.Missing = parseInt(data.Missing);
+														}
+													}
+												}
+											}
+											document.getElementById("camp-client").innerText = lastCampRec.customer.name;
+											document.getElementById("camp-clientid").innerText = lastCampRec.client;
+											document.getElementById("camp-desc").value = lastCampRec.description;
+											document.getElementById("camp-banner").value = lastCampRec.banner;
+											document.getElementById("camp-itemName").value = lastCampRec.item.Name;
+											if(lastCampRec.item.Type == "file")
+												document.getElementById("camp-itemStat").innerText = (lastCampRec.item.Missing ? "Missing" : "File Good");
+											else
+												document.getElementById("camp-itemStat").innerText = "N/A";
+											document.getElementById("camp-itemID").innerText = lastCampRec.aritem;
+											document.getElementById("camp-itemScript").value = lastCampRec.item.Script; 
+											document.getElementById("camp-itemType").value = ((lastCampRec.item.Type == "file") ? "Audio" : "Script");
+											campItemTypeChange(); // update options visibility
+											document.getElementById("camp-itemDur").innerText = timeFormat(lastCampRec.item.Duration);
+											return;
+										}
+									}
+								}
+							}else{
+								// aritem has been deleted
+								lastCampRec.item = false;	// save will check this to know it needs to generate a new item
+								document.getElementById("camp-client").innerText = lastCampRec.customer.name;
+								document.getElementById("camp-clientid").innerText = lastCampRec.client;
+								document.getElementById("camp-desc").value = lastCampRec.description;
+								document.getElementById("camp-banner").value = lastCampRec.banner;
+								document.getElementById("camp-itemName").value = "";
+								document.getElementById("camp-itemStat").innerText = "Item was deleted";
+								document.getElementById("camp-itemID").innerText = "";
+								document.getElementById("camp-itemScript").value = ""; 
+								document.getElementById("camp-itemType").value = ((lastCampRec.item.Type == "file") ? "Audio" : "Script");
+								campItemTypeChange(); // update options visibility
+								document.getElementById("camp-itemDur").innerText = timeFormat(0.0);
+								return;
+							}
+						}
+					}
+				}
+			}
+		}
+		// handle failure
+		if(resp)
+			alert("Got an error fetching data from server.\n"+resp);
+		else
+			alert("Failed to fetch data from the server.");  
+		campRecClose();
+	}else{
+		// load empty/new record properties
+		el.innerText = "";
+		lastCampRec = false;
+		document.getElementById("camp-client").innerText = lastCustName.getValue();
+		document.getElementById("camp-clientid").innerText = selCustID;
+		document.getElementById("camp-desc").value = "";
+		document.getElementById("camp-banner").value = "";
+		document.getElementById("camp-itemName").value = "";
+		document.getElementById("camp-itemStat").innerText = "N/A";
+		document.getElementById("camp-itemID").innerText = "";
+		document.getElementById("camp-itemScript").value = ""; 
+		document.getElementById("camp-itemType").value = "Audio";
+		campItemTypeChange(); // update options visibility
+		document.getElementById("camp-itemDur").innerText = timeFormat(0);
+	}
+}
+
+function campSetFileItemDefaults(param){
+	// set Artist and Album if ids are > 0
+	let el = document.getElementById("campItemArtBtn");
+	let thisID = el.getAttribute("data-id");
+	if(thisID)
+		param.Artist = thisID;
+	el = document.getElementById("campItemAlbBtn");
+	thisID = el.getAttribute("data-id");
+	if(thisID)
+		param.Album = thisID;
+}
+
+async function campSaveRecord(evt){
+	evt.preventDefault();
+	let name = document.getElementById("camp-itemName").value;
+	if(!name.length){
+		alert("Campaign Name is a required field.");
+		return;
+	}
+	
+	let type = document.getElementById("camp-itemType").value;
+	let tocID = 0;
+	if(lastCampRec && lastCampRec.item){
+		tocID = lastCampRec.item.id;
+	}
+	// arItem properties
+	if(!tocID){
+		// create a new aritem: Type, Name, Script AND Set category
+		let script = document.getElementById("camp-itemScript").value;
+		let dur = 0.0;
+		let type = "file";
+		if(type != "Audio"){
+			 // include durration for non-audio
+			dur = timeParse(document.getElementById("camp-itemDur").value);
+			type = "item";
+		}
+	
+		let api = "library/set/toc";
+		let resp = await fetchContent(api, {
+				method: 'POST',
+				body: JSON.stringify({Type: type, Name: name, Script: script, Duration: dur}),
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp){
+			if(resp.ok){
+				let repData = await resp.json();
+				if(repData.insertId){
+					tocID = repData.insertId;
+				}else{
+					alert("Failed to get new arItem ID back from server.\n");
+					return;
+				}
+			}else{
+				alert("Got an error saving data to server.\n"+resp.statusText);
+				return;
+			}
+		}else{
+			alert("Failed to save data to the server.");
+			return;
+		}
+		// add to custom properties
+		let list = JSON.parse(localStorage.getItem("trafficDefCampCustom"));
+		if(list && list.length){
+			api = "library/set/meta";
+			for(let i=0; i<list.length; i++){
+				let data = {Parent: "toc", Property: list[i].Property, Value: list[i].Value, ID: tocID};
+				let resp = await fetchContent(api, {
+					method: 'POST',
+					body: JSON.stringify(data),
+					headers: {
+						"Content-Type": "application/json",
+						"Accept": "application/json"
+					}
+				});
+				if(resp){
+					if(!resp.ok){
+						alert("Got an error saving custom properties to server.\n"+resp.statusText);
+						return;
+					}
+				}else{
+					alert("Failed to save custom properties to the server.");
+					return;
+				}
+			}
+		}
+		let el = document.getElementById("campItemCatBtn");
+		let catID = el.getAttribute("data-id");
+		if(catID){
+			// add to category
+			api = "library/set/category_item";
+			let resp = await fetchContent(api, {
+				method: 'POST',
+				body: JSON.stringify({Item: tocID, Category: catID}),
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+			if(resp){
+				if(!resp.ok){
+					alert("Got an error setting item category to server.\n"+resp.statusText);
+					return;
+				}
+			}else{
+				alert("Failed to set item category to the server.");
+				return;
+			}
+		}
+		if(type == "Audio"){
+			let params = {};
+			campSetFileItemDefaults(params);
+			if(params.length){
+				api = "library/set/file/"+tocID;
+				let resp = await fetchContent(api, {
+					method: 'POST',
+					body: JSON.stringify(params),
+					headers: {
+						"Content-Type": "application/json",
+						"Accept": "application/json"
+					}
+				});
+				if(resp){
+					if(!resp.ok){
+						alert("Got an error setting item artist/album to server.\n"+resp.statusText);
+						return;
+					}
+				}else{
+					alert("Failed to set item artist/album to the server.");
+					return;
+				}
+			}
+		}
+	}
+	if(!selCampID){
+		// create campaign record
+		let api = "library/set/campaign";
+		let resp = await fetchContent(api, {
+				method: 'POST',
+				body: JSON.stringify({client: selCustID, 
+					banner: document.getElementById("camp-banner").value, 
+					description: document.getElementById("camp-desc").value, 
+					aritem: tocID}),
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp){
+			if(resp.ok){
+				let repData = await resp.json();
+				if(repData.insertId){
+					selCampID = repData.insertId;
+				}else{
+					alert("Failed to get new campaign ID back from server.\n");
+					return;
+				}
+			}else{
+				alert("Got an error saving data to server.\n"+resp.statusText);
+				return;
+			}
+		}else{
+			alert("Failed to save data to the server.");
+			return;
+		}
+		alert("Created new campaign.");
+		campLoadRecord();
+	}else{
+		let campParams = {};
+		// check if tocID != current aritem
+		if(!lastCampRec.item  || (lastCampRec.item.id != tocID)){
+			// Name, Script, etc will have already been updated/created above
+			campParams.aritem = tocID;
+		}else{
+			let itemParams = {};
+			if((lastCampRec.item.Type == "file") && (type != "Audio")){
+				// change from audio file to script only
+				itemParams.Type = "item";
+				itemParams.Duration = timeParse(document.getElementById("camp-itemDur").value);
+				// delete file
+				let api = "library/delete/file/"+tocID;
+				let resp = await fetchContent(api, {
+					method: 'GET',
+					headers: {
+						"Content-Type": "application/json",
+						"Accept": "application/json"
+					}
+				});
+				if(resp){
+					if(!resp.ok){
+						alert("Got an error deleting file record from server.\n"+resp.statusText);
+						return;
+					}
+				}else{
+					alert("Failed to delete file record from the server.");
+					return;
+				}
+			}
+			if((lastCampRec.item.Type == "item") && (type == "Audio")){
+				// change from script to audio file
+				itemParams.Type = "file";
+				itemParams.Duration = 0.0;
+				// create empty file record, with default properties
+				let params = {ID: tocID, Missing: 1};
+				campSetFileItemDefaults(params);
+				api = "library/set/file/";
+				let resp = await fetchContent(api, {
+					method: 'POST',
+					body: JSON.stringify(params),
+					headers: {
+						"Content-Type": "application/json",
+						"Accept": "application/json"
+					}
+				});
+				if(resp){
+					if(!resp.ok){
+						alert("Got an error creating file record from server.\n"+resp.statusText);
+						return;
+					}
+				}else{
+					alert("Failed to create file record on the server.");
+					return;
+				}
+			}
+			// Check for update to Name, Duration, and Script
+			let el = document.getElementById("camp-itemName");
+			if(el.value != lastCampRec.item.Name)
+				itemParams.Name = el.value;
+			el = document.getElementById("camp-itemScript");
+			if(el.value != lastCampRec.item.Script)
+				itemParams.Script = el.value;
+			if(type != "Audio"){
+				el = document.getElementById("camp-itemDur");
+				let durSec = timeParse(el.value);
+				if(durSec != lastCampRec.item.Duration)
+					itemParams.Duration = durSec;
+			}
+			if(Object.keys(itemParams).length){
+				api = "library/set/toc/"+tocID;
+				let resp = await fetchContent(api, {
+					method: 'POST',
+					body: JSON.stringify(itemParams),
+					headers: {
+						"Content-Type": "application/json",
+						"Accept": "application/json"
+					}
+				});
+				if(resp){
+					if(!resp.ok){
+						alert("Got an error updating item record from server.\n"+resp.statusText);
+						return;
+					}
+				}else{
+					alert("Failed to update item record on the server.");
+					return;
+				}
+			}
+		}
+		// check for update to campaign Description and Banner
+		let el = document.getElementById("camp-desc");
+		if(el.value != lastCampRec.description)
+			campParams.description = el.value;
+		el = document.getElementById("camp-banner");
+		if(el.value != lastCampRec.banner)
+			campParams.banner = el.value;
+		if(Object.keys(campParams).length){
+			api = "library/set/campaign/"+selCampID;
+			let resp = await fetchContent(api, {
+				method: 'POST',
+				body: JSON.stringify(campParams),
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+			if(resp){
+				if(!resp.ok){
+					alert("Got an error updating campaign record from server.\n"+resp.statusText);
+					return;
+				}
+			}else{
+				alert("Failed to update campaign record on the server.");
+				return;
+			}
+		}
+		alert("Updated campaign.");
+		campLoadRecord();
+	}
+}
+
+/***** Ad manager - Order/Invoice functions *****/
+
+var lastInvRec;
+var lastOrdersRec;
+var lastInvNum = new watchableValue(false);
+var invSort;
+var invOrderCampList;
+
+function invListRefresh(evt){
+	let dtype = document.querySelector('input[name="invDateType"]:checked').value
+	let el = document.getElementById("invDateYear");
+	let lck = document.getElementById("invIgnoreLoc");
+	let cck = document.getElementById("invIgnoreCamp");
+	if(dtype == "Ignore"){
+		el.disabled = true;
+		lck.disabled = true;
+		cck.disabled = true;
+	}else{
+		el.disabled = false;
+		lck.disabled = false;
+		cck.disabled = false;
+	}
+	let year = parseInt(el.value);
+	let month = 0;
+	el = document.getElementById("invDateMon");
+	if(dtype == "Ignore"){
+		el.disabled = true;
+	}else{
+		if(year > 1900){
+			el.disabled = false;
+			month = parseInt(el.value);
+		}else
+			el.disabled = true;
+	}
+	el = document.getElementById("invNumMatch");
+	let match = el.value;
+	el = document.getElementById("invListDiv");
+	genPopulateTableFromArray(false, el);
+	
+	let post = {type:"invoice", datetype:dtype, dyear:year, dmon:month};
+	if(locationID && (document.getElementById("invIgnoreLoc").checked == false))
+		post.locID = locationID;
+	if(selCustID && (document.getElementById("invIgnoreCust").checked == false))
+		post.custID = selCustID;
+	if(selCampID && (document.getElementById("invIgnoreCamp").checked == false))
+		post.campID = selCampID;
+	if(match && match.length)
+		post.match = "%"+match+"%";
+	post.sortBy = invSort;
+
+	el.innerHTML = "<div class='center'><i class='fa fa-circle-o-notch fa-spin' style='font-size:48px'></i></div>";
+	
+	fetchContent("library/browse", {
+		method: 'POST',
+		body: JSON.stringify(post),
+		headers: {
+			"Content-Type": "application/json",
+			"Accept": "application/json"
+		}
+	}).then((resp) => {
+		if(resp instanceof Response){
+			if(resp.ok){
+				resp.json().then((data) => {
+					genPopulateTableFromArray(data, el, false, invRowClick, invHeaderClick, invSort, false, false, false, {lastOrder:"100px"}, true, false);
+				});
+				return;
+			}
+		}
+		// handle failure
+		genPopulateTableFromArray(false, el);
+		if(resp)
+			alert("Got an error fetching data from server.\n"+resp);
+		else
+			alert("Failed to fetch data from the server.");  
+	});
+}
+
+function invHeaderClick(event){	// this is only the headers cells, for sorting
+	if(event.target.textContent.length){
+		if(invSort === event.target.textContent)
+			invSort = "-"+event.target.textContent; // toggle: make decending
+		else
+			invSort = event.target.textContent;
+		invListRefresh();
+	}
+}
+
+function invRowClick(evt){
+	let el = event.currentTarget.firstChild.firstChild;
+	lastInvNum.setValue(parseInt(el.nodeValue));
+	invLoadRecord();
+}
+
+function invLocValChange(){
+	let el = document.getElementById("invLocName");
+	let val = locName.getValue();
+	if(val && val.length){
+		el.innerText = val;
+		el = document.getElementById("newOrderLoc");
+		if(el.value != val){
+			el.value = val;
+			refreshInvDaypartList()
+		}
+	}
+	if(document.getElementById("trafdiv"))
+		invListRefresh();
+}
+
+function invCampValChange(){
+	let el = document.getElementById("invCampName");
+	let val = lastCampName.getValue();
+	if(val && val.length)
+		el.innerText = val;
+	if(document.getElementById("trafdiv"))
+		invListRefresh();
+	if(lastInvRec && (lastCampRec.client == lastInvRec.customer)){
+		el = document.getElementById("newOrderCampBtn");
+		el.setAttribute("data-id", selCampID);
+		el.innerText = val;
+	}
+}
+
+function invCustValChange(){
+	let el = document.getElementById("invCustName");
+	let val = lastCustName.getValue();
+	if(val && val.length)
+		el.innerText = val;
+	if(document.getElementById("trafdiv"))
+		invListRefresh();
+	el = document.getElementById("invNewbtn");
+	if(val && val.length)
+		el.disabled = false;
+	else
+		el.disabled = true;
+}
+
+function refreshInvCampList(evt){
+	let clientID = parseInt(document.getElementById("invClientID").innerText);
+	fetchContent("library/browse", {
+		method: 'POST',
+		body: JSON.stringify({type:"camp", custID:clientID, sortBy:"Name"}),
+		headers: {
+			"Content-Type": "application/json",
+			"Accept": "application/json"
+		}
+	}).then((resp) => {
+		if(resp instanceof Response){
+			if(resp.ok){
+				resp.json().then((data) => {
+					let div = document.getElementById("invOrderCampList");
+					if(div){
+						//convert ItemID -> id:  we want the id in the list to be aritemIDs not the campaign record IDs.
+						for(let i=0; i<data.length; i++)
+							data[i].id = data[i].ItemID;
+						buildSearchList(div, data, invOrderCampSel);
+						let el = document.getElementById("invOrderCampFilterText");
+						filterSearchList({target: el});
+					}
+				});
+				return;
+			}
+		}
+		// handle failure
+		if(resp)
+			alert("Got an error fetching data from server.\n"+resp);
+		else
+			alert("Failed to fetch data from the server.");  
+	});
+}
+
+function invOrderCampSel(evt){
+	// close search-list menu
+	let el = document.getElementById("newOrderCampBtn");
+	toggleShowSearchList({target: el});
+	// set button text to selection
+	el.setAttribute("data-id", evt.target.getAttribute("data-id"));
+	el.innerText = evt.target.innerText;
+}
+
+function refreshInvDaypartList(evt){
+	let el = document.getElementById("newOrderLoc");
+	let locID = el.selectedOptions[0].getAttribute("data-id");
+	fetchContent("library/get/daypart", {
+		method: 'POST',
+		body: JSON.stringify({Location: locID, sortBy:"Name"}),
+		headers: {
+			"Content-Type": "application/json",
+			"Accept": "application/json"
+		}
+	}).then((resp) => {
+		if(resp instanceof Response){
+			if(resp.ok){
+				resp.json().then((data) => {
+					let div = document.getElementById("invOrderDaypartList");
+					if(div){
+						buildSearchList(div, data, invOrderDaypartSel);
+						let el = document.getElementById("invOrderDaypartFilterText");
+						filterSearchList({target: el});
+					}
+				});
+				return;
+			}
+		}
+		// handle failure
+		if(resp)
+			alert("Got an error fetching data from server.\n"+resp);
+		else
+			alert("Failed to fetch data from the server.");  
+	});
+}
+
+function invOrderDaypartSel(evt){
+	// close search-list menu
+	let el = document.getElementById("newOrderDaypartBtn");
+	toggleShowSearchList({target: el});
+	// set button text to selection and save catid
+	el.setAttribute("data-id", evt.target.getAttribute("data-id"));
+	el.innerText = evt.target.innerText;
+}
+
+function invCreateNew(){
+	lastInvNum.setValue(0);
+	invLoadRecord();
+}
+
+function invOrderNew(){
+	let row = document.getElementById("newOrderRow");
+	row.hidden = false;
+}
+
+function invOrderNewClose(){
+	let row = document.getElementById("newOrderRow");
+	row.hidden = true;
+}
+
+function invRecClose(evt){
+	lastInvNum.setValue(0);
+	let el = document.getElementById("invSearchBox");
+	el.style.display = "block";
+		el = document.getElementById("invInfoBox");
+	el.style.display = "none";
+}
+
+function invShowHidChldn(evt){
+	let target = evt.target;
+	let row = target.parentNode.parentNode.parentNode;
+	if(target.tagName != "BUTTON")
+		target = target.parentNode;
+	let idx = target.getAttribute("data-idx");
+	let rec = lastOrdersRec[idx];
+	if(!rec.showChldn)
+		rec.showChldn = true;
+	else
+		rec.showChldn = false;
+	invRedisplayRecord(document.getElementById("invOrdersDiv"));
+}
+
+function invExpandTree(colValue, rec, i){
+	if(!colValue.length)
+		return "";
+	else{
+		if(rec.showChldn){
+			let div = document.createElement('div');
+			let actions = false;
+			let haction = false;
+			if(lastInvRec.posted == '0000-00-00'){
+				if((rec.Type == "order") && rec.DaypartID && rec.Start && rec.Days)
+					haction = `<button class="editbutton" onclick="invAddDupOrder(event)">+</button>`;
+				if(rec.Type != "bulk")
+					actions = `<button class="editbutton" onclick="invRemoveOrder(event)">-</button>`;
+			}
+			let colWidth = {Status:"75px", OrderDate:"75px", Slot:"120px", Fulfilled:"75px", Amount:"70px", action:"18px"};
+			let fields = {Amount:financialFormat};
+			let headings = {Status:"Status", OrderDate:"Date", Slot:"Slot", Fulfilled:"Fulfilled", Comment:"Comment", Amount:"Amount", Location: false, Type:false, Item:false, ID:false, Daypart:false, DaypartID:false, ItemID:false, Start: false, Days:false};
+			genPopulateTableFromArray(colValue, div, headings, false, false, false, actions, haction, fields, colWidth, false, false);
+			return {div:div, thisCell:"<button class='editbutton' onclick='invShowHidChldn(event)' data-idx='"+i+"'><i class='fa fa-caret-up'></i></button> "+colValue.length};
+		}else
+			return "<button class='editbutton' onclick='invShowHidChldn(event)' data-idx='"+i+"'><i class='fa fa-caret-down'></i></button> "+colValue.length;
+	}
+}
+
+function invNewOrderTypeChange(evt){
+	let type = evt.target.value;
+	if(type == "bulk"){
+		document.getElementById("newOrderQty").hidden = true;
+		document.getElementById("newOrderLoc").hidden = false;
+		document.getElementById("newOrderCampBtn").hidden = false;
+		document.getElementById("newOrderDesc").hidden = true;
+		document.getElementById("newOrderDaypartBtn").hidden = true;
+		document.getElementById("newOrderStart").hidden = false;
+		document.getElementById("newOrderDays").hidden = false;
+		document.getElementById("newOrderPrice").hidden = false;
+		document.getElementById("newOrderPrUnit").hidden = true;
+	}else if(type == "order-dp"){
+		document.getElementById("newOrderQty").hidden = false;
+		document.getElementById("newOrderDaypartBtn").hidden = false;
+		document.getElementById("newOrderStart").hidden = false;
+		document.getElementById("newOrderDays").hidden = false;
+		document.getElementById("newOrderPrUnit").hidden = false;
+		document.getElementById("newOrderLoc").hidden = false;
+		document.getElementById("newOrderCampBtn").hidden = false;
+		document.getElementById("newOrderDesc").hidden = true;
+		document.getElementById("newOrderPrice").hidden = false;
+	}else if(type == "order-fixed"){
+		document.getElementById("newOrderQty").hidden = true;
+		document.getElementById("newOrderDaypartBtn").hidden = true;
+		document.getElementById("newOrderStart").hidden = true;
+		document.getElementById("newOrderDays").hidden = true;
+		document.getElementById("newOrderPrUnit").hidden = true;
+		document.getElementById("newOrderLoc").hidden = false;
+		document.getElementById("newOrderCampBtn").hidden = false;
+		document.getElementById("newOrderDesc").hidden = true;
+		document.getElementById("newOrderPrice").hidden = false;
+	}else if(type == "item"){
+		document.getElementById("newOrderQty").hidden = true;
+		document.getElementById("newOrderLoc").hidden = true;
+		document.getElementById("newOrderCampBtn").hidden = true;
+		document.getElementById("newOrderDesc").hidden = false;
+		document.getElementById("newOrderDaypartBtn").hidden = true;
+		document.getElementById("newOrderStart").hidden = true;
+		document.getElementById("newOrderDays").hidden = true;
+		document.getElementById("newOrderPrice").hidden = false;
+		document.getElementById("newOrderPrUnit").hidden = true;
+	}else if(type == "credit"){
+		document.getElementById("newOrderQty").hidden = true;
+		document.getElementById("newOrderLoc").hidden = true;
+		document.getElementById("newOrderCampBtn").hidden = true;
+		document.getElementById("newOrderDesc").hidden = false;
+		document.getElementById("newOrderDaypartBtn").hidden = true;
+		document.getElementById("newOrderStart").hidden = true;
+		document.getElementById("newOrderDays").hidden = true;
+		document.getElementById("newOrderPrice").hidden = false;
+		document.getElementById("newOrderPrUnit").hidden = true;
+	}
+	invOrderDateChange(); // check to see if the slot list needs updating too.
+
+}
+
+function invOrderDateChange(){
+	if(document.getElementById("newOrdertType").value == "order-fixed"){
+		// using the specified date, populate the open slots menu
+		let locid = document.getElementById("newOrderLoc").selectedOptions[0].getAttribute("data-id");
+		let date = document.getElementById("newOrderStart").value;
+		//!! need to do this!
+	}
+}
+
+async function invAddOrder(evt){
+	let type = document.getElementById("newOrdertType").value;
+	let invid = lastInvNum.getValue();
+	if(type == "bulk"){
+		let locid = document.getElementById("newOrderLoc").selectedOptions[0].getAttribute("data-id");
+		let itemid = document.getElementById("newOrderCampBtn").getAttribute("data-id");
+		let start = document.getElementById("newOrderStart").value;
+		let days = document.getElementById("newOrderDays").value;
+		let amount = document.getElementById("newOrderPrice").value;
+		// create order entry
+		let api = "library/set/orders";
+		let resp = await fetchContent(api, {
+				method: 'POST',
+				body: JSON.stringify({invoice: invid, 
+					itemID: itemid, // needs to be an item, not campaign
+					amount: amount, 
+					location: locid,
+					type: "bulk",
+					dp_start: start,
+					dp_range: days
+				 }),
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp){
+			if(resp.ok){
+				let repData = await resp.json();
+				if(!repData.insertId){
+					alert("Failed to get new order ID back from server.\n");
+					return;
+				}
+			}else{
+				alert("Got an error saving order data to server.\n"+resp.statusText);
+				return;
+			}
+		}else{
+			alert("Failed to save order data to the server.");
+			return;
+		}
+		alert("Created new bulk order.");
+		invLoadRecord();
+	}else if(type == "order-fixed"){
+		
+	}else if(type == "order-dp"){
+		let qty = document.getElementById("newOrderQty").value;
+		let locid = document.getElementById("newOrderLoc").selectedOptions[0].getAttribute("data-id");
+		let campid = document.getElementById("newOrderCampBtn").getAttribute("data-id");
+		let dpid = document.getElementById("newOrderDaypartBtn").getAttribute("data-id");
+		let start = document.getElementById("newOrderStart").value;
+		let days = document.getElementById("newOrderDays").value;
+		let amount = document.getElementById("newOrderPrice").value;
+	}else if(type == "item"){
+		let desc = document.getElementById("newOrderDesc").value;
+		let amount = document.getElementById("newOrderPrice").value;
+	}else if(type == "credit"){
+		let desc = document.getElementById("newOrderDesc").value;
+		let amount = document.getElementById("newOrderPrice").value;
+	}
+}
+
+function invAddDupOrder(evt){
+	
+}
+
+function invRemoveOrder(evt){
+	
+}
+
+function invBumpOrder(evt){
+	
+}
+
+function invRedisplayRecord(el){
+	let haction = false;
+	if(lastInvRec.posted == '0000-00-00')
+		haction = `<button class="editbutton" onclick="invOrderNew(event)">+</button>`;
+	let colWidth = {action:"18px", children:"50px", Type:"70px", Days:"43px", Amount:"70px", Daypart:"125px", Start:"104px", Location:"100px"};
+	let fields = {Amount:financialFormat, children:invExpandTree};
+	let headings = {children:"Qty", Type: "Type", Location:"Location", Item:"Campaign", Daypart:"Daypart", Start:"Start", Days:"Days", Amount:"Amount", showChldn:false, ID:false, DaypartID:false, ItemID:false};
+	// unhook "newOrderRow" to "docWrapper"
+	let nor = document.getElementById("newOrderRow");
+	nor.hidden = true;
+	document.getElementById("holdingTable").appendChild(nor);
+	genPopulateTableFromArray(lastOrdersRec, el, headings, false, false, false, false, haction, fields, colWidth, false, false);
+	// move "newOrderRow" hidden to first table row.
+	let tbl = el.firstChild;
+	let tbody = tbl.firstChild;
+	let header = tbody.firstChild;
+	header.after(nor);
+}
+
+async function invLoadRecord(){
+	let invID = lastInvNum.getValue();
+	let el = document.getElementById("invSearchBox");
+	el.style.display = "none";
+	el = document.getElementById("invInfoBox");
+	el.style.display = "block";
+	el = document.getElementById("invOrdersDiv");
+	// unhook "newOrderDiv" to "docWrapper"
+	let nor = document.getElementById("newOrderRow");
+	nor.hidden = true;
+	document.getElementById("holdingTable").appendChild(nor);
+	if(invID){
+		// load invoice record
+		let resp = await fetchContent("library/get/invoices/"+invID, {
+				method: 'GET',
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		let data = false;
+		if(resp instanceof Response){
+			if(resp && resp.ok)
+				data = await resp.json();
+			if(!data || !data.length){
+				// handle failure
+				if(resp)
+					alert("Got an error fetching data from server.\n"+resp);
+				else
+					alert("Failed to fetch data from the server.");  
+				invRecClose();
+				return
+			}
+			lastInvRec = data[0];
+			resp = await fetchContent("library/get/client/"+lastInvRec.customer, {
+					method: 'GET',
+					headers: {
+						"Content-Type": "application/json",
+						"Accept": "application/json"
+					}
+				});
+			if(resp instanceof Response){
+				if(resp.ok){
+					let data = await resp.json();
+					if(data && data.length){
+						data = data[0]; // should be only one record
+						lastInvRec.customerName = data.name;
+						lastInvRec.repCust = data.salesrep;
+					}
+				}
+			}
+			// populate record fields
+			if(lastInvRec.posted == '0000-00-00'){
+				document.getElementById("invPosted").innerText = "Not Yet Posted";
+				document.getElementById("invUpdateBtn").disabled = false;
+				document.getElementById("invDesc").readOnly = false;
+				document.getElementById("invTerms").readOnly = false;
+				document.getElementById("invRep").readOnly = false;
+			}else{
+				document.getElementById("invPosted").innerText = lastInvRec.posted;
+				document.getElementById("invUpdateBtn").disabled = true;
+				document.getElementById("invDesc").readOnly = true;
+				document.getElementById("invTerms").readOnly = true;
+				document.getElementById("invRep").readOnly = true;
+			}
+			document.getElementById("invClient").innerText = lastInvRec.customerName;
+			document.getElementById("invClientID").innerText = lastInvRec.customer;
+			refreshInvCampList();
+			document.getElementById("invDesc").value = lastInvRec.comment;
+			document.getElementById("invTerms").value = lastInvRec.terms;
+			document.getElementById("invRep").value = lastInvRec.salesrep;
+			document.getElementById("invCustRep").innerText = "Customer's Rep: "+lastInvRec.repCust;
+			
+		}
+		
+		// load existing associated orders
+		document.getElementById("invID").innerText = invID;
+		el.innerHTML = "<div class='center'><i class='fa fa-circle-o-notch fa-spin' style='font-size:48px'></i></div>";
+		resp = await fetchContent("library/getorders/"+invID, {
+				method: 'GET',
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp instanceof Response){
+			if(resp.ok){
+				lastOrdersRec = await resp.json();
+				invRedisplayRecord(el);
+				return;
+			}
+		}
+		// handle failure
+		genPopulateTableFromArray(false, el);
+		if(resp)
+			alert("Got an error fetching data from server.\n"+resp);
+		else
+			alert("Failed to fetch data from the server.");  
+		invRecClose();
+	}else{
+		// load empty/new record properties
+		lastInvRec = false;
+		lastOrdersRec = false;
+		document.getElementById("invID").innerText = "";
+		document.getElementById("invPosted").innerText = "Not Yet Posted";
+		document.getElementById("invUpdateBtn").disabled = false;
+		document.getElementById("invDesc").readOnly = false;
+		document.getElementById("invTerms").readOnly = false;
+		document.getElementById("invRep").readOnly = false;
+		document.getElementById("invDesc").value = "";
+		document.getElementById("invTerms").value = 15;
+		document.getElementById("invRep").value = "";
+		
+		document.getElementById("invClient").innerText = lastCustName.getValue();
+		document.getElementById("invClientID").innerText = selCustID;
+		document.getElementById("invCustRep").innerText = "Customer's Rep: "+lastCustRec.salesrep;
+	}
+}
+
+async function invSaveRecord(evt){
+	evt.preventDefault();
+	let invID = lastInvNum.getValue();
+	if(!invID){
+		// create invoice record
+		if(!selCustID){
+			alert("A customer must be selected to associate the invoice with.");
+			return;
+		}
+		let api = "library/set/invoices";
+		let resp = await fetchContent(api, {
+				method: 'POST',
+				body: JSON.stringify({customer: selCustID, 
+					comment: document.getElementById("invDesc").value, 
+					terms: document.getElementById("invTerms").value, 
+					salesrep: document.getElementById("invRep").value
+				 }),
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp){
+			if(resp.ok){
+				let repData = await resp.json();
+				if(repData.insertId){
+					lastInvNum.setValue(repData.insertId);;
+				}else{
+					alert("Failed to get new invoice ID back from server.\n");
+					return;
+				}
+			}else{
+				alert("Got an error saving invoice data to server.\n"+resp.statusText);
+				return;
+			}
+		}else{
+			alert("Failed to save invoice data to the server.");
+			return;
+		}
+		alert("Created new invoice.");
+		invLoadRecord();
+	}else{
+		// check for update to invoice properties
+		let invParams = {};
+		let el = document.getElementById("invDesc");
+		if(el.value != lastInvRec.comment)
+			invParams.comment = el.value;
+		el = document.getElementById("invRep");
+		if(el.value != lastInvRec.salesrep)
+			invParams.salesrep = el.value;
+		el = document.getElementById("invTerms");
+		if(el.value != lastInvRec.terms)
+			invParams.terms = el.value;
+		if(Object.keys(invParams).length){
+			api = "library/set/invoices/"+invID;
+			let resp = await fetchContent(api, {
+				method: 'POST',
+				body: JSON.stringify(invParams),
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+			if(resp){
+				if(!resp.ok){
+					alert("Got an error updating invoice record from server.\n"+resp.statusText);
+					return;
+				}
+			}else{
+				alert("Failed to update invoice record on the server.");
+				return;
+			}
+		}
+		alert("Updated invoice.");
+		invLoadRecord();
+	}
 }
 
 /**** startup and load functions *****/
@@ -12521,15 +14297,26 @@ window.onload = function(){
 	locName.registerCallback(refreshLogsLocationDep);
 	locName.registerCallback(refreshSchedLocationDep);
 	locName.registerCallback(refreshItemLocationDep);
+	locName.registerCallback(custLocValChange);
+	locName.registerCallback(campLocValChange);
+	locName.registerCallback(invLocValChange);
+	lastInvNum.registerCallback(custInvValChange);
+	lastInvNum.registerCallback(campInvValChange);
+	lastCustName.registerCallback(campCustValChange);
+	lastCustName.registerCallback(invCustValChange);
+	lastCampName.registerCallback(invCampValChange);
 	mediaListCache.registerCallback(mediaMenuRefresh);
 	mediaListCache.registerCallback(fileReplaceDestRefresh);
 	locListCache.registerCallback(locMenuRefresh);
 	locListCache.registerCallback(refreshAddItemRest);
 	catListCache.registerCallback(refreshAddItemCats);
+	catListCache.registerCallback(refreshCampCats);
 	catListCache.registerCallback(refreshFileImportCats);
 	catListCache.registerCallback(refreshTaskCats);
 	artListCache.registerCallback(refreshItemArtists);
+	artListCache.registerCallback(refreshCampArts);
 	albListCache.registerCallback(refreshItemAlbums);
+	albListCache.registerCallback(refreshCampAlbs);
 	catListCache.registerCallback(refreshItemReassign);
 	artListCache.registerCallback(refreshItemReassign);
 	albListCache.registerCallback(refreshItemReassign);

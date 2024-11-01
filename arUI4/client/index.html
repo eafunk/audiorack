@@ -9,7 +9,7 @@
 <body>
 	<script src="index.js"></script>
 	<div class="container">
-		<div class="wrapper">
+		<div class="wrapper" id="docWrapper">
 			<div id="custQueryDialog" class="modal">
 				<form id="custDiaForm">
 					<div id="custQueryDiv"></div>
@@ -23,6 +23,49 @@
 					<p>Info Panel</p>
 				</div>
 			</div>
+			<table id="holdingTable" hidden></tbody>
+				<tr></tr>
+				<tr id="newOrderRow" hidden>
+					<td><input id="newOrderQty" type="number" style="width: 4.5em" min="1" max="999" step="1" name="Qty"></td>
+					<td>
+						<select id="newOrdertType" name="type" onchange="invNewOrderTypeChange(event)">
+							<option value="order-dp" selected>Daypart</option>
+							<option value="order-fixed">Timeslot</option>
+							<option value="item">Item</option>
+							<option value="bulk">Bulk</option>
+							<option value="credit">Credit</option>
+						</select>
+					</td>
+					<td>
+						<select id="newOrderLoc" onchange="refreshInvDaypartList()">
+							<option value="" onclick="getLocList()">Reload List</option>
+						</select>
+					</td>
+					<td style="position: relative;">
+						<button id="newOrderCampBtn" class="editbutton" data-id="0" onclick="toggleShowSearchList(event)">[None]</button>
+						<div class="search-list">
+							<button class="editbutton" onclick="refreshInvCampList(event)">Refresh List</button><br>
+							<input id="invOrderCampFilterText" type="text" onkeyup="filterSearchList(event)" placeholder="Enter Search..."></input>
+							<div id="invOrderCampList"></div>
+						</div>
+						<input id="newOrderDesc" type="text" size="50" name="Description" value="Description" hidden/>
+					</td>
+					<td style="position: relative;">
+						<button id="newOrderDaypartBtn" class="editbutton" data-id="0" onclick="toggleShowSearchList(event)">[None]</button>
+						<div class="search-list">
+							<button class="editbutton" onclick="refreshInvDaypartList(event)">Refresh List</button><br>
+							<input id="invOrderDaypartFilterText" type="text" onkeyup="filterSearchList(event)" placeholder="Enter Search..."></input>
+							<div id="invOrderDaypartList"></div>
+						</div>
+					</td>
+					<td><input type="date" id="newOrderStart" name="Start" value="" onchange="invOrderDateChange()"></td>
+					<td><input id="newOrderDays" type="number" style="width: 4em" min="0" max="90" step="1" name="Days"/></td>
+					<td><input id="newOrderPrice" type="number" style="width: 6.8em" min="0.00" max="10000.00" step="0.01" name="Price"/>
+					<span id="newOrderPrUnit" hidden>Per Play</span>
+					</td>
+					<td><button class="editbutton" onclick="invAddOrder(event)">&check;</button><button class="editbutton" onclick="invOrderNewClose(event)">x</button></td>
+				</tr>
+			</table>
 			<div id="navtab" class="navtab">
 				<button id="navabout" class="tabitem" onclick="showTab(event, 'about')">About</button>
 			</div>
@@ -226,9 +269,17 @@
 			</div>
 			<div id="studio" class="tabcontent">
 				<button id="showscripttabobtn" class="editbutton" onclick="showScriptTab(event)">DJ Scripts<i class="fa fa-caret-up"></i></button>
-				<div class="Bpanel" id="scriptpane">
-					<button class="editbutton" style="position:absolute; right:60px; float:top;" onclick="closeScriptTab(event)">DJ Scripts<i class="fa fa-caret-down"></i></button>
-					<div id="scriptContent" class="scroll" style="text-align: left;">
+				<div class="Bpanel" id="scriptpane" style="display:none;">
+					<button class="editbutton" style="position:absolute; right:60px; top:1px;" onclick="closeScriptTab(event)">DJ Scripts<i class="fa fa-caret-down"></i></button>
+					<div id="scriptList" class="scroll" style="text-align: left; border: 1px solid #000; boader-width: 1px;">
+					</div>
+					<div class="container" style="flex:0 0 70%; flex-flow: column; padding: 12px;">
+						<div id="scriptName" style="padding: 5px;"></div>
+						<div id="scriptContent" class="scroll" style="text-align: left; border: 1px solid #000; boader-width: 1px;"></div>
+						<div>
+							Read By DJ: <input id="scriptReadDJ" style="margin: 0 auto;"type="text" size="20" name="DJName" value="" onchange="scriptReaderChange()">
+							<button id="scriptReadBtn" class="editbutton" style="width: 100px; margin: 0 auto;" onclick="readScriptAction(event)" disabled>Read/Log</button>
+						</div>
 					</div>
 				</div>
 				<div id="studiodiv" class="scroll">
@@ -321,7 +372,7 @@
 								<div class="accpanel">
 									<table>
 										<tr>
-											<td><button id="stDumpBtn" class="stDumpBtn" ontouchstart="stDumpAction();" onmousedown="stDumpAction(); disabled">DUMP</button></td>
+											<td><button id="stDumpBtn" class="stDumpBtn" ontouchstart="stDumpAction();" onmousedown="stDumpAction();" disabled>DUMP</button></td>
 											<td>Enabled delay (sec.): <input id="stDelaySec" type="number" min="4" max="10" value="7"></td>
 										</tr>
 									</table>
@@ -359,6 +410,7 @@
 
 						</div>
 					</div>
+					
 				</div>
 			</div>
 			<div id="configure" class="tabcontent">
@@ -381,46 +433,266 @@
 				</div>
 			</div>
 			<div id="cust" class="tabcontent">
-				<div class="boxed">
+				<div class="boxed" id="custSearchBox">
 					<legend>Ad Customer Search</legend>
 					<div class="boxed" style="display: flex; flex-direction:row; justify-content:center; align-items:center;">
-						<fieldset style="display: flex; flex-direction:row; justify-content:center; align-items:center;">
-							<ul id="custDateType" style="list-style-type:none; text-align: left; " onchange="custListRefresh(event)">
-							<legend>Order Date</legend>
-							<li><input type="radio" id="custDateActive" name="custDateType" value="Active" checked><label for="custDateActive">Active In year (YYYY)</label>
-							<li><input type="radio" id="custDatePosted" name="custDateType" value="Posted" ><label for="custDatePosted">Posted In year </label>
-							</ul>
-							<input type="text" id="custDateYear" value="" size="4" pattern="^\d{4}$" onchange="custListRefresh(event)">
-							<select id="custDateMon" onchange="custListRefresh(event)">
-								<option value='0'>Any</option>
-								<option selected value='01'>January</option>
-								<option value='2'>February</option>
-								<option value='3'>March</option>
-								<option value='4'>April</option>
-								<option value='5'>May</option>
-								<option value='6'>June</option>
-								<option value='7'>July</option>
-								<option value='8'>August</option>
-								<option value='9'>September</option>
-								<option value='10'>October</option>
-								<option value='11'>November</option>
-								<option value='12'>December</option>
-							</select>
+						<fieldset style="display: flex; flex-direction:column; justify-content:center;">
+							<legend>Properties</legend>
+							<div style="display: flex; flex-direction:row;">
+								<label for="custNameMatch">Name contains:</label>
+								<input type="text" id="custNameMatch" value="" size="30" onchange="custListRefresh(event)">
+							</div>
 						</fieldset>
-						<label for="custNameMatch">Name contains:</label><input type="text" id="custNameMatch" value="" size="30" onchange="custListRefresh(event)">
+						<fieldset style="display: flex; flex-direction:column; justify-content:center;">
+							<legend>Activity</legend>
+							<ul id="custDateType" style="list-style-type:none; text-align: left; padding-left: 0px;" onchange="custListRefresh(event)">
+							<li><input type="radio" id="custDateActive" name="custDateType" value="Active" checked><label for="custDateActive">Active In</label>
+							<li><input type="radio" id="custDatePosted" name="custDateType" value="Posted" ><label for="custDatePosted">Posted In</label>
+							<li><input type="radio" id="custDateIgnore" name="custDateType" value="Ignore" ><label for="custDateIgnore">Ignore</label>
+							</ul>
+							<div style="display: flex; flex-direction:row;">
+								Year <input type="text" id="custDateYear" value="" size="4" pattern="^\d{4}$" onchange="custListRefresh(event)">
+								Month <select id="custDateMon" onchange="custListRefresh(event)">
+									<option value='0'>Any</option>
+									<option selected value='01'>January</option>
+									<option value='2'>February</option>
+									<option value='3'>March</option>
+									<option value='4'>April</option>
+									<option value='5'>May</option>
+									<option value='6'>June</option>
+									<option value='7'>July</option>
+									<option value='8'>August</option>
+									<option value='9'>September</option>
+									<option value='10'>October</option>
+									<option value='11'>November</option>
+									<option value='12'>December</option>
+								</select>
+							</div>
+							<div style="border: none; display: flex; flex-direction:row;">
+								Location: <div id="custLocName">None</div><input type="checkbox" id="custIgnoreLoc" name="custIgnoreLoc" onchange="custListRefresh(event)"><label for="custIgnoreLoc">Ignore</label>
+							</div>
+							<div style="display: flex; flex-direction:row;">
+								Invoice: <div id="custInvNum">None</div><input type="checkbox" id="custIgnoreInv" name="custIgnoreInv" onchange="custListRefresh(event)">
+								<label for="custIgnoreInv">Ignore</label>
+							</div>
+						</fieldset>
 					</div>
-					<button id="custNewbtn" onclick="custCreateNew(event)">New Customer</button>
 					<div class="scroll" id="custListDiv" style="height: 200px;">
 					</div>
+					<button id="custNewbtn" class="editbutton" onclick="custCreateNew(event)">New Customer</button>
 				</div>
-				<div class="scroll" id="custRecordDiv">
+				
+				<div class="boxed" id="custInfoBox" style="display: none; justify: center;" >
+					<span style='float: right;'><button id="custClosebtn" class="editbutton" onclick="custRecClose()">Close</button></span>
+					<legend>Customer Record</legend>
+					<form id="custRecform"><table class="tablealtj" style="table-layout: fixed;">
+						<tr><td>Client Name:</td><td><input type="text" name="name" id="cust-name" value="" size="40"></td>
+							<td>ID:</td><td colspan="2"><div id="custID"></div></td></tr>
+						<tr><td colspan="5"><br></td></tr>
+						<tr><td>Address (Line 1):</td><td colspan="4"><input type="text" name="address1" id="cust-addr1" value="" size="40"></td></tr>
+						<tr><td>Address (Line 2):</td><td colspan="4"><input type="text" name="address2" id="cust-addr2" value="" size="40"></td></tr>
+						<tr><td>City:</td><td colspan="4"><input type="text" name="city" id="cust-city" value="" size="25"></td></tr>
+						<tr><td>State:</td><td><input type="text" name="state" id="cust-state" value="" size="15"></td>
+							<td>Postal Code:</td><td colspan="2"><input type="text" name="postcode" id="cust-pcode" value="" size="20"></td></tr>
+						<tr><td>Country:</td><td colspan="4"><input type="text" name="country" id="cust-country" value="" size="15"></td></tr>
+						<tr><td colspan="5"><br></td></tr>
+						<tr><td>Contact Person:</td><td colspan="4"><input type="text" name="contact" id="cust-contact" value="" size="25"></td></tr>
+						<tr><td>Phone Number:</td><td><input type="text" name="phone" id="cust-phone" value="" size="20"></td>
+							<td>Email:</td><td colspan="2"><input type="text" name="email" id="cust-email" value="" size="40"></td></tr>
+						<tr><td colspan="5"><br></td></tr>
+						<tr><td>Sales Rep:</td><td colspan="4"><input type="text" name="salesrep" id="cust-rep" value="" size="40"></td></tr>
+						<tr><td colspan="5"><center><button class="editbutton" onclick="custSaveRecord(event)">Update</button></center></td></tr>
+					</table></form>
 				</div>
 			</div>
+			
 			<div id="campaign" class="tabcontent">
-				<p>Radio is fun...</p>
+				<div class="boxed" id="campSearchBox">
+					<legend>Ad Campaign Search</legend>
+					<div class="boxed" style="display: flex; flex-direction:row; justify-content:center; align-items:center;">
+						<fieldset style="display: flex; flex-direction:column; justify-content:center;">
+							<legend>Properties</legend>
+							<div style="display: flex; flex-direction:row;">
+								<label for="campNameMatch">Name contains:</label>
+								<input type="text" id="campNameMatch" value="" size="30" onchange="campListRefresh(event)">
+							</div>
+							<div style="display: flex; flex-direction:row;">
+								Customer: <div id="campCustName">None</div><input type="checkbox" id="campIgnoreCust" name="campIgnoreCust" onchange="campListRefresh(event)">
+								<label for="campIgnoreCust">Ignore</label>
+							</div>
+						</fieldset>
+						<fieldset style="display: flex; flex-direction:column; justify-content:center;">
+							<legend>Activity</legend>
+							<ul id="campDateType" style="list-style-type:none; text-align: left; padding-left: 0px;" onchange="campListRefresh(event)">
+							<li><input type="radio" id="campDateActive" name="campDateType" value="Active" checked><label for="campDateActive">Active In</label>
+							<li><input type="radio" id="campDatePosted" name="campDateType" value="Posted" ><label for="campDatePosted">Posted In</label>
+							<li><input type="radio" id="campDateIgnore" name="campDateType" value="Ignore" ><label for="campDateIgnore">Ignore</label>
+							</ul>
+							<div style="display: flex; flex-direction:row;">
+								Year <input type="text" id="campDateYear" value="" size="4" pattern="^\d{4}$" onchange="campListRefresh(event)">
+								Month <select id="campDateMon" onchange="campListRefresh(event)">
+									<option value='0'>Any</option>
+									<option selected value='01'>January</option>
+									<option value='2'>February</option>
+									<option value='3'>March</option>
+									<option value='4'>April</option>
+									<option value='5'>May</option>
+									<option value='6'>June</option>
+									<option value='7'>July</option>
+									<option value='8'>August</option>
+									<option value='9'>September</option>
+									<option value='10'>October</option>
+									<option value='11'>November</option>
+									<option value='12'>December</option>
+								</select>
+							</div>
+							<div style="display: flex; flex-direction:row;">
+								Location: <div id="campLocName">None</div><input type="checkbox" id="campIgnoreLoc" name="campIgnoreLoc" onchange="campListRefresh(event)"><label for="campIgnoreLoc">Ignore</label>
+							</div>
+							<div style="display: flex; flex-direction:row;">
+								Invoice: <div id="campInvNum">None</div><input type="checkbox" id="campIgnoreInv" name="campIgnoreInv" onchange="campListRefresh(event)">
+								<label for="campIgnoreInv">Ignore</label>
+							</div>
+						</fieldset>
+					</div>
+					<div class="scroll" id="campListDiv" style="height: 200px;">
+					</div>
+					<button id="campNewbtn" class="editbutton" onclick="campCreateNew(event)" disabled>New Campaign</button>
+					<br>A customer must be selected to create a new campaign.
+				</div>
+				<div class="boxed" id="campInfoBox" style="display: none; justify: center;" >
+					<span style='float: right;'><button id="campClosebtn" class="editbutton" onclick="campRecClose()">Close</button></span>
+					<legend>Campaign Record</legend>
+					<table class="tablealtj" style="table-layout: fixed;">
+						<tr><td>ID:</td><td colspan="3"><div id="campID"></div></td></tr>
+						<tr><td>Associated Customer:</td><td><div id="camp-client"></div></td>
+							<td>ID:</td><td><div id="camp-clientid"></div></td></tr>
+						<tr><td colspan="4"><br></td></tr>
+						<tr><td>Description:</td><td colspan="3"><input type="text" name="description" id="camp-desc" value="" size="64"></td></tr>
+						<tr><td>Banner:</td><td colspan="3"><input type="text" name="banner" id="camp-banner" value="" size="64"></td></tr>
+					</table>
+					<fieldset>
+						<legend>Associated AudioRack Item</legend>
+						<span style='float: right;'><button class="editbutton" onclick="campItemInfo(event)">i</button></span>
+						<table class="tablealtj" style="table-layout: fixed;">
+							<tr><td>Name:</td><td><input type="text" name="name" id="camp-itemName" value="" size="40"></td>
+								<td>ID:</td><td><div id="camp-itemID"></div></td></tr>
+							<tr><td>Type:</td>
+								<td>
+									<select name="itemType" id="camp-itemType" onchange="campItemTypeChange(event)">
+										<option value="Audio" default>Audio File</option>
+										<option value="Script">Script Only</option>
+									</select>
+									<div id="camp-ItemRmFile" hidden><input type="checkbox" id="camp-ItemRmFileCk" name="rmFile">Remove existing audio file from media firectory.</div>
+								</td>
+								<td>Status:</td><td><div id="camp-itemStat"></div></td></tr>
+							<tr><td>Duration:</td><td colspan="3"><input id="camp-itemDur" type="text" size="10" name="Duration" value="" ></td></tr>
+							<tr><td colspan="4"><br></td></tr>
+							<tr id="campDefCat"><td>Include in category:</td><td colspan="2">
+								<button class="editbutton" onclick="clearCampCatSelect(event)">Clear</button>
+								<button id="campItemCatBtn" class="editbutton" data-id="0" onclick="toggleShowSearchList(event)">[None]</button>
+								<div class="search-list">
+									<button class="editbutton" onclick="refreshCampCats(event)">Refresh List</button><br>
+									<input id="campCatFilterText" type="text" onkeyup="filterSearchList(event)" placeholder="Enter Search..."></input>
+									<div id="campCatList"></div>
+								</div>
+							</td></tr>
+							<tr id="campDefCustom"><td>Include custom properties:</td><td colspan="2"><div id="campDefCustList"></div></td></tr>
+							<tr id="campDefArt"><td>Set artist:</td><td colspan="2">
+								<button class="editbutton" onclick="clearCampArtSelect(event)">Clear</button>
+								<button id="campItemArtBtn" class="editbutton" data-id="0" onclick="toggleShowSearchList(event)">[None]</button>
+								<div class="search-list">
+									<button class="editbutton" onclick="refreshCampArts(event)">Refresh List</button><br>
+									<input id="campArtFilterText" type="text" onkeyup="filterSearchList(event)" placeholder="Enter Search..."></input>
+									<div id="campArtList"></div>
+								</div>
+							</td></tr>
+							<tr id="campDefAlb"><td>Set albumn:</td><td colspan="2">
+								<button class="editbutton" onclick="clearCampAlbSelect(event)">Clear</button>
+								<button id="campItemAlbBtn" class="editbutton" data-id="0" onclick="toggleShowSearchList(event)">[None]</button>
+								<div class="search-list">
+									<button class="editbutton" onclick="refreshCampAlbs(event)">Refresh List</button><br>
+									<input id="campAlbFilterText" type="text" onkeyup="filterSearchList(event)" placeholder="Enter Search..."></input>
+									<div id="campAlbList"></div>
+								</div>
+							</td></tr>
+							<tr><td>Script:</td><td colspan="3"><textarea rows="6" cols=58' name="itemScript" id="camp-itemScript" value=""></textarea></td></tr>
+						</table>
+					</fieldset>
+					<button class="editbutton" onclick="campSaveRecord(event)">Update</button>
+				</div>
 			</div>
 			<div id="invoice" class="tabcontent">
-				<p>Radio is fun...</p>
+				<div class="boxed" id="invSearchBox">
+					<legend>Order/Invoice Search</legend>
+					<div class="boxed" style="display: flex; flex-direction:row; justify-content:center; align-items:center;">
+						<fieldset style="display: flex; flex-direction:column; justify-content:center;">
+							<legend>Properties</legend>
+							<div style="display: flex; flex-direction:row;">
+								<label for="invNumMatch">Invoice Number (ID) contains:</label>
+								<input type="text" id="invNumMatch" value="" size="12" onchange="invListRefresh(event)">
+							</div>
+							<div style="display: flex; flex-direction:row;">
+								Customer: <div id="invCustName">None</div><input type="checkbox" id="invIgnoreCust" name="invIgnoreCust" onchange="invListRefresh(event)">
+								<label for="invIgnoreCust">Ignore</label>
+							</div>
+						</fieldset>
+						<fieldset style="display: flex; flex-direction:column; justify-content:center;">
+							<legend>Activity</legend>
+							<ul id="invDateType" style="list-style-type:none; text-align: left; padding-left: 0px;" onchange="invListRefresh(event)">
+							<li><input type="radio" id="invDateActive" name="invDateType" value="Active" checked><label for="invDateActive">Active In</label>
+							<li><input type="radio" id="invDatePosted" name="invDateType" value="Posted" ><label for="invDatePosted">Posted In</label>
+							<li><input type="radio" id="invDateIgnore" name="invDateType" value="Ignore" ><label for="invDateIgnore">Ignore</label>
+							</ul>
+							<div style="display: flex; flex-direction:row;">
+								Year <input type="text" id="invDateYear" value="" size="4" pattern="^\d{4}$" onchange="invListRefresh(event)">
+								Month <select id="invDateMon" onchange="invListRefresh(event)">
+									<option value='0'>Any</option>
+									<option selected value='01'>January</option>
+									<option value='2'>February</option>
+									<option value='3'>March</option>
+									<option value='4'>April</option>
+									<option value='5'>May</option>
+									<option value='6'>June</option>
+									<option value='7'>July</option>
+									<option value='8'>August</option>
+									<option value='9'>September</option>
+									<option value='10'>October</option>
+									<option value='11'>November</option>
+									<option value='12'>December</option>
+								</select>
+							</div>
+							<div style="display: flex; flex-direction:row;">
+								Location: <div id="invLocName">None</div><input type="checkbox" id="invIgnoreLoc" name="invIgnoreLoc" onchange="invListRefresh(event)"><label for="invIgnoreLoc">Ignore</label>
+							</div>
+							<div style="display: flex; flex-direction:row;">
+								Campaign: <div id="invCampName">None</div><input type="checkbox" id="invIgnoreCamp" name="invIgnoreCamp" onchange="invListRefresh(event)">
+								<label for="cinvIgnoreCamp">Ignore</label>
+							</div>
+						</fieldset>
+					</div>
+					<div class="scroll" id="invListDiv" style="height: 200px;">
+					</div>
+					<button id="invNewbtn" class="editbutton" onclick="invCreateNew(event)" disabled>New Invoice</button>
+					<br>A customer must be selected to create a new order.
+				</div>
+				<div class="boxed" id="invInfoBox" style="display: none; height:100%; justify: center;" >
+					<span style='float: right;'><button id="invClosebtn" class="editbutton" onclick="invRecClose()">Close</button></span>
+					<legend>Invoice/Order Record</legend>
+					<table class="tablealtj" style="table-layout: fixed;">
+						<tr><td>Invoice Number:</td><td colspan="3"><div id="invID"></div></td></tr>
+						<tr><td>Associated Customer:</td><td><div id="invClient"></div></td>
+							<td>ID:</td><td><div id="invClientID"></div></td></tr>
+						<tr><td>Description:</td><td colspan="3"><input type="text" name="description" id="invDesc" value="" size="64"></td></tr>
+						<tr><td>Payment Terms:</td><td><input type="text" name="terms" id="invTerms" value="" size="3"> Days</td>
+							<td>Sales Rep.:</td><td><input type="text" name="rep" id="invRep" value="" size="25"><div id="invCustRep"></div></td></tr>
+						<tr><td>Posted:</td><td colspan="2"><div id="invPosted"></div></td>
+							<td><button id="invPostBtn" class="editbutton" onclick="invPost(event)" disabled>Post Invoice</button></div></td></tr>
+					</table>
+					<button class="editbutton" id="invUpdateBtn" onclick="invSaveRecord(event)">Update</button>
+					<div class="scroll" id="invOrdersDiv">
+					</div>
+				</div>
 			</div>
 			<div id="trafsched" class="tabcontent">
 				<p>Radio is fun...</p>

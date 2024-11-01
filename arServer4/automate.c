@@ -129,7 +129,7 @@ uint32_t AddItem(int pos, char *URLstr, char *adder, uint32_t adderUID){
 		return 0;
 	}
 	
-	if(instance = createQueueRecord(newID)){		
+	if(instance = createQueueRecord(newID)){
 		// insert or append item into queue list
 		pthread_rwlock_wrlock(&queueLock);
 		if(pos < 0){
@@ -666,13 +666,15 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 		if(!strcmp(type, "stop")){
 			// it's a playlist stop item... stop the playlist and delete it!
 			plRunning = 0;
-			releaseQueueRecord((queueRecord *)&queueList, instance, 0);
-			// send out notifications
-			notifyData	data;
-			data.reference = 0;
-			data.senderID = getSenderID();
-			data.value.iVal = 0;
-			notifyMakeEntry(nType_status, &data, sizeof(data));
+			if(releaseQueueRecord((queueRecord *)&queueList, instance, 0)){
+				plRev++;
+				// send out notifications
+				notifyData	data;
+				data.reference = 0;
+				data.senderID = getSenderID();
+				data.value.iVal = 0;
+				notifyMakeEntry(nType_status, &data, sizeof(data));
+			}
 			free(type);
 			return;
 		}
@@ -790,55 +792,58 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 	
 	NextListItem(status, instance, &nextp, sbtime, remtime, isPlaying);
 	
-	if(*firstp == -1)
-		*firstp = nextp;
-		
 //	if(!strcmp(type, "task")){
 //		// If this is a task, skip it... use the the next returned current player as the returned current player 
 //		*firstp = nextp;
 //	}
 	
-	// set seg times into next item, if next item is loaded
-	if(checkPnumber(nextp)){
-		nextIn = &mixEngine->ins[nextp];
-		if(checkPnumber(*firstp)){
-			thisIn = &mixEngine->ins[*firstp];
-			if(nextIn->status & status_standby){
-				if(!(nextIn->status & status_playing)){
-					if(plRunning){
-						priority = GetMetaInt(nextIn->UID, "Priority", NULL);
-						targetTime = GetMetaFloat(nextIn->UID, "TargetTime", NULL);
-						if(((targetTime < 0) && (priority > 9)) || (thisIn->segNext != (nextp+1))){
-								setSegTimes(thisIn, nextIn, nextp);
+	if(*firstp == -1){
+		if(strcmp(type, "stop"))
+			*firstp = nextp;
+	}else{
+		// set seg times into next item, if next item is loaded
+		if(checkPnumber(nextp)){
+			nextIn = &mixEngine->ins[nextp];
+			if(checkPnumber(*firstp)){
+				thisIn = &mixEngine->ins[*firstp];
+				if(nextIn->status & status_standby){
+					if(!(nextIn->status & status_playing)){
+						if(plRunning && strcmp(type, "stop")){
+							priority = GetMetaInt(nextIn->UID, "Priority", NULL);
+							targetTime = GetMetaFloat(nextIn->UID, "TargetTime", NULL);
+							if(((targetTime < 0) && (priority > 9)) || (thisIn->segNext != (nextp+1))){
+									setSegTimes(thisIn, nextIn, nextp);
+							}
+						}else{
+							if(thisIn->segNext){
+								// unhook any segue times that have been set if the list is not running
+								// or will not be running after a stop
+								thisIn->segNext = 0;
+							}
 						}
-					}else{
-						if(thisIn->segNext){
-							// unhook any segue times that have been set if the list is not running
-							thisIn->segNext = 0;
-						}
+					}
+				}
+			}else{
+				if(remtime < 30){
+					// next item is loaded, this one is not, less than 30 seconds until something needs to play! 
+					// Swap this one with the next one if this is not a stop and next is managed
+					if(strcmp(type, "stop") && nextIn->managed){
+						if(next = (queueRecord *)getNextNode((LinkedListEntry *)instance))
+							moveAfterNode((LinkedListEntry *)instance, (LinkedListEntry *)next, (LinkedListEntry *)&queueList);
 					}
 				}
 			}
 		}else{
-			if(remtime < 30){
-				// next item is loaded, this one is not, less than 30 seconds until something needs to play! 
-				// Swap this one with the next one if this is not a stop and next is managed
-				if(strcmp(type, "stop") && nextIn->managed){
-					if(next = (queueRecord *)getNextNode((LinkedListEntry *)instance))
-						moveAfterNode((LinkedListEntry *)instance, (LinkedListEntry *)next, (LinkedListEntry *)&queueList);
+			// Next item is not in a player.  Check if this item thinks 
+			// is in a player and set to seg.
+			if(checkPnumber(*firstp)){
+				thisIn = &mixEngine->ins[*firstp];
+				if(thisIn->segNext){
+					// unhook any segue times that have been set previously
+					// further clean up will occur if next next time this function
+					// is called though this point in the queue list
+					thisIn->segNext = 0;
 				}
-			}
-		}
-	}else{
-		// Next item is not in a player.  Check if this item thinks 
-		// is in a player and set to seg.
-		if(checkPnumber(*firstp)){
-			thisIn = &mixEngine->ins[*firstp];
-			if(thisIn->segNext){
-				// unhook any segue times that have been set previously
-				// further clean up will occur if next next time this function
-				// is called though this point in the queue list
-				thisIn->segNext = 0;
 			}
 		}
 	}

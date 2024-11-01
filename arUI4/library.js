@@ -515,6 +515,7 @@ function restQueryRequest(connection, table, request, response, select, from, wh
 			tail += "LIMIT "+cnt+" OFFSET "+offset;
 	}
 	let query = select+from+where+tail;
+
 //console.log(query); // Used to help debug SQL queries
 	connection.query(query, function (err, results, fields) {
 		if(err){
@@ -991,7 +992,7 @@ function apiToTableReformat(table, params){
 	// and some rational columns from ID to 'Item' to our client API side
 	let idCol = 'id';
 	// tables for which the id column is named ID
-	if(['artist', 'album', 'category', 'toc', 'daypart', 'queries', 'favs', 'locations', 'schedule', 'file', 'logs', 'orders', 'request', 'users'].includes(table) == true){
+	if(['artist', 'album', 'category', 'toc', 'daypart', 'queries', 'favs', 'locations', 'schedule', 'file', 'logs', 'orders', 'request', 'users', 'orders'].includes(table) == true){
 		idCol = 'ID';
 		//	and handle parameters too...
 		if(params.id){
@@ -1101,7 +1102,7 @@ function apiToTableReformat(table, params){
 
 function tableToApiReformat(table, result){
 	// tables for which the id column is named ID
-	if(['artist', 'album', 'category', 'toc', 'daypart', 'queries', 'favs', 'locations', 'schedule', 'file', 'logs', 'orders', 'request', 'users'].includes(table) == true){
+	if(['artist', 'album', 'category', 'toc', 'daypart', 'queries', 'favs', 'locations', 'schedule', 'file', 'logs', 'orders', 'request', 'users', 'orders'].includes(table) == true){
 		result.forEach(function(item){ 
 			if(item.ID){
 				item.id = item.ID;
@@ -1240,7 +1241,7 @@ function setIn(request, response, params, dirs){
 			return;
 		}
 		// check for allowed tables
-		if(['artist', 'album', 'category', 'locations', 'toc', 'meta', 'queries', 'rest', 'category_item', 'schedule', 'playlist', 'task', 'file'].includes(table) == false){
+		if(['artist', 'album', 'category', 'locations', 'toc', 'meta', 'queries', 'rest', 'category_item', 'schedule', 'playlist', 'task', 'file', 'orders', 'client', 'campaign', 'invoices'].includes(table) == false){
 			response.status(400);
 			response.end();
 			return;
@@ -1267,9 +1268,10 @@ function setIn(request, response, params, dirs){
 					if(['meta', 'rest', 'category_item', 'playlist', 'task'].includes(table))
 						// tables where row ID is named RID, rather than just ID
 						where = " WHERE RID ="+libpool.escape(dirs[4])+";";
+					if(['client', 'campaign', 'invoices'].includes(table))
+						where = " WHERE id ="+libpool.escape(dirs[4])+";";
 					else
 						where = " WHERE ID ="+libpool.escape(dirs[4])+";";
-					
 					let keys = Object.keys(params);
 					let vals = Object.values(params);
 					if(keys.length == 0){
@@ -1315,7 +1317,7 @@ function setIn(request, response, params, dirs){
 				}else{
 					if(table == 'toc'){
 						// special new toc handling... must have type property set
-						if((['file', 'task', 'playlist'].includes(params.Type) == false) && 
+						if((['file', 'task', 'playlist', 'item'].includes(params.Type) == false) && 
 											((params.Name == undefined) || (params.Name.length == 0))){
 							response.status(400);
 							response.end();
@@ -1467,6 +1469,11 @@ function setIn(request, response, params, dirs){
 						colstr += ", Added";
 						setstr += ", UNIX_TIMESTAMP()";
 					}
+					if(['campaign'].includes(table)){
+						// set Added column with current UNIX TIME
+						colstr += ", created";
+						setstr += ", NOW()";
+					}
 					colstr += ") ";
 					setstr += ");";
 					// execute the query
@@ -1524,43 +1531,73 @@ function removeSubtype(connection, type, id, response){
 							response.end();
 						}else{
 							// [type] table
-							connection.query("DELETE FROM "+locConf['prefix']+type+" WHERE ID = "+id+";", function(err, results){
-								if(err){
-									connection.rollback(function(){
-										connection.release();
-									});
-									response.status(304);
-									response.send(err.code);
-									response.end();
-								}else{
-									// toc table
-									connection.query("DELETE FROM "+locConf['prefix']+"toc WHERE ID = "+id+";", function(err, results){
-										if(err){
-											connection.rollback(function(){
-												connection.release();
-											});
-											response.status(304);
-											response.send(err.code);
-											response.end();
-										}else{
-											connection.commit(function(err){
-												if(err){
-													connection.rollback(function(){
-														connection.release();
-													});
-													response.status(304);
-													response.send(err.code);
-													response.end();
-												}else{
+							if(type == "item"){
+								// item is self-referencing... there is no "type" table to remove en entry from.
+								// Just remove from the toc table
+								connection.query("DELETE FROM "+locConf['prefix']+"toc WHERE ID = "+id+";", function(err, results){
+									if(err){
+										connection.rollback(function(){
+											connection.release();
+										});
+										response.status(304);
+										response.send(err.code);
+										response.end();
+									}else{
+										connection.commit(function(err){
+											if(err){
+												connection.rollback(function(){
 													connection.release();
-													response.status(201);
-													response.end();
-												}
-											});
-										}
-									});
-								}
-							});
+												});
+												response.status(304);
+												response.send(err.code);
+												response.end();
+											}else{
+												connection.release();
+												response.status(201);
+												response.end();
+											}
+										});
+									}
+								});
+							}else{
+								connection.query("DELETE FROM "+locConf['prefix']+type+" WHERE ID = "+id+";", function(err, results){
+									if(err){
+										connection.rollback(function(){
+											connection.release();
+										});
+										response.status(304);
+										response.send(err.code);
+										response.end();
+									}else{
+										// toc table
+										connection.query("DELETE FROM "+locConf['prefix']+"toc WHERE ID = "+id+";", function(err, results){
+											if(err){
+												connection.rollback(function(){
+													connection.release();
+												});
+												response.status(304);
+												response.send(err.code);
+												response.end();
+											}else{
+												connection.commit(function(err){
+													if(err){
+														connection.rollback(function(){
+															connection.release();
+														});
+														response.status(304);
+														response.send(err.code);
+														response.end();
+													}else{
+														connection.release();
+														response.status(201);
+														response.end();
+													}
+												});
+											}
+										});
+									}
+								});
+							}
 						}
 					});
 				}
@@ -1999,6 +2036,52 @@ function deleteID(request, response, params, dirs){
 					response.end();
 				}else{
 					connection.query("DELETE FROM "+locConf['prefix']+"queries WHERE ID = "+ID+";", function(err, results){
+						if(err){
+							connection.release();
+							response.status(304);
+							response.send(err.code);
+							response.end();
+						}else{
+							connection.release();
+							response.status(201);
+							response.end();
+						}
+					});
+				}
+			});
+		}else if(table == 'file'){
+			// this will not remove the underlying toc entry.... it is only to be used by the traffic manager for
+			// changing item types from file to a generic "item" for script only items.
+			libpool.getConnection((err, connection) => {
+				if(err){
+					response.status(400);
+					response.send(err.code);
+					response.end();
+				}else{
+					// remove file entry
+					connection.query("DELETE FROM "+locConf['prefix']+"file WHERE ID = "+ID+";", function(err, results){
+						if(err){
+							connection.release();
+							response.status(304);
+							response.send(err.code);
+							response.end();
+						}else{
+							connection.release();
+							response.status(201);
+							response.end();
+						}
+					});
+				}
+			});
+		}else if(table == 'orders'){
+			libpool.getConnection((err, connection) => {
+				if(err){
+					response.status(400);
+					response.send(err.code);
+					response.end();
+				}else{
+					// remove file entry
+					connection.query("DELETE FROM "+locConf['prefix']+"orders WHERE ID = "+ID+";", function(err, results){
 						if(err){
 							connection.release();
 							response.status(304);
@@ -2550,52 +2633,244 @@ function searchFor(request, response, params, dirs){
 					where = parts.where;
 					from += ") ";
 				}else if(type == 'cust'){
-/*//!vvv
-SELECT DISTINCT ar_client.name AS Label, ar_client.id AS id 
-FROM ar_client 
-RIGHT JOIN ar_invoices ON (ar_invoices.customer = ar_client.id 
-	AND YEAR(ar_invoices.posted) = '2024' AND MONTH(ar_invoices.posted) = 1
-) 
-LEFT JOIN ar_orders ON (ar_orders.invoice = ar_invoices.id AND ar_orders.location = 1
-	AND (YEAR(ar_orders.date) = '2024' AND MONTH(ar_orders.date) = 1) OR ((ar_orders.dp_start BETWEEN '2024-01-00' AND '2024-02-00') OR
-	('2024-01-00' BETWEEN ar_orders.dp_start AND DATE_ADD(ar_orders.dp_start, INTERVAL ar_orders.dp_range DAY))) 
-)
-WHERE name LIKE 'Te%'
-*/
-					table = "client"
 					if(!sort)
-						sort = "Label";
-					select = "SELECT DISTINCT "+locConf['prefix']+"client.name AS Label, ";
-					select += locConf['prefix']+"client.id AS ID ";
+						sort = "Name";
+					let yr = parseInt(params.dyear);
+					let mon = parseInt(params.dmon);
+					let locID = false;
+					let invID = false;
+					if(params.locID)
+						locID = parseInt(params.locID);
+					if(params.invID)
+						invID = parseInt(params.invID);
+					table = "client"
+					select = "SELECT "+locConf['prefix']+"client.name AS Name, ";
+					select += locConf['prefix']+"client.id AS ID, ";
+					select += "MAX(IF("+locConf['prefix']+"orders.date, "+locConf['prefix']+"orders.date, DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range DAY))) AS lastOrder ";
 					from = buildFromString(from, "client");
-					if(params.match){ 
-						where = buildWhereString(where, "client", "name", params.match);
-						delete params.match;
+					if(params.datetype && (params.datetype == "Posted") && yr){
+						from = buildFromString(from, "invoices");
+						if(locID)
+							from = buildFromString(from, "orders");
+						from += ") ";
+						where = "WHERE "+locConf['prefix']+"invoices.customer = "+locConf['prefix']+"client.id ";
+						if(locID){
+							where += "AND "+locConf['prefix']+"orders.invoice = "+locConf['prefix']+"invoices.id AND "+locConf['prefix']+"orders.location = "+locID+" ";
+						}
+						if(invID)
+							where += "AND "+locConf['prefix']+"orders.invoice = "+invID+" ";
+						where += "AND YEAR("+locConf['prefix']+"invoices.posted) = " + yr;
+						if(mon)
+							where += " AND MONTH("+locConf['prefix']+"invoices.posted) = " + mon;
+						where += " ";
+						if(params.match && params.match.length)
+							where = buildWhereString(where, "client", "name", params.match);
+						if(!locID){
+							where = "LEFT JOIN "+locConf['prefix']+"orders ON("+locConf['prefix']+"orders.invoice = "+locConf['prefix']+"invoices.id) " + where;
+						}
+					}else if(params.datetype && (params.datetype == "Active") && yr){
+						from = buildFromString(from, "invoices");
+						from = buildFromString(from, "orders");
+						from += ") ";
+						where = "WHERE "+locConf['prefix']+"invoices.customer = "+locConf['prefix']+"client.id AND "+locConf['prefix']+"orders.invoice = ar_invoices.id ";
+						if(locID)
+							where += "AND "+locConf['prefix']+"orders.location = "+locID+" ";
+						if(invID)
+							where += "AND "+locConf['prefix']+"orders.invoice = "+invID+" ";
+						where += "AND ((YEAR("+locConf['prefix']+"orders.date) = "+yr;
+						if(mon)
+							where += " AND MONTH("+locConf['prefix']+"orders.date) = "+mon;
+						where += ") OR (("+locConf['prefix']+"orders.dp_start BETWEEN '";
+						if(mon){
+							where += yr+"-"+mon+"-01' AND ";
+							if(mon < 12)
+								where += "'"+yr+"-"+(mon+1)+"-01') ";
+							else
+								where += "'"+(yr+1)+"-01-01') ";
+						}else
+							where += yr+"-01-00' AND '"+(yr+1)+"-01-00') ";
+						
+						if(mon)
+							where += "OR ('"+yr+"-"+mon+"-01' BETWEEN "+locConf['prefix']+"orders.dp_start AND DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range DAY))"; 
+						else
+							 where += "OR ('"+yr+"-01-01' BETWEEN "+locConf['prefix']+"orders.dp_start AND DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range DAY))"; 
+						where += ")) ";
+						if(params.match && params.match.length)
+							where = buildWhereString(where, "client", "name", params.match);
+					}else{
+						from += ") ";
+						if(params.match && params.match.length)
+							where = buildWhereString(where, "client", "name", params.match);
+						where = "LEFT JOIN ("+locConf['prefix']+"orders, "+locConf['prefix']+"invoices) ON("+locConf['prefix']+"invoices.customer = "+locConf['prefix']+"client.id AND "+locConf['prefix']+"orders.invoice = "+locConf['prefix']+"invoices.id) " + where;
 					}
-					
-					let parts = {from: from, where: where};
-					let added = includeSearchKeys(parts, params);
-					if(added){
-						from = parts.from;
-						where = parts.where;
-						// if there are seach fields, we don't show all, only those that match
-						from = buildFromString(from, "toc");
-						from = buildFromString(from, "category_item");
-						if(parts.subquery && parts.subquery.length)
-							from = buildFromString(from, false, parts.subquery);
-						where += "AND "+locConf['prefix']+"category_item.Item = "+locConf['prefix']+"toc.ID ";
-						where += "AND "+locConf['prefix']+"category.ID = "+locConf['prefix']+"category_item.Category "; 
+					tail += "GROUP BY ID ";
+				}else if(type == 'camp'){
+					if(!sort)
+						sort = "Name";
+					let yr = parseInt(params.dyear);
+					let mon = parseInt(params.dmon);
+					let locID = false;
+					let custID = false;
+					let invID = false;
+					if(params.locID)
+						locID = parseInt(params.locID);
+					if(params.custID)
+						custID = parseInt(params.custID);
+					if(params.invID)
+						invID = parseInt(params.invID);
+					table = "campaign"
+					select = "SELECT "+locConf['prefix']+"toc.name AS Name, "+locConf['prefix']+"toc.ID AS ItemID, ";
+					select += locConf['prefix']+"campaign.id AS ID, "+locConf['prefix']+"client.name AS Customer,";
+					select += "MAX(IF("+locConf['prefix']+"orders.date, "+locConf['prefix']+"orders.date, DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range DAY))) AS lastOrder ";
+					from = buildFromString(from, "campaign");
+					from = buildFromString(from, "toc");
+					from = buildFromString(from, "client");
+					where = "WHERE "+locConf['prefix']+"toc.ID = "+locConf['prefix']+"campaign.aritem AND "+locConf['prefix']+"client.id = "+locConf['prefix']+"campaign.client ";
+					if(params.datetype && ((params.datetype == "Posted") || (params.datetype == "Active")) && yr){
+						from = buildFromString(from, "orders");
+						where += "AND "+locConf['prefix']+"orders.itemID = "+locConf['prefix']+"campaign.aritem ";
+					}
+					if(custID)
+						where += "AND "+locConf['prefix']+"campaign.client = "+custID+" "; 
+					if(params.datetype && (params.datetype == "Posted") && yr){
+						from = buildFromString(from, "invoices");
+						if(invID || locID){
+							from = buildFromString(from, "orders");
+							if(invID)
+								where += "AND "+locConf['prefix']+"orders.invoice = "+invID+" ";
+							if(locID)
+								where += "AND "+locConf['prefix']+"orders.location = "+locID+" ";
+						}
+						where += "AND "+locConf['prefix']+"orders.invoice = "+locConf['prefix']+"invoices.id ";
+						where += "AND YEAR("+locConf['prefix']+"invoices.posted) = " + yr;
+						if(mon)
+							where += " AND MONTH("+locConf['prefix']+"invoices.posted) = " + mon;
+						where += " ";
+						if(params.match && params.match.length)
+							where = buildWhereString(where, "toc", "name", params.match);
+					}else if(params.datetype && (params.datetype == "Active") && yr){
+						if(invID || locID){
+							from = buildFromString(from, "orders");
+							if(invID)
+								where += "AND "+locConf['prefix']+"orders.invoice = "+invID+" ";
+							if(locID)
+								where += "AND "+locConf['prefix']+"orders.location = "+locID+" ";
+						}
+						where += "AND ((YEAR("+locConf['prefix']+"orders.date) = "+yr;
+						if(mon)
+							where += " AND MONTH("+locConf['prefix']+"orders.date) = "+mon;
+						where += ") OR (("+locConf['prefix']+"orders.dp_start BETWEEN '";
+						if(mon){
+							where += yr+"-"+mon+"-01' AND ";
+							if(mon < 12)
+								where += "'"+yr+"-"+(mon+1)+"-01') ";
+							else
+								where += "'"+(yr+1)+"-01-01') ";
+						}else
+							where += yr+"-01-00' AND '"+(yr+1)+"-01-00') ";
+						
+						if(mon)
+							where += "OR ('"+yr+"-"+mon+"-01' BETWEEN "+locConf['prefix']+"orders.dp_start AND DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range DAY))"; 
+						else
+							 where += "OR ('"+yr+"-01-01' BETWEEN "+locConf['prefix']+"orders.dp_start AND DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range DAY))"; 
+						where += ")) ";
+						if(params.match && params.match.length)
+							where = buildWhereString(where, "toc", "name", params.match);
+					}else{
+						if(invID){
+							if(invID)
+								where += "AND "+locConf['prefix']+"orders.invoice = "+invID+" ";
+						}
+						if(params.match && params.match.length)
+							where = buildWhereString(where, "toc", "name", params.match);
+						where = "LEFT JOIN "+locConf['prefix']+"orders ON ("+locConf['prefix']+"orders.itemID = "+locConf['prefix']+"campaign.aritem) " + where;
 					}
 					from += ") ";
-//!^^^
+					tail += "GROUP BY ID ";
+				}else if(type == 'invoice'){
+ 					if(!sort)
+						sort = "ID";
+					let yr = parseInt(params.dyear);
+					let mon = parseInt(params.dmon);
+					let locID = false;
+					let custID = false;
+					let campID = false;
+					if(params.locID)
+						locID = parseInt(params.locID);
+					if(params.custID)
+						custID = parseInt(params.custID);
+					if(params.campID)
+						campID = parseInt(params.campID);
+					table = "invoices"
+					select = "SELECT "+locConf['prefix']+"invoices.id AS ID, ";
+					select += locConf['prefix']+"client.name AS Customer,";
+					select += "MAX(IF("+locConf['prefix']+"orders.date, "+locConf['prefix']+"orders.date, DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range DAY))) AS lastOrder ";
+					from = buildFromString(from, "invoices");
+					from = buildFromString(from, "client");
+					where = "WHERE "+locConf['prefix']+"invoices.customer = "+locConf['prefix']+"client.id ";
+					if(custID)
+						where += "AND "+locConf['prefix']+"invoices.customer = "+custID+" "; 
+					if(params.datetype && (params.datetype == "Posted") && yr){
+						where += "AND "+locConf['prefix']+"invoices.id = "+locConf['prefix']+"orders.invoice ";
+						from = buildFromString(from, "orders");
+						if(campID){
+							where += "AND "+locConf['prefix']+"orders.ItemID = ar_campaign.aritem ";
+							where += "AND "+locConf['prefix']+"campaign.id = "+campID+" "; 
+							from = buildFromString(from, "campaign");
+						}
+						if(locID)
+							where += "AND "+locConf['prefix']+"orders.location = "+locID+" ";
+						where += "AND YEAR("+locConf['prefix']+"invoices.posted) = " + yr;
+						if(mon)
+							where += " AND MONTH("+locConf['prefix']+"invoices.posted) = " + mon;
+						where += " ";
+						if(params.match && params.match.length)
+							where = buildWhereString(where, "invoices", "id", params.match);
+					}else if(params.datetype && (params.datetype == "Active") && yr){
+						where += "AND "+locConf['prefix']+"invoices.id = "+locConf['prefix']+"orders.invoice ";
+						from = buildFromString(from, "orders");
+						if(campID){
+							where += "AND "+locConf['prefix']+"orders.ItemID = ar_campaign.aritem ";
+							where += "AND "+locConf['prefix']+"campaign.id = "+campID+" "; 
+							from = buildFromString(from, "campaign");
+						}
+						if(locID)
+							where += "AND "+locConf['prefix']+"orders.location = "+locID+" ";
+						where += "AND ((YEAR("+locConf['prefix']+"orders.date) = "+yr;
+						if(mon)
+							where += " AND MONTH("+locConf['prefix']+"orders.date) = "+mon;
+						where += ") OR (("+locConf['prefix']+"orders.dp_start BETWEEN '";
+						if(mon){
+							where += yr+"-"+mon+"-01' AND ";
+							if(mon < 12)
+								where += "'"+yr+"-"+(mon+1)+"-01') ";
+							else
+								where += "'"+(yr+1)+"-01-01') ";
+						}else
+							where += yr+"-01-00' AND '"+(yr+1)+"-01-00') ";
+						
+						if(mon)
+							where += "OR ('"+yr+"-"+mon+"-01' BETWEEN "+locConf['prefix']+"orders.dp_start AND DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range DAY))"; 
+						else
+							 where += "OR ('"+yr+"-01-01' BETWEEN "+locConf['prefix']+"orders.dp_start AND DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range DAY))"; 
+						where += ")) ";
+						if(params.match && params.match.length)
+							where = buildWhereString(where, "invoices", "id", params.match);
+					}else{
+						where = "LEFT JOIN "+locConf['prefix']+"orders ON("+locConf['prefix']+"invoices.id = "+locConf['prefix']+"orders.invoice) " + where;
+						if(params.match && params.match.length)
+							where = buildWhereString(where, "invoices", "id", params.match);
+					}
+					from += ") ";
+					tail += "GROUP BY ID ";
 				}else{
 					response.status(400);
 					response.end();
 					connection.release(); // return the connection to pool
 					return;
 				}
+console.log(select, from, where, tail);
 				restQueryRequest(connection, table, request, response, select, from, where, tail, sort, 0); // NOTE: connection will be returned to the pool.
-				
 			}
 		});
 	}else{
@@ -2606,6 +2881,115 @@ WHERE name LIKE 'Te%'
 		{Type: "Rested", qtype: "rested"}];
 		restObjectRequest(response, list);
 	}
+}
+
+function responseWrapper(request, response, params, dirs, func){
+	try{
+		asyncGetDBConnection().then(connection => {
+			if(!connection){
+				response.status(400);
+				response.end();
+				return;
+			}
+			func(connection, request, response, params, dirs).then(async (result) => {
+				if(typeof result !== 'number'){
+					response.status(201);
+					response.json(result);
+					response.end();
+				}else{
+					response.status(400);
+					response.end();
+				}
+				if(connection)
+					connection.release();
+			}).catch(err => {
+				response.status(400);
+				response.send(err.code);
+				response.end();
+			});
+		});
+	}catch(err){
+		response.status(400);
+		response.end();
+	}
+}
+
+async function bumpInvoiceOrder(connection, request, response, params, dirs){
+	
+}
+
+async function postInvoice(connection, request, response, params, dirs){
+	
+}
+
+async function addInvoiceOrder(connection, request, response, params, dirs){
+	
+}
+
+async function getInvoiceOrders(connection, request, response, params, dirs){
+	if(dirs[3]){
+		// get ID and make sure it is a number.
+		let ID = parseInt(dirs[3], 10);
+		if(isNaN(ID) || !ID)
+			return 400;
+		// check for permission
+		if(request.session.permission == "studio")	// studio permission is not allowed to make changes, all others are
+			return 401;
+		let result;
+		let query = 
+`SELECT `+locConf['prefix']+`orders.ID AS ID, `+locConf['prefix']+`orders.type AS Type, `+locConf['prefix']+`locations.Name AS Location, item.ID AS ItemID, `+locConf['prefix']+`daypart.ID AS DaypartID,
+	`+locConf['prefix']+`daypart.Name AS Daypart, `+locConf['prefix']+`orders.dp_start AS Start, `+locConf['prefix']+`orders.dp_range AS Days, 
+	IF(`+locConf['prefix']+`orders.type = 'bulk', DATE(FROM_UNIXTIME(`+locConf['prefix']+`logs.Time)), `+locConf['prefix']+`orders.date) AS OrderDate, slot.Name AS Slot, IF(`+locConf['prefix']+`orders.date >= DATE(NOW()), 'Pending', 'Complete') AS Status, 
+	item.Name AS Item, `+locConf['prefix']+`orders.amount AS Amount, 
+	`+locConf['prefix']+`orders.comment AS Comment,  
+	IF(`+locConf['prefix']+`orders.fulfilled IS NULL, TIME(FROM_UNIXTIME(`+locConf['prefix']+`logs.Time)), TIME(`+locConf['prefix']+`orders.fulfilled)) AS Fulfilled 
+FROM `+locConf['prefix']+`orders 
+LEFT JOIN `+locConf['prefix']+`logs ON (`+locConf['prefix']+`logs.Added = 0 AND `+locConf['prefix']+`logs.Location = `+locConf['prefix']+`orders.location 
+	AND `+locConf['prefix']+`logs.Item = `+locConf['prefix']+`orders.itemID AND 
+	(
+		(`+locConf['prefix']+`orders.type = 'bulk' AND DATE(FROM_UNIXTIME(`+locConf['prefix']+`logs.Time)) BETWEEN `+locConf['prefix']+`orders.dp_start 
+			AND DATE_ADD(`+locConf['prefix']+`orders.dp_start, INTERVAL `+locConf['prefix']+`orders.dp_range DAY)) OR 
+		(`+locConf['prefix']+`orders.type = 'order' AND `+locConf['prefix']+`logs.OwnerID = `+locConf['prefix']+`orders.slotID AND DATE(FROM_UNIXTIME(`+locConf['prefix']+`logs.Time)) = `+locConf['prefix']+`orders.date) 
+	)
+)
+LEFT JOIN `+locConf['prefix']+`toc AS item ON (item.ID = `+locConf['prefix']+`orders.itemID) 
+LEFT JOIN `+locConf['prefix']+`toc AS slot ON (slot.ID = `+locConf['prefix']+`orders.slotID) 
+LEFT JOIN `+locConf['prefix']+`daypart ON (`+locConf['prefix']+`daypart.ID = `+locConf['prefix']+`orders.daypart) 
+LEFT JOIN `+locConf['prefix']+`locations ON (`+locConf['prefix']+`locations.ID = `+locConf['prefix']+`orders.location) 
+WHERE `+locConf['prefix']+`orders.invoice = '`+ID+`'  
+ORDER BY Type, Location, ItemID, Start, Days, OrderDate, DaypartID, Slot;`;
+		try{
+			result = await asyncQuery(connection, query);
+		}catch(err){
+			return 304;
+		}
+		// Create branches
+		let parent = false;
+		let base = [];
+		for(let i=0; i<result.length; i++){
+			if(!parent || (result[i].Location != parent.Location) || (result[i].Type != parent.Type) || 
+							(result[i].ItemID != parent.ItemID) || (result[i].DaypartID != parent.DaypartID) ||
+							(result[i].Start != parent.Start) || (result[i].Days != parent.Days)){
+				parent = {ID: 0, Location: result[i].Location, Type: result[i].Type, Item:result[i].Item, Daypart:result[i].Daypart, DaypartID:result[i].DaypartID, ItemID:result[i].ItemID, DaypartID: result[i].DaypartID,
+																		Start:result[i].Start, Days: result[i].Days, Amount: 0.0};
+				if(result[i].Type == "bulk")
+					parent.Amount = result[i].Amount;
+				parent.children = [];
+				base.push(parent);
+			}
+			parent.children.push(result[i])
+			if(result[i].Type == "bulk"){
+				delete result[i].Amount;
+			}else{
+				if(result[i].Type == "credit")
+					parent.Amount -= result[i].Amount;
+				else
+					parent.Amount += result[i].Amount; // order or item
+			}
+		}
+		return base;
+	}
+	return 400;
 }
 
 async function getItemObject(ID, params){  // params.resolve, params.locname, params.histlimit, params.histdate
@@ -2745,7 +3129,6 @@ async function getItemObject(ID, params){  // params.resolve, params.locname, pa
 					return 404;
 				}
 				
-				
 			}else if(type == "playlist"){
 				try{
 					subresults = await asyncQuery(connection, "SELECT Position, RID, Property, Value FROM "+locConf['prefix']+type+" WHERE ID = "+ID+" ORDER BY Position ASC;");
@@ -2777,7 +3160,7 @@ async function getItemObject(ID, params){  // params.resolve, params.locname, pa
 				final[type] = subresults;
 				connection.release();
 				return final;
-			}else{
+			}else if(type != "item"){ // type item is a self referencing dummy item.
 				try{
 					subresults = await asyncQuery(connection, "SELECT * FROM "+locConf['prefix']+libpool.escapeId(type)+" WHERE ID = "+ID+";");
 				}catch(err){
@@ -2785,9 +3168,9 @@ async function getItemObject(ID, params){  // params.resolve, params.locname, pa
 					return 304;
 				}
 				final[type] = subresults;
-				connection.release();
-				return final;
 			}
+			connection.release();
+			return final;
 		}else{
 			//type Error
 			connection.release();
@@ -2798,7 +3181,6 @@ async function getItemObject(ID, params){  // params.resolve, params.locname, pa
 		connection.release();
 		return 404;
 	}
-
 }
 
 // item/ID{?resolve=(1,0)}		gets full item info, If resolve is true (default 0 <false>), file item paths and 
@@ -3746,7 +4128,7 @@ async function importFileIntoLibrary(fpath, params, fullpath){
 						conn.release();
 						pass.status = -1;
 						return pass;
-					}
+					}result.insertId
 					query = "DELETE FROM "+locConf['prefix']+"playlist WHERE ID = "+ID+";";
 					try{
 						result = await asyncQuery(conn, query);
@@ -4671,6 +5053,102 @@ function abortDbFileSearch(request, response){
 	}
 }
 
+async function logRead(request, response, params, dirs){
+	// /logread/ID?locID=value&readBy=TheDJWhoReadIt Enters a read (script) item into the logs as if it were a played recording
+	let itemID = parseInt(dirs[3], 10);
+	if(isNaN(itemID)){
+		response.status(400);
+		response.end();
+		return;
+	}
+	let locID = parseInt(params.locID, 10);
+	if(isNaN(locID)){
+		response.status(400);
+		response.end();
+		return;
+	}
+	let reader = params.readBy;
+	if(!reader || !reader.length){
+		response.status(400);
+		response.end();
+		return;
+	}
+	let item = await getItemObject(itemID, false);
+	if((typeof item === 'number') || (!item.ID) || (!item.Name)){
+		response.status(result);
+		response.end();
+		return;
+	}
+	
+	libpool.getConnection((err, connection) => {
+		if(err){
+			response.status(400);
+			response.send(err.code);
+			response.end();
+		}else{
+			let artist = "";
+			let artID = 0;
+			let album = "";
+			let albID = 0;
+			if(item.file){
+				artist = item.file.Artist;
+				artID = item.file.ArtistID;
+				album = item.file.Album;
+				albID = item.file.AlbumID;
+			}
+
+			let query = "INSERT INTO "+locConf['prefix']+"logs (Added, Time, Item, Location, Name, Comment, Artist, ArtistID, Album, AlbumID) ";
+			query += "VALUES (0, UNIX_TIMESTAMP(NOW()), "+item.ID+", "+locID+", "+libpool.escape(item.Name)+", ";
+			query += libpool.escape("Read By: "+reader)+", "+libpool.escape(artist)+", "+artID+", "+libpool.escape(album)+", "+albID+"); ";
+			connection.query(query, function (err, res, fields) {
+				if(err){
+					response.status(304);
+					response.send(err.code);
+				}else{
+					response.status(201);
+					response.json(res);
+				}
+				connection.release(); // return the connection to pool
+				response.end();
+			});
+		}
+	});
+
+}
+
+function bulkReads(request, response, params, dirs){ 
+	// /bulkreads/locID  Returns a list of DJ read items (scripts) that are ordered as "bulk" items (no specific slot/time/date)
+	if(dirs[3]){
+		// get locID and make sure it is a number.
+		let locID = parseInt(dirs[3], 10);
+		if(isNaN(locID)){
+			response.status(400);
+			response.end();
+			return;
+		}
+		libpool.getConnection((err, connection) => {
+			if(err){
+				response.status(400);
+				response.send(err.code);
+				response.end();
+			}else{
+				let select = "SELECT DISTINCT "+locConf['prefix']+"toc.ID AS ItemID, "+locConf['prefix']+"toc.Name AS Name, ";
+				select += locConf['prefix']+"toc.Script AS Script ";
+				let from = "FROM ("+locConf['prefix']+"orders, "+locConf['prefix']+"toc) ";
+				let where = "WHERE "+locConf['prefix']+"orders.location = "+locID+" AND ";
+				where += locConf['prefix']+"orders.type = 'bulk' AND "+locConf['prefix']+"orders.date IS NOT TRUE AND ";
+				where += locConf['prefix']+"toc.ID = ar_orders.itemID AND ";
+				where += "DATE(NOW()) BETWEEN "+locConf['prefix']+"orders.dp_start AND DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range DAY) ";
+				let tail = "ORDER BY Name ASC;";
+				restQueryRequest(connection, "orders", request, response, select, from, where, tail, false, 0); // NOTE: connection will be returned to the pool.
+			}
+		});
+	}else{
+		response.status(400);
+		response.end();
+	}
+}
+
 module.exports = {
 	configure: function (config) {
 		supportDir = "/opt/audiorack/support";
@@ -4757,8 +5235,13 @@ module.exports = {
 			return;
 		}
 		let dirs = request.path.split('/');
+		
 		if(dirs[2] == 'get'){
 			getFrom(request, response, params, dirs);	// /get/table/{ID/}?column=value1&...
+		}else if(dirs[2] == 'logread'){
+			logRead(request, response, params, dirs);	// /logread/ID?locID=value  Enters a read (script) item into the logs as if it were a played recording
+		}else if(dirs[2] == 'bulkreads'){
+			bulkReads(request, response, params, dirs);	// /bulkreads/locID  Returns a list of DJ read items (scripts) that are ordered as "bulk" items (no specific slot/time/date)
 		}else if(dirs[2] == 'set'){
 			setIn(request, response, params, dirs);	// /set/table/{ID/}?column=value1&... If ID is excluded, a new row is created
 		}else if(dirs[2] == 'delete'){
@@ -4838,6 +5321,10 @@ module.exports = {
 																				// the library if they are not already present based on hash code.
 		}else if(dirs[2] == 'crawlhalt'){
 			abortDbFileSearch(request, response);		// stops a dbFileSearch process running in the background
+		}else if(dirs[2] == 'getorders'){
+			responseWrapper(request, response, params, dirs, getInvoiceOrders); // /getorders/invoiceID
+		}else if(dirs[2] == 'addorder'){
+			addInvoiceOrder(request, response, params, dirs);	// /addorder/invoiceID
 		}else{
 			response.status(400);
 			response.end();

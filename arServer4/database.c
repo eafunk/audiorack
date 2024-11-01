@@ -3255,14 +3255,11 @@ void GetItemMetaData(uint32_t UID, const char *url){
 		if(prefix)
 			free(prefix);
 		return;
-	}
-	if(!strcmp(Type,"playlist")){
+	}else{
 		// no addition meta data to get, and also, no error.
 		if(prefix)
 			free(prefix);
 		return;
-	}else{
-		SetMetaData(UID, "Type", "");
 	}
 error:
 	db_set_errtag(instance, NULL);

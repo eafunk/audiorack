@@ -1041,7 +1041,7 @@ void GetURLMetaData(uint32_t UID, const char *url){
 		}else if(!strcmp(type, "sip")){
 			SetMetaData(UID, "Name", "sip URLs are not loadable directly");
 			SetMetaData(UID, "Missing", "1");
-		}else if(strcmp(type, "item"))	// NOT an enpty item
+		}else if(strcmp(type, "item"))	// NOT an empty item
 			GetGstDiscoverMetaData(UID, url);
 	}
 	if(type)

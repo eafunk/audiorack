@@ -103,7 +103,7 @@ uint32_t createMetaRecord(const char *url, uint32_t *reqID, unsigned char silent
 	rec->rev = 0;	// new record, revision zero
 	rec->silent = silent;
 	if(url)
-		setValueForKey((keyValueRecord *)&rec->child, "URL", url);	
+		setValueForKey((keyValueRecord *)&rec->child, "URL", url);
 	pthread_rwlock_unlock(&dataLock);
 	if(!silent){
 		notifyData	data;

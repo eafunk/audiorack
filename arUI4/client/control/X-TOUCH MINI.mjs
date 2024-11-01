@@ -420,7 +420,6 @@ function showPBal(val, ref){
 }
 
 function showPVol(val, ref){
-console.log("showPVol:", val, ref);
 	let msg = new Array(3);
 	ref = parseInt(ref);
 	if(val === undefined)
