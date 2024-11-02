@@ -2810,7 +2810,7 @@ function searchFor(request, response, params, dirs){
 					where = "WHERE "+locConf['prefix']+"invoices.customer = "+locConf['prefix']+"client.id ";
 					if(custID)
 						where += "AND "+locConf['prefix']+"invoices.customer = "+custID+" "; 
-					if(params.datetype && (params.datetype == "Posted") && yr){
+					if(params.datetype && (params.datetype == "Unposted")){
 						where += "AND "+locConf['prefix']+"invoices.id = "+locConf['prefix']+"orders.invoice ";
 						from = buildFromString(from, "orders");
 						if(campID){
@@ -2820,6 +2820,21 @@ function searchFor(request, response, params, dirs){
 						}
 						if(locID)
 							where += "AND "+locConf['prefix']+"orders.location = "+locID+" ";
+						where += "AND "+locConf['prefix']+"invoices.posted = '0000-00-00' ";
+						if(params.match && params.match.length)
+							where = buildWhereString(where, "invoices", "id", params.match);
+					}else if(params.datetype && (params.datetype == "Posted") && yr){
+						where += "AND "+locConf['prefix']+"invoices.id = "+locConf['prefix']+"orders.invoice ";
+						from = buildFromString(from, "orders");
+						if(campID){
+							where += "AND "+locConf['prefix']+"orders.ItemID = ar_campaign.aritem ";
+							where += "AND "+locConf['prefix']+"campaign.id = "+campID+" "; 
+							from = buildFromString(from, "campaign");
+						}
+						if(locID)
+							where += "AND "+locConf['prefix']+"orders.location = "+locID+" ";
+							
+							
 						where += "AND YEAR("+locConf['prefix']+"invoices.posted) = " + yr;
 						if(mon)
 							where += " AND MONTH("+locConf['prefix']+"invoices.posted) = " + mon;
@@ -2937,11 +2952,12 @@ async function getInvoiceOrders(connection, request, response, params, dirs){
 			return 401;
 		let result;
 		let query = 
-`SELECT `+locConf['prefix']+`orders.ID AS ID, `+locConf['prefix']+`orders.type AS Type, `+locConf['prefix']+`locations.Name AS Location, item.ID AS ItemID, `+locConf['prefix']+`daypart.ID AS DaypartID,
+`SELECT `+locConf['prefix']+`orders.ID AS ID, `+locConf['prefix']+`orders.type AS Type, `+locConf['prefix']+`orders.location AS locID, 
+	`+locConf['prefix']+`locations.Name AS Location, item.ID AS ItemID, `+locConf['prefix']+`daypart.ID AS DaypartID,
 	`+locConf['prefix']+`daypart.Name AS Daypart, `+locConf['prefix']+`orders.dp_start AS Start, `+locConf['prefix']+`orders.dp_range AS Days, 
 	IF(`+locConf['prefix']+`orders.type = 'bulk', DATE(FROM_UNIXTIME(`+locConf['prefix']+`logs.Time)), `+locConf['prefix']+`orders.date) AS OrderDate, slot.Name AS Slot, IF(`+locConf['prefix']+`orders.date >= DATE(NOW()), 'Pending', 'Complete') AS Status, 
 	item.Name AS Item, `+locConf['prefix']+`orders.amount AS Amount, 
-	`+locConf['prefix']+`orders.comment AS Comment,  
+	IF(`+locConf['prefix']+`orders.type = 'bulk',`+locConf['prefix']+`logs.Comment,`+locConf['prefix']+`orders.comment) AS Comment,  
 	IF(`+locConf['prefix']+`orders.fulfilled IS NULL, TIME(FROM_UNIXTIME(`+locConf['prefix']+`logs.Time)), TIME(`+locConf['prefix']+`orders.fulfilled)) AS Fulfilled 
 FROM `+locConf['prefix']+`orders 
 LEFT JOIN `+locConf['prefix']+`logs ON (`+locConf['prefix']+`logs.Added = 0 AND `+locConf['prefix']+`logs.Location = `+locConf['prefix']+`orders.location 
@@ -2967,10 +2983,11 @@ ORDER BY Type, Location, ItemID, Start, Days, OrderDate, DaypartID, Slot;`;
 		let parent = false;
 		let base = [];
 		for(let i=0; i<result.length; i++){
-			if(!parent || (result[i].Location != parent.Location) || (result[i].Type != parent.Type) || 
+			if(!parent || (result[i].locID != parent.locID) || (result[i].Type != parent.Type) || 
 							(result[i].ItemID != parent.ItemID) || (result[i].DaypartID != parent.DaypartID) ||
 							(result[i].Start != parent.Start) || (result[i].Days != parent.Days)){
-				parent = {ID: 0, Location: result[i].Location, Type: result[i].Type, Item:result[i].Item, Daypart:result[i].Daypart, DaypartID:result[i].DaypartID, ItemID:result[i].ItemID, DaypartID: result[i].DaypartID,
+				parent = {ID: 0, locID: result[i].locID, Location: result[i].Location, Type: result[i].Type, Item:result[i].Item, Daypart:result[i].Daypart, 
+																		DaypartID:result[i].DaypartID, ItemID:result[i].ItemID, DaypartID: result[i].DaypartID,
 																		Start:result[i].Start, Days: result[i].Days, Amount: 0.0};
 				if(result[i].Type == "bulk")
 					parent.Amount = result[i].Amount;
@@ -5055,6 +5072,7 @@ function abortDbFileSearch(request, response){
 
 async function logRead(request, response, params, dirs){
 	// /logread/ID?locID=value&readBy=TheDJWhoReadIt Enters a read (script) item into the logs as if it were a played recording
+	// &dateTime=Optional UnixTimeStamp, otherwise set to now.
 	let itemID = parseInt(dirs[3], 10);
 	if(isNaN(itemID)){
 		response.status(400);
@@ -5066,6 +5084,12 @@ async function logRead(request, response, params, dirs){
 		response.status(400);
 		response.end();
 		return;
+	}
+	let dateTime = 0;
+	if(params.dateTime){
+		dateTime = parseInt(params.dateTime, 10);
+		if(isNaN(dateTime))
+			dateTime = 0;
 	}
 	let reader = params.readBy;
 	if(!reader || !reader.length){
@@ -5096,9 +5120,12 @@ async function logRead(request, response, params, dirs){
 				album = item.file.Album;
 				albID = item.file.AlbumID;
 			}
-
 			let query = "INSERT INTO "+locConf['prefix']+"logs (Added, Time, Item, Location, Name, Comment, Artist, ArtistID, Album, AlbumID) ";
-			query += "VALUES (0, UNIX_TIMESTAMP(NOW()), "+item.ID+", "+locID+", "+libpool.escape(item.Name)+", ";
+			if(dateTime)
+				query += "VALUES (0, "+dateTime+", ";
+			else
+				query += "VALUES (0, UNIX_TIMESTAMP(NOW()), ";
+			query += item.ID+", "+locID+", "+libpool.escape(item.Name)+", ";
 			query += libpool.escape("Read By: "+reader)+", "+libpool.escape(artist)+", "+artID+", "+libpool.escape(album)+", "+albID+"); ";
 			connection.query(query, function (err, res, fields) {
 				if(err){
@@ -5113,7 +5140,6 @@ async function logRead(request, response, params, dirs){
 			});
 		}
 	});
-
 }
 
 function bulkReads(request, response, params, dirs){ 

@@ -25,7 +25,7 @@
 			</div>
 			<table id="holdingTable" hidden></tbody>
 				<tr></tr>
-				<tr id="newOrderRow" hidden>
+				<tr id="newOrderRow" style="border: 1px solid #000;" hidden>
 					<td><input id="newOrderQty" type="number" style="width: 4.5em" min="1" max="999" step="1" name="Qty"></td>
 					<td>
 						<select id="newOrdertType" name="type" onchange="invNewOrderTypeChange(event)">
@@ -65,7 +65,20 @@
 					</td>
 					<td><button class="editbutton" onclick="invAddOrder(event)">&check;</button><button class="editbutton" onclick="invOrderNewClose(event)">x</button></td>
 				</tr>
+				<tr id="newBulkRow" hidden>
+					<td colSpan="6" style="border: 1px solid #000;">
+						Create a manualy enter script read event <input id="orderBulkDateTime" type="datetime-local" name="TargetTime" value="">
+						Read By DJ: <input id="orderBulkReadDJ" style="margin: 0 auto;" type="text" size="20" name="DJName" value="" onchange="orderBulkReaderChange()">
+					</td>
+					<td>
+						<button id="orderBulkReadBtn" class="editbutton" onclick="orderBulkReadAction()" disabled>&check;</button>
+						<button class="editbutton" onclick="orderBulkReadClose()">x</button>
+					</td>
+				</tr>
 			</table>
+			<div id="orderManualLogBulk" hidden>
+				
+			</div>
 			<div id="navtab" class="navtab">
 				<button id="navabout" class="tabitem" onclick="showTab(event, 'about')">About</button>
 			</div>
@@ -642,6 +655,7 @@
 							<ul id="invDateType" style="list-style-type:none; text-align: left; padding-left: 0px;" onchange="invListRefresh(event)">
 							<li><input type="radio" id="invDateActive" name="invDateType" value="Active" checked><label for="invDateActive">Active In</label>
 							<li><input type="radio" id="invDatePosted" name="invDateType" value="Posted" ><label for="invDatePosted">Posted In</label>
+							<li><input type="radio" id="invDateUnposted" name="invDateType" value="Unposted" ><label for="invDateUnposted">Not Posted</label>
 							<li><input type="radio" id="invDateIgnore" name="invDateType" value="Ignore" ><label for="invDateIgnore">Ignore</label>
 							</ul>
 							<div style="display: flex; flex-direction:row;">

@@ -12278,10 +12278,10 @@ async function readScriptAction(evt){
 					}
 				}
 			}else{
-				alert("Got an error fetching data from serverr.\n"+resp.statusText);
+				alert("Got an error logging data from server.\n"+resp.statusText);
 			}
 		}else{
-			alert("Failed to fetch data from the server.");
+			alert("Failed to make a log entry from the server.");
 		}
 	}
 }
@@ -13558,34 +13558,35 @@ var invOrderCampList;
 function invListRefresh(evt){
 	let dtype = document.querySelector('input[name="invDateType"]:checked').value
 	let el = document.getElementById("invDateYear");
+	let elm = document.getElementById("invDateMon");
 	let lck = document.getElementById("invIgnoreLoc");
 	let cck = document.getElementById("invIgnoreCamp");
-	if(dtype == "Ignore"){
+	let year = parseInt(el.value);
+	let month = 0;
+	if(dtype == "Unposted"){
 		el.disabled = true;
+		elm.disabled = true;
+		lck.disabled = false;
+		cck.disabled = false;
+	}else if(dtype == "Ignore"){
+		el.disabled = true;
+		elm.disabled = true;
 		lck.disabled = true;
 		cck.disabled = true;
 	}else{
 		el.disabled = false;
 		lck.disabled = false;
 		cck.disabled = false;
-	}
-	let year = parseInt(el.value);
-	let month = 0;
-	el = document.getElementById("invDateMon");
-	if(dtype == "Ignore"){
-		el.disabled = true;
-	}else{
 		if(year > 1900){
-			el.disabled = false;
-			month = parseInt(el.value);
+			elm.disabled = false;
+			month = parseInt(elm.value);
 		}else
-			el.disabled = true;
+			elm.disabled = true;
 	}
 	el = document.getElementById("invNumMatch");
 	let match = el.value;
 	el = document.getElementById("invListDiv");
 	genPopulateTableFromArray(false, el);
-	
 	let post = {type:"invoice", datetype:dtype, dyear:year, dmon:month};
 	if(locationID && (document.getElementById("invIgnoreLoc").checked == false))
 		post.locID = locationID;
@@ -13813,14 +13814,14 @@ function invExpandTree(colValue, rec, i){
 			let actions = false;
 			let haction = false;
 			if(lastInvRec.posted == '0000-00-00'){
-				if((rec.Type == "order") && rec.DaypartID && rec.Start && rec.Days)
-					haction = `<button class="editbutton" onclick="invAddDupOrder(event)">+</button>`;
+				if(((rec.Type == "order") && rec.DaypartID && rec.Start && rec.Days) || (rec.Type == "bulk"))
+					haction = `<button class="editbutton" onclick="invAddDupOrder(event)" data-idx="`+i+`">+</button>`;
 				if(rec.Type != "bulk")
 					actions = `<button class="editbutton" onclick="invRemoveOrder(event)">-</button>`;
 			}
 			let colWidth = {Status:"75px", OrderDate:"75px", Slot:"120px", Fulfilled:"75px", Amount:"70px", action:"18px"};
 			let fields = {Amount:financialFormat};
-			let headings = {Status:"Status", OrderDate:"Date", Slot:"Slot", Fulfilled:"Fulfilled", Comment:"Comment", Amount:"Amount", Location: false, Type:false, Item:false, ID:false, Daypart:false, DaypartID:false, ItemID:false, Start: false, Days:false};
+			let headings = {Status:"Status", OrderDate:"Date", Slot:"Slot", Fulfilled:"Fulfilled", Comment:"Comment", Amount:"Amount", locID:false, Location: false, Type:false, Item:false, ID:false, Daypart:false, DaypartID:false, ItemID:false, Start: false, Days:false};
 			genPopulateTableFromArray(colValue, div, headings, false, false, false, actions, haction, fields, colWidth, false, false);
 			return {div:div, thisCell:"<button class='editbutton' onclick='invShowHidChldn(event)' data-idx='"+i+"'><i class='fa fa-caret-up'></i></button> "+colValue.length};
 		}else
@@ -13882,7 +13883,6 @@ function invNewOrderTypeChange(evt){
 		document.getElementById("newOrderPrUnit").hidden = true;
 	}
 	invOrderDateChange(); // check to see if the slot list needs updating too.
-
 }
 
 function invOrderDateChange(){
@@ -13956,8 +13956,64 @@ async function invAddOrder(evt){
 	}
 }
 
+function orderBulkReaderChange(){
+	if(document.getElementById("orderBulkReadDJ").value.length)
+		document.getElementById("orderBulkReadBtn").disabled = false;
+	else
+		document.getElementById("orderBulkReadBtn").disabled = true;
+}
+
+async function orderBulkReadAction(){
+	let dateTime = document.getElementById("orderBulkDateTime").value;
+	let i = document.getElementById("newBulkRow").getAttribute("data-idx");
+	if((dateTime !== null && dateTime.trim() !== "")){
+		// convert to unixtime from local ISO format 
+		dateTime = Date.parse(dateTime) / 1000;
+	}else{
+		alert("Invalid date and/or time format.");  
+		return;
+	}
+	let resp = await fetchContent("library/logread/"+lastOrdersRec[i].ItemID, {
+		method: 'POST',
+		body: JSON.stringify({locID: lastOrdersRec[i].locID, 
+										dateTime:dateTime, 
+										readBy: document.getElementById("orderBulkReadDJ").value
+									}),
+		headers: {
+			"Content-Type": "application/json",
+			"Accept": "application/json"
+		}
+	});
+	if(resp){
+		if(resp.ok){
+			alert("Created new bulk read event.");
+			invLoadRecord();
+		}else{
+			alert("Got an error logging data from server.\n"+resp.statusText);
+		}
+	}else{
+		alert("Failed to make a log entry from the server.");
+	}
+}
+
+function orderBulkReadClose(){
+	document.getElementById("newBulkRow").hidden = true;
+}
+
 function invAddDupOrder(evt){
-	
+	let i = evt.target.getAttribute("data-idx");
+	if(lastOrdersRec[i].Type == "bulk"){
+		// show manual read entry row: action is from a button on the row
+		let nor = document.getElementById("newBulkRow");
+		nor.setAttribute("data-idx", i);
+		let tbody = evt.target.parentNode.parentNode.parentNode;
+		let header = tbody.firstChild;
+		header.after(nor);
+		nor.hidden = false;
+	}else{
+		// create another daypart order, using this group's properties
+		//!!
+	}
 }
 
 function invRemoveOrder(evt){
@@ -13968,23 +14024,37 @@ function invBumpOrder(evt){
 	
 }
 
+function unhookNewOrderRows(){
+	// unhook "newOrderDiv" to "docWrapper"
+	let nor = document.getElementById("newOrderRow");
+	nor.hidden = true;
+	document.getElementById("holdingTable").appendChild(nor);
+	nor = document.getElementById("newBulkRow");
+	nor.hidden = true;
+	document.getElementById("holdingTable").appendChild(nor);
+}
+
+function hookNewOrderRows(tbl){
+	// connect new order rows
+	let nor = document.getElementById("newOrderRow");
+	let tbody = tbl.firstChild;
+	let header = tbody.firstChild;
+	header.after(nor);
+}
+
 function invRedisplayRecord(el){
 	let haction = false;
 	if(lastInvRec.posted == '0000-00-00')
 		haction = `<button class="editbutton" onclick="invOrderNew(event)">+</button>`;
 	let colWidth = {action:"18px", children:"50px", Type:"70px", Days:"43px", Amount:"70px", Daypart:"125px", Start:"104px", Location:"100px"};
 	let fields = {Amount:financialFormat, children:invExpandTree};
-	let headings = {children:"Qty", Type: "Type", Location:"Location", Item:"Campaign", Daypart:"Daypart", Start:"Start", Days:"Days", Amount:"Amount", showChldn:false, ID:false, DaypartID:false, ItemID:false};
-	// unhook "newOrderRow" to "docWrapper"
-	let nor = document.getElementById("newOrderRow");
-	nor.hidden = true;
-	document.getElementById("holdingTable").appendChild(nor);
+	let headings = {children:"Qty", Type: "Type", Location:"Location", Item:"Campaign", Daypart:"Daypart", Start:"Start", Days:"Days", Amount:"Amount", 
+						locID:false, showChldn:false, ID:false, DaypartID:false, ItemID:false};
+	unhookNewOrderRows();
 	genPopulateTableFromArray(lastOrdersRec, el, headings, false, false, false, false, haction, fields, colWidth, false, false);
 	// move "newOrderRow" hidden to first table row.
 	let tbl = el.firstChild;
-	let tbody = tbl.firstChild;
-	let header = tbody.firstChild;
-	header.after(nor);
+	hookNewOrderRows(tbl)
 }
 
 async function invLoadRecord(){
@@ -13994,10 +14064,7 @@ async function invLoadRecord(){
 	el = document.getElementById("invInfoBox");
 	el.style.display = "block";
 	el = document.getElementById("invOrdersDiv");
-	// unhook "newOrderDiv" to "docWrapper"
-	let nor = document.getElementById("newOrderRow");
-	nor.hidden = true;
-	document.getElementById("holdingTable").appendChild(nor);
+	unhookNewOrderRows();
 	if(invID){
 		// load invoice record
 		let resp = await fetchContent("library/get/invoices/"+invID, {

@@ -226,6 +226,7 @@ iframe{
 	text-align: center;
 	padding: 5px;
 	margin: 5px;
+	height: 100%;
 }
 
 .schedGrid {
@@ -419,7 +420,7 @@ iframe{
 .search-list {
 	text-align: left;
 	display: none;
-	max-height: 150px;
+	max-height: 152px;
 	overflow-y: auto;
 	position: absolute;
 	left: 0px;
