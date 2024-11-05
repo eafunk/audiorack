@@ -2986,7 +2986,7 @@ ORDER BY Type, Location, ItemID, Start, Days, OrderDate, DaypartID, Slot;`;
 			if(!parent || (result[i].locID != parent.locID) || (result[i].Type != parent.Type) || 
 							(result[i].ItemID != parent.ItemID) || (result[i].DaypartID != parent.DaypartID) ||
 							(result[i].Start != parent.Start) || (result[i].Days != parent.Days)){
-				parent = {ID: 0, locID: result[i].locID, Location: result[i].Location, Type: result[i].Type, Item:result[i].Item, Daypart:result[i].Daypart, 
+				parent = {ID: result[i].ID, locID: result[i].locID, Location: result[i].Location, Type: result[i].Type, Item:result[i].Item, Daypart:result[i].Daypart, 
 																		DaypartID:result[i].DaypartID, ItemID:result[i].ItemID, DaypartID: result[i].DaypartID,
 																		Start:result[i].Start, Days: result[i].Days, Amount: 0.0};
 				if(result[i].Type == "bulk")

@@ -887,7 +887,7 @@ app.get('/stadmin', function(request, response){
 									<textarea id="stConsRep" rows="19" width=100% readonly=""></textarea>
 									<div>
 										<input type="text" id="conCommand" placeholder="command" style="float: left; width: calc(100% - 35px)"></input>
-										<button class="editbutton" type="submit" onClick="stConsSend()" style="float: right; width: 25px;">Send</button>
+										<button class="editbutton" type="submit" onClick="stConsSend()" style="float: right; width: 32px;">Send</button>
 									</div>
 								</div>
 								<div id="stConfOut" class="accpanel">

@@ -13769,6 +13769,8 @@ function invOrderDaypartSel(evt){
 }
 
 function invCreateNew(){
+	//!!
+	
 	lastInvNum.setValue(0);
 	invLoadRecord();
 }
@@ -13890,7 +13892,7 @@ function invOrderDateChange(){
 		// using the specified date, populate the open slots menu
 		let locid = document.getElementById("newOrderLoc").selectedOptions[0].getAttribute("data-id");
 		let date = document.getElementById("newOrderStart").value;
-		//!! need to do this!
+		//!! need to do this! open slot menu.
 	}
 }
 
@@ -13938,7 +13940,7 @@ async function invAddOrder(evt){
 		alert("Created new bulk order.");
 		invLoadRecord();
 	}else if(type == "order-fixed"){
-		
+		//!! need to implement all below
 	}else if(type == "order-dp"){
 		let qty = document.getElementById("newOrderQty").value;
 		let locid = document.getElementById("newOrderLoc").selectedOptions[0].getAttribute("data-id");
@@ -14042,12 +14044,63 @@ function hookNewOrderRows(tbl){
 	header.after(nor);
 }
 
+async function invBulkUpdateRec(evt, save){
+	// for now, just days, come back and add Start, and Price
+	let cell = evt.target.parentNode;
+	let firstRowCell = cell.parentNode.firstChild;
+	let el = cell.firstChild;
+	let idx = parseInt(firstRowCell.firstChild.getAttribute("data-idx"));
+	let id = parseInt(lastOrdersRec[idx].ID);
+	let newVal = parseInt(el.value);
+	if(save && id && newVal){
+		// update to new value
+		let api = "library/set/orders/"+id;
+		let resp = await fetchContent(api, {
+				method: 'POST',
+				body: JSON.stringify({dp_range: newVal}),
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp){
+			if(resp.ok){
+				let repData = await resp.json();
+				if(!repData.affectedRows){
+					alert("Failed to get order ID back from server.\n");
+					return;
+				}
+			}else{
+				alert("Got an error saving order data to server.\n"+resp.statusText);
+				return;
+			}
+		}else{
+			alert("Failed to save order data to the server.");
+			return;
+		}
+		alert("Update bulk order record.");
+		lastOrdersRec[idx].Days = newVal;
+	}else
+		el.value = lastOrdersRec[idx].Days;	// return to original value
+}
+
+function invDaysFormater(colValue, rec, i){
+	if((lastInvRec.posted == '0000-00-00') && (rec.Type == "bulk")){
+		let result = "<input type='number' style='width: 4em' min='0' max='365' step='1' name='Days' value='"+colValue+"'>";
+		result += "<button class='editbutton' onclick='invBulkUpdateRec(event, 1)'>&check;</button><button class='editbutton' onclick='invBulkUpdateRec(event, 0)'>x</button>";
+		return result;
+	}else
+		return colValue;
+}
+
 function invRedisplayRecord(el){
 	let haction = false;
-	if(lastInvRec.posted == '0000-00-00')
-		haction = `<button class="editbutton" onclick="invOrderNew(event)">+</button>`;
-	let colWidth = {action:"18px", children:"50px", Type:"70px", Days:"43px", Amount:"70px", Daypart:"125px", Start:"104px", Location:"100px"};
 	let fields = {Amount:financialFormat, children:invExpandTree};
+	if(lastInvRec.posted == '0000-00-00'){
+		fields.Days = invDaysFormater;
+		haction = `<button class="editbutton" onclick="invOrderNew(event)">+</button>`;
+	}
+	let colWidth = {action:"18px", children:"50px", Type:"70px", Days:"43px", Amount:"70px", Daypart:"125px", Start:"104px", Location:"100px"};
 	let headings = {children:"Qty", Type: "Type", Location:"Location", Item:"Campaign", Daypart:"Daypart", Start:"Start", Days:"Days", Amount:"Amount", 
 						locID:false, showChldn:false, ID:false, DaypartID:false, ItemID:false};
 	unhookNewOrderRows();
@@ -14157,6 +14210,7 @@ async function invLoadRecord(){
 		// load empty/new record properties
 		lastInvRec = false;
 		lastOrdersRec = false;
+		el.innerHTML = "";
 		document.getElementById("invID").innerText = "";
 		document.getElementById("invPosted").innerText = "Not Yet Posted";
 		document.getElementById("invUpdateBtn").disabled = false;
