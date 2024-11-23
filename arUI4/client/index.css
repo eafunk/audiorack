@@ -51,7 +51,7 @@ html, body {
 .Bpanel {
 	display: flex;
 	flex-flow: row;
-	width: 700px;
+	width: 800px;
 	height: 0px; /* 0px height - change this with JavaScript */
 	position: fixed; /* Stay in place */
 	z-index: 20; /* Stay on top */
@@ -424,9 +424,9 @@ iframe{
 	overflow-y: auto;
 	position: absolute;
 	left: 0px;
-	background-color: #f6f6f6;
+	background-color: #d0d0d0;
 	min-width: 230px;
-	border: 1px solid #ddd;
+	border: 1px solid #888;
 	z-index: 20;
 }
 
@@ -437,9 +437,9 @@ iframe{
 	overflow-y: auto;
 	position: absolute;
 	right: 0px;
-	background-color: #f6f6f6;
+	background-color: #d0d0d0;
 	min-width: 230px;
-	border: 1px solid #ddd;
+	border: 1px solid #888;
 	z-index: 20;
 }
 
@@ -450,9 +450,9 @@ iframe{
 	overflow-y: auto;
 	position: relative;
 	right: 0px;
-	background-color: #f6f6f6;
+	background-color: #d0d0d0;
 	min-width: 120px;
-	border: 1px solid #ddd;
+	border: 1px solid #888;
 	z-index: 20;
 }
 
@@ -602,6 +602,13 @@ textarea {
 	padding: 5px;
 }
 
+#invInfoBox {
+	display: none;
+	flex-flow: column; 
+	height: 100%;
+	justify: center;
+}
+
 #brefine * {
 	font-size: 10px;
 }
@@ -713,6 +720,10 @@ button.active {
 #stQDur {
 	text-align: right;
 	font-size: 16px;
+}
+
+#scriptpane {
+
 }
 
 .player-fader {

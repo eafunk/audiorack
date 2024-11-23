@@ -40,7 +40,7 @@ includeScript("vumeter.js");
 includeScript("jssip-3.10.0.min.js");	// for live remote
 
 var infoWidth = "450px";
-var scriptHeight = "350px";
+var scriptHeight = "375px";
 var cred = false;
 var locName = new watchableValue(false);
 var locationID;
@@ -206,7 +206,11 @@ function timeFormatNoDP(timesec){
 function financialFormat(val){
 	if(typeof val === 'undefined')
 		return ""; // empty string
-	return Number.parseFloat(val).toFixed(2);
+	let num = Number.parseFloat(val);
+	if(isNaN(num))
+		return ""; // empty string
+	let str = num.toLocaleString('en-US', {style: 'currency', currency: 'USD'});
+	return str;
 }
 
 function updateListDuration(plprops){
@@ -1350,7 +1354,7 @@ function genPopulateTableFromArray(list, el, colMap, rowClick, headClick, sortVa
 					let val = list[i][cols[j]];
 					if(fieldTypes[cols[j]] instanceof Function){
 						// fieldType is a function... have the function process the value
-						let result = fieldTypes[cols[j]](val, list[i], i);
+						let result = fieldTypes[cols[j]](val, list[i], i, cols[j]);
 						if(typeof result === 'object'){
 							extraDiv = result.div;
 							inner = result.thisCell;
@@ -1421,8 +1425,9 @@ function genPopulateTableFromArray(list, el, colMap, rowClick, headClick, sortVa
 				if(newac.indexOf("$") > -1){
 					let parts = newac.split("$");	// function to call
 					for(let n = 0; n < parts.length; n++){
-						if(n % 2 == 1)
+						if(n % 2 == 1){
 							parts[n] = window[parts[n]](list[i]);
+						}
 					}
 					newac = parts.join("");
 				}
@@ -12819,9 +12824,11 @@ function campHeaderClick(event){	// this is only the headers cells, for sorting
 }
 
 function campCreateNew(){
-	selCampID = 0;
-	lastCampName.setValue(false);
-	campLoadRecord();
+	if(selCustID){
+		selCampID = 0;
+		lastCampName.setValue(false);
+		campLoadRecord();
+	}
 }
 
 function campRowClick(evt){
@@ -13769,15 +13776,16 @@ function invOrderDaypartSel(evt){
 }
 
 function invCreateNew(){
-	//!!
-	
-	lastInvNum.setValue(0);
-	invLoadRecord();
+	if(selCustID){
+		lastInvNum.setValue(0);
+		invLoadRecord();
+	}
 }
 
 function invOrderNew(){
 	let row = document.getElementById("newOrderRow");
 	row.hidden = false;
+	invNewOrderTypeChange({target: document.getElementById("newOrdertType")});
 }
 
 function invOrderNewClose(){
@@ -13807,30 +13815,6 @@ function invShowHidChldn(evt){
 	invRedisplayRecord(document.getElementById("invOrdersDiv"));
 }
 
-function invExpandTree(colValue, rec, i){
-	if(!colValue.length)
-		return "";
-	else{
-		if(rec.showChldn){
-			let div = document.createElement('div');
-			let actions = false;
-			let haction = false;
-			if(lastInvRec.posted == '0000-00-00'){
-				if(((rec.Type == "order") && rec.DaypartID && rec.Start && rec.Days) || (rec.Type == "bulk"))
-					haction = `<button class="editbutton" onclick="invAddDupOrder(event)" data-idx="`+i+`">+</button>`;
-				if(rec.Type != "bulk")
-					actions = `<button class="editbutton" onclick="invRemoveOrder(event)">-</button>`;
-			}
-			let colWidth = {Status:"75px", OrderDate:"75px", Slot:"120px", Fulfilled:"75px", Amount:"70px", action:"18px"};
-			let fields = {Amount:financialFormat};
-			let headings = {Status:"Status", OrderDate:"Date", Slot:"Slot", Fulfilled:"Fulfilled", Comment:"Comment", Amount:"Amount", locID:false, Location: false, Type:false, Item:false, ID:false, Daypart:false, DaypartID:false, ItemID:false, Start: false, Days:false};
-			genPopulateTableFromArray(colValue, div, headings, false, false, false, actions, haction, fields, colWidth, false, false);
-			return {div:div, thisCell:"<button class='editbutton' onclick='invShowHidChldn(event)' data-idx='"+i+"'><i class='fa fa-caret-up'></i></button> "+colValue.length};
-		}else
-			return "<button class='editbutton' onclick='invShowHidChldn(event)' data-idx='"+i+"'><i class='fa fa-caret-down'></i></button> "+colValue.length;
-	}
-}
-
 function invNewOrderTypeChange(evt){
 	let type = evt.target.value;
 	if(type == "bulk"){
@@ -13839,6 +13823,7 @@ function invNewOrderTypeChange(evt){
 		document.getElementById("newOrderCampBtn").hidden = false;
 		document.getElementById("newOrderDesc").hidden = true;
 		document.getElementById("newOrderDaypartBtn").hidden = true;
+		document.getElementById("newOrderSlotDiv").hidden = true;
 		document.getElementById("newOrderStart").hidden = false;
 		document.getElementById("newOrderDays").hidden = false;
 		document.getElementById("newOrderPrice").hidden = false;
@@ -13846,6 +13831,7 @@ function invNewOrderTypeChange(evt){
 	}else if(type == "order-dp"){
 		document.getElementById("newOrderQty").hidden = false;
 		document.getElementById("newOrderDaypartBtn").hidden = false;
+		document.getElementById("newOrderSlotDiv").hidden = true;
 		document.getElementById("newOrderStart").hidden = false;
 		document.getElementById("newOrderDays").hidden = false;
 		document.getElementById("newOrderPrUnit").hidden = false;
@@ -13856,7 +13842,8 @@ function invNewOrderTypeChange(evt){
 	}else if(type == "order-fixed"){
 		document.getElementById("newOrderQty").hidden = true;
 		document.getElementById("newOrderDaypartBtn").hidden = true;
-		document.getElementById("newOrderStart").hidden = true;
+		document.getElementById("newOrderSlotDiv").hidden = false;
+		document.getElementById("newOrderStart").hidden = false;
 		document.getElementById("newOrderDays").hidden = true;
 		document.getElementById("newOrderPrUnit").hidden = true;
 		document.getElementById("newOrderLoc").hidden = false;
@@ -13867,6 +13854,7 @@ function invNewOrderTypeChange(evt){
 		document.getElementById("newOrderQty").hidden = true;
 		document.getElementById("newOrderLoc").hidden = true;
 		document.getElementById("newOrderCampBtn").hidden = true;
+		document.getElementById("newOrderSlotDiv").hidden = true;
 		document.getElementById("newOrderDesc").hidden = false;
 		document.getElementById("newOrderDaypartBtn").hidden = true;
 		document.getElementById("newOrderStart").hidden = true;
@@ -13877,6 +13865,7 @@ function invNewOrderTypeChange(evt){
 		document.getElementById("newOrderQty").hidden = true;
 		document.getElementById("newOrderLoc").hidden = true;
 		document.getElementById("newOrderCampBtn").hidden = true;
+		document.getElementById("newOrderSlotDiv").hidden = true;
 		document.getElementById("newOrderDesc").hidden = false;
 		document.getElementById("newOrderDaypartBtn").hidden = true;
 		document.getElementById("newOrderStart").hidden = true;
@@ -13887,12 +13876,55 @@ function invNewOrderTypeChange(evt){
 	invOrderDateChange(); // check to see if the slot list needs updating too.
 }
 
-function invOrderDateChange(){
+function refreshInvSlotList(){
+	let date = document.getElementById("newOrderStart").value;
+	if(date){
+		let el = document.getElementById("newOrderLoc");
+		let locID = el.selectedOptions[0].getAttribute("data-id");
+		fetchContent("library/openslots/"+date, {
+			method: 'POST',
+			body: JSON.stringify({locID: locID, sortBy:"Name"}),
+			headers: {
+				"Content-Type": "application/json",
+				"Accept": "application/json"
+			}
+		}).then((resp) => {
+			if(resp instanceof Response){
+				if(resp.ok){
+					resp.json().then((data) => {
+						let div = document.getElementById("invOrderSlotList");
+						if(div){
+							buildSearchList(div, data, invOrderSlotSel);
+							let el = document.getElementById("invOrderSlotFilterText");
+							filterSearchList({target: el});
+						}
+					});
+					return;
+				}
+			}
+			// handle failure
+			if(resp)
+				alert("Got an error fetching data from server.\n"+resp);
+			else
+				alert("Failed to fetch data from the server.");  
+		});
+	}
+}
+
+function invOrderSlotSel(evt){
+	// close search-list menu
+	let el = document.getElementById("newOrderSlotBtn");
+	toggleShowSearchList({target: el});
+	// set button text to selection and save catid
+	el.setAttribute("data-id", evt.target.getAttribute("data-id"));
+	el.innerText = evt.target.innerText;
+}
+
+async function invOrderDateChange(){
 	if(document.getElementById("newOrdertType").value == "order-fixed"){
 		// using the specified date, populate the open slots menu
 		let locid = document.getElementById("newOrderLoc").selectedOptions[0].getAttribute("data-id");
-		let date = document.getElementById("newOrderStart").value;
-		//!! need to do this! open slot menu.
+		refreshInvSlotList();
 	}
 }
 
@@ -13937,24 +13969,155 @@ async function invAddOrder(evt){
 			alert("Failed to save order data to the server.");
 			return;
 		}
-		alert("Created new bulk order.");
-		invLoadRecord();
+		invLoadOrders(lastInvNum.getValue());
 	}else if(type == "order-fixed"){
-		//!! need to implement all below
+		let locid = document.getElementById("newOrderLoc").selectedOptions[0].getAttribute("data-id");
+		let itemid = document.getElementById("newOrderCampBtn").getAttribute("data-id");
+		let slot = document.getElementById("newOrderSlotBtn").getAttribute("data-id");
+		let start = document.getElementById("newOrderStart").value;
+		let amount = document.getElementById("newOrderPrice").value;
+		let api = "library/set/orders";
+		let resp = await fetchContent(api, {
+				method: 'POST',
+				body: JSON.stringify({invoice: invid, 
+					itemID: itemid, // needs to be an item, not campaign
+					amount: amount, 
+					location: locid,
+					type: "order",
+					date: start,
+					slotID: slot
+				 }),
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp){
+			if(resp.ok){
+				let repData = await resp.json();
+				if(!repData.insertId){
+					alert("Failed to get new order ID back from server.\n");
+					return;
+				}
+			}else{
+				alert("Got an error saving order data to server.\n"+resp.statusText);
+				return;
+			}
+		}else{
+			alert("Failed to save order data to the server.");
+			return;
+		}
+		invLoadOrders(lastInvNum.getValue());
 	}else if(type == "order-dp"){
+		let reply;
 		let qty = document.getElementById("newOrderQty").value;
 		let locid = document.getElementById("newOrderLoc").selectedOptions[0].getAttribute("data-id");
-		let campid = document.getElementById("newOrderCampBtn").getAttribute("data-id");
+		let itemid = document.getElementById("newOrderCampBtn").getAttribute("data-id");
 		let dpid = document.getElementById("newOrderDaypartBtn").getAttribute("data-id");
 		let start = document.getElementById("newOrderStart").value;
 		let days = document.getElementById("newOrderDays").value;
 		let amount = document.getElementById("newOrderPrice").value;
+		let api = "library/dporder/"+invid;
+		let resp = await fetchContent(api, {
+				method: 'POST',
+				body: JSON.stringify({locID: locid, 
+					itemID: itemid, // needs to be an item, not campaign
+					price: amount, 
+					dpID: dpid,
+					start: start,
+					days: days,
+					qty: qty
+				 }),
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp){
+			if(resp.ok){
+				reply = await resp.json();
+				if(!reply){
+					alert("Failed to get daypart order status back from server.\n");
+					return;
+				}
+			}else{
+				alert("Got an error saving order data to server.\n"+resp.statusText);
+				return;
+			}
+		}else{
+			alert("Failed to save order data to the server.");
+			return;
+		}
+		if(reply.failed)
+			alert("New daypart orders failed: Could not be fit into the schedule.");
+		else{
+			alert("Created new daypart orders.", "Requested: "+reply.requested, "Filled: "+reply.filled, "Bumped to fill: "+reply.bumped, "Failed: "+reply.failed);
+			invLoadOrders(lastInvNum.getValue());
+		}
 	}else if(type == "item"){
 		let desc = document.getElementById("newOrderDesc").value;
 		let amount = document.getElementById("newOrderPrice").value;
+		let api = "library/set/orders";
+		let resp = await fetchContent(api, {
+				method: 'POST',
+				body: JSON.stringify({invoice: invid, 
+					amount: amount, 
+					type: "item",
+					comment: desc
+				 }),
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp){
+			if(resp.ok){
+				let repData = await resp.json();
+				if(!repData.insertId){
+					alert("Failed to get new order ID back from server.\n");
+					return;
+				}
+			}else{
+				alert("Got an error saving order data to server.\n"+resp.statusText);
+				return;
+			}
+		}else{
+			alert("Failed to save order data to the server.");
+			return;
+		}
+		invLoadOrders(lastInvNum.getValue());
 	}else if(type == "credit"){
 		let desc = document.getElementById("newOrderDesc").value;
 		let amount = document.getElementById("newOrderPrice").value;
+		let api = "library/set/orders";
+		let resp = await fetchContent(api, {
+				method: 'POST',
+				body: JSON.stringify({invoice: invid, 
+					amount: amount, 
+					type: "credit",
+					comment: desc
+				 }),
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp){
+			if(resp.ok){
+				let repData = await resp.json();
+				if(!repData.insertId){
+					alert("Failed to get new order ID back from server.\n");
+					return;
+				}
+			}else{
+				alert("Got an error saving order data to server.\n"+resp.statusText);
+				return;
+			}
+		}else{
+			alert("Failed to save order data to the server.");
+			return;
+		}
+		invLoadOrders(lastInvNum.getValue());
 	}
 }
 
@@ -14002,7 +14165,7 @@ function orderBulkReadClose(){
 	document.getElementById("newBulkRow").hidden = true;
 }
 
-function invAddDupOrder(evt){
+async function invAddDupOrder(evt){
 	let i = evt.target.getAttribute("data-idx");
 	if(lastOrdersRec[i].Type == "bulk"){
 		// show manual read entry row: action is from a button on the row
@@ -14014,16 +14177,110 @@ function invAddDupOrder(evt){
 		nor.hidden = false;
 	}else{
 		// create another daypart order, using this group's properties
-		//!!
+		let parentRec = lastOrdersRec[i];
+		if(parentRec.Type == "order"){
+			let invid = lastInvNum.getValue();
+			if(parentRec.locID && parentRec.ItemID && parentRec.DaypartID && parentRec.Days && parentRec.Start && parentRec.Start.length){
+				let api = "library/dporder/"+invid;
+				let reply;
+				let resp = await fetchContent(api, {
+						method: 'POST',
+						body: JSON.stringify({locID: parentRec.locID, 
+							itemID: parentRec.ItemID, // needs to be an item, not campaign
+							price: parentRec.Amount, 
+							dpID: parentRec.DaypartID,
+							start: parentRec.Start,
+							days: parentRec.Days,
+							qty: 1
+						 }),
+						headers: {
+							"Content-Type": "application/json",
+							"Accept": "application/json"
+						}
+					});
+				if(resp){
+					if(resp.ok){
+						reply = await resp.json();
+						if(!reply){
+							alert("Failed to get daypart order status back from server.\n");
+							return;
+						}
+					}else{
+						alert("Got an error saving order data to server.\n"+resp.statusText);
+						return;
+					}
+				}else{
+					alert("Failed to save order data to the server.");
+					return;
+				}
+				if(reply.failed)
+					alert("Duplicate daypart order failed: Could not be fit into the schedule.");
+				else{
+					alert("Duplicated daypart order.", "Requested: "+reply.requested, "Filled: "+reply.filled, "Bumped to fill: "+reply.bumped, "Failed: "+reply.failed);
+					invLoadOrders(lastInvNum.getValue());
+				}
+			}
+		}
 	}
 }
 
-function invRemoveOrder(evt){
-	
+async function invRemoveOrder(evt){
+	let cell = evt.target.parentNode;
+	let row = cell.parentNode;
+	let id = parseInt(row.firstChild.firstChild.getAttribute("data-id"));	// order subitem
+	if(!id){
+		let idx = parseInt(row.firstChild.firstChild.getAttribute("data-idx"));	// order group item (bulk type if deletable)
+		id = parseInt(lastOrdersRec[idx].ID);
+	}
+	if(id){
+		let api = "library/delete/orders/"+id;
+		let resp = await fetchContent(api, {
+				method: 'GET',
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp){
+			if(resp.ok){
+				invLoadOrders(lastInvNum.getValue());
+				return;
+			}else{
+				alert("Got an error removing order data from server.\n"+resp.statusText);
+			}
+		}else{
+			alert("Failed to delete order data from the server.");
+		}
+	}
+	alert("Failed due to missing order record ID.");
 }
 
-function invBumpOrder(evt){
-	
+async function invBumpOrder(evt){
+	let cell = evt.target.parentNode;
+	let row = cell.parentNode;
+	let id = parseInt(row.firstChild.firstChild.getAttribute("data-id"));	// order subitem
+	if(id){
+		let api = "library/bump/"+id;
+		let resp = await fetchContent(api, {
+				method: 'GET',
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp){
+			if(resp.ok){
+				alert("Order bumped.");
+				invLoadOrders(lastInvNum.getValue());
+				return;
+			}else{
+				alert("Got an error bumping order.\n"+resp.statusText);
+			}
+		}else{
+			alert("Failed to bump order.");
+		}
+	}
+	alert("Failed due to missing order record ID.");
 }
 
 function unhookNewOrderRows(){
@@ -14047,67 +14304,195 @@ function hookNewOrderRows(tbl){
 async function invBulkUpdateRec(evt, save){
 	// for now, just days, come back and add Start, and Price
 	let cell = evt.target.parentNode;
-	let firstRowCell = cell.parentNode.firstChild;
-	let el = cell.firstChild;
-	let idx = parseInt(firstRowCell.firstChild.getAttribute("data-idx"));
+	let row = cell.parentNode;
+	let idx = parseInt(row.firstChild.firstChild.getAttribute("data-idx"));
 	let id = parseInt(lastOrdersRec[idx].ID);
-	let newVal = parseInt(el.value);
-	if(save && id && newVal){
-		// update to new value
-		let api = "library/set/orders/"+id;
-		let resp = await fetchContent(api, {
-				method: 'POST',
-				body: JSON.stringify({dp_range: newVal}),
-				headers: {
-					"Content-Type": "application/json",
-					"Accept": "application/json"
-				}
-			});
-		if(resp){
-			if(resp.ok){
-				let repData = await resp.json();
-				if(!repData.affectedRows){
-					alert("Failed to get order ID back from server.\n");
+	let cols = row.childNodes;
+	let curRec = lastOrdersRec[idx];
+	if(save){
+		let post = {};
+		let el = cols[4].firstChild;	// start
+		let newVal = el.value;
+		if(newVal != curRec.Start)
+			post.dp_start = newVal;
+		
+		el = cols[5].firstChild;	// days
+		newVal = parseInt(el.value);
+		if(newVal != curRec.Days)
+			post.dp_range = newVal;
+
+		el = cols[7].firstChild;	// amount
+		newVal = parseFloat(el.value);
+		if(newVal != curRec.Amount)
+			post.amount = newVal;
+
+		if(id && Object.keys(post).length){
+			// update to new value
+			let api = "library/set/orders/"+id;
+			let resp = await fetchContent(api, {
+					method: 'POST',
+					body: JSON.stringify(post),
+					headers: {
+						"Content-Type": "application/json",
+						"Accept": "application/json"
+					}
+				});
+			if(resp){
+				if(resp.ok){
+					let repData = await resp.json();
+					if(!repData.affectedRows){
+						alert("Failed to get order ID back from server.\n");
+						return;
+					}
+				}else{
+					alert("Got an error saving order data to server.\n"+resp.statusText);
 					return;
 				}
 			}else{
-				alert("Got an error saving order data to server.\n"+resp.statusText);
+				alert("Failed to save order data to the server.");
 				return;
 			}
-		}else{
-			alert("Failed to save order data to the server.");
-			return;
+			alert("Update bulk order record.");
+			lastOrdersRec[idx].Days = post.dp_start;
+			lastOrdersRec[idx].Start = post.dp_range
+			lastOrdersRec[idx].Amount = post.amount;
+
 		}
-		alert("Update bulk order record.");
-		lastOrdersRec[idx].Days = newVal;
-	}else
-		el.value = lastOrdersRec[idx].Days;	// return to original value
+	}else{
+		let el = cols[4].firstChild;	// start
+		el.value = curRec.Start;
+		
+		el = cols[5].firstChild;	// days
+		el.value = parseInt(curRec.Days);
+		
+		el = cols[7].firstChild;	// amount
+		el.value = parseFloat(curRec.Amount);
+	}
 }
 
-function invDaysFormater(colValue, rec, i){
-	if((lastInvRec.posted == '0000-00-00') && (rec.Type == "bulk")){
-		let result = "<input type='number' style='width: 4em' min='0' max='365' step='1' name='Days' value='"+colValue+"'>";
-		result += "<button class='editbutton' onclick='invBulkUpdateRec(event, 1)'>&check;</button><button class='editbutton' onclick='invBulkUpdateRec(event, 0)'>x</button>";
+function invOrderFormater(colValue, rec, i, colName){
+	let result = colValue;
+	if(rec.Type == "bulk"){
+		if(colName == "Days")
+			result = "<input type='number' style='width: 4em' min='0' max='365' step='1' name='Days' value='"+colValue+"'>";
+		else if(colName == "Start")
+			result = "<input type='date' name='Start' value='"+colValue+"'>";
+		else if(colName == "Amount")
+			result = "<input type='number' style='width: 6.8em' min='0.00' max='10000.00' step='0.01' name='Price' value='"+colValue+"'>";
+	}else if(colName == "Amount")
+		result = financialFormat(colValue);
+	if(result != null)
 		return result;
+	else
+		return "";
+}
+
+function orderActionFormat(rec){ // can't start with i, or it interfears with $i decoding
+	if(rec.Type == "bulk"){
+		return "<button class='editbutton' onclick='invBulkUpdateRec(event, 1)'>&check;</button><button class='editbutton' onclick='invBulkUpdateRec(event, 0)'>&cularr;</button><button class='editbutton' onclick='invRemoveOrder(event)'>x</button>";
 	}else
-		return colValue;
+		return "";
+}
+
+function invExpandTree(colValue, rec, i){
+	if(!colValue.length)
+		return "";
+	else{
+		if(rec.showChldn){
+			let div = document.createElement('div');
+			let actions = false;
+			let haction = false;
+			if(lastInvRec.posted == '0000-00-00'){
+				if(((rec.Type == "order") && rec.DaypartID && rec.Start && rec.Days) || (rec.Type == "bulk"))
+					haction = `<button class="editbutton" onclick="invAddDupOrder(event)" data-idx="`+i+`">+</button>`;
+				if(rec.Type != "bulk"){
+					actions = `<button class="editbutton" onclick="invRemoveOrder(event)">-</button>`;
+					if(rec.Type == "order"){
+						let enddate = new Date(rec.Start);
+						let today = new Date();
+						enddate.setDate(enddate.getDate() + rec.Days);
+						today.setHours(0, 0, 0, 0);
+						enddate.setHours(0, 0, 0, 0);
+						if(today <= enddate)
+							actions +=`<button class="editbutton" onclick="invBumpOrder(event)">&#x279F;</button>`;
+					}
+				}
+			}
+			let colWidth = {Status:"75px", OrderDate:"75px", Slot:"120px", Fulfilled:"75px", Amount:"70px", action:"36px"};
+			let fields = {Status: "<input type='hidden' name='Status' data-id='$ID'></input>$val", Amount:financialFormat};
+			let headings = {Status:"Status", OrderDate:"Date", Slot:"Slot", Fulfilled:"Fulfilled", Comment:"Comment", Amount:"Amount", locID:false, Location: false, Type:false, Item:false, ID:false, Daypart:false, DaypartID:false, ItemID:false, Start: false, Days:false};
+			genPopulateTableFromArray(colValue, div, headings, false, false, false, actions, haction, fields, colWidth, false, false);
+			return {div:div, thisCell:"<button class='editbutton' onclick='invShowHidChldn(event)' data-idx='"+i+"'><i class='fa fa-caret-up'></i></button> "+colValue.length};
+		}else
+			return "<button class='editbutton' onclick='invShowHidChldn(event)' data-idx='"+i+"'><i class='fa fa-caret-down'></i></button> "+colValue.length;
+	}
 }
 
 function invRedisplayRecord(el){
 	let haction = false;
+	let rowAction = false;
 	let fields = {Amount:financialFormat, children:invExpandTree};
 	if(lastInvRec.posted == '0000-00-00'){
-		fields.Days = invDaysFormater;
+		fields.Days = invOrderFormater;
+		fields.Start = invOrderFormater;
+		fields.Amount = invOrderFormater;
+		fields.Campaign = invOrderFormater;
 		haction = `<button class="editbutton" onclick="invOrderNew(event)">+</button>`;
+		rowAction = `$orderActionFormat$`;
 	}
 	let colWidth = {action:"18px", children:"50px", Type:"70px", Days:"43px", Amount:"70px", Daypart:"125px", Start:"104px", Location:"100px"};
-	let headings = {children:"Qty", Type: "Type", Location:"Location", Item:"Campaign", Daypart:"Daypart", Start:"Start", Days:"Days", Amount:"Amount", 
-						locID:false, showChldn:false, ID:false, DaypartID:false, ItemID:false};
+	let headings = {children:"Qty", Type: "Type", Location:"Location", Item:"Campaign", Start:"Start", Days:"Days", Daypart:"Daypart", Amount:"Amount", 
+						locID:false, showChldn:false, ID:false, DaypartID:false, ItemID:false, groupHash:false};
 	unhookNewOrderRows();
-	genPopulateTableFromArray(lastOrdersRec, el, headings, false, false, false, false, haction, fields, colWidth, false, false);
+	genPopulateTableFromArray(lastOrdersRec, el, headings, false, false, false, rowAction, haction, fields, colWidth, false, false);
 	// move "newOrderRow" hidden to first table row.
 	let tbl = el.firstChild;
 	hookNewOrderRows(tbl)
+}
+
+async function invLoadOrders(invID){
+	// lastInvNum.getValue()
+	// load existing associated orders
+	unhookNewOrderRows();
+	let total = 0.0;
+	let el = document.getElementById("invOrdersDiv");
+	el.innerHTML = "<div class='center'><i class='fa fa-circle-o-notch fa-spin' style='font-size:48px'></i></div>";
+	resp = await fetchContent("library/getorders/"+invID, {
+			method: 'GET',
+			headers: {
+				"Content-Type": "application/json",
+				"Accept": "application/json"
+			}
+		});
+	if(resp instanceof Response){
+		if(resp.ok){
+			let resultRec = await resp.json();
+			if(lastOrdersRec){
+				// remember which rows are expanded
+				for(let i=0; i<lastOrdersRec.length; i++){
+					let rec = lastOrdersRec[i];
+					if(rec.showChldn){
+						let obj = findPropObjInArray(resultRec, "groupHash", rec.groupHash)
+						if(obj)
+							obj.showChldn = 1;
+					}
+				}
+			}
+			lastOrdersRec = resultRec;
+			for(let i=0; i<lastOrdersRec.length; i++)
+				total += lastOrdersRec[i].Amount;
+			document.getElementById("invTotal").innerText = financialFormat(total);
+			invRedisplayRecord(el);
+			return;
+		}
+	}
+	// handle failure
+	genPopulateTableFromArray(false, el);
+	if(resp)
+		alert("Got an error fetching data from server.\n"+resp);
+	else
+		alert("Failed to fetch data from the server.");  
+	invRecClose();
 }
 
 async function invLoadRecord(){
@@ -14115,9 +14500,8 @@ async function invLoadRecord(){
 	let el = document.getElementById("invSearchBox");
 	el.style.display = "none";
 	el = document.getElementById("invInfoBox");
-	el.style.display = "block";
+	el.style.display = "flex";
 	el = document.getElementById("invOrdersDiv");
-	unhookNewOrderRows();
 	if(invID){
 		// load invoice record
 		let resp = await fetchContent("library/get/invoices/"+invID, {
@@ -14181,31 +14565,10 @@ async function invLoadRecord(){
 			document.getElementById("invCustRep").innerText = "Customer's Rep: "+lastInvRec.repCust;
 			
 		}
-		
-		// load existing associated orders
 		document.getElementById("invID").innerText = invID;
-		el.innerHTML = "<div class='center'><i class='fa fa-circle-o-notch fa-spin' style='font-size:48px'></i></div>";
-		resp = await fetchContent("library/getorders/"+invID, {
-				method: 'GET',
-				headers: {
-					"Content-Type": "application/json",
-					"Accept": "application/json"
-				}
-			});
-		if(resp instanceof Response){
-			if(resp.ok){
-				lastOrdersRec = await resp.json();
-				invRedisplayRecord(el);
-				return;
-			}
-		}
-		// handle failure
-		genPopulateTableFromArray(false, el);
-		if(resp)
-			alert("Got an error fetching data from server.\n"+resp);
-		else
-			alert("Failed to fetch data from the server.");  
-		invRecClose();
+
+		invLoadOrders(invID);
+		
 	}else{
 		// load empty/new record properties
 		lastInvRec = false;
@@ -14253,7 +14616,7 @@ async function invSaveRecord(evt){
 			if(resp.ok){
 				let repData = await resp.json();
 				if(repData.insertId){
-					lastInvNum.setValue(repData.insertId);;
+					lastInvNum.setValue(repData.insertId);
 				}else{
 					alert("Failed to get new invoice ID back from server.\n");
 					return;

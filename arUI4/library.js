@@ -20,6 +20,49 @@
 
 const DefLimit = 0;	// zero for no default limit: return all results
 
+const CRC32_TABLE = (function(){
+	let c;
+	let crcTable = [];
+	for (let n = 0; n < 256; n++){
+		c = n;
+		for(let k = 0; k < 8; k++)
+			c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+		crcTable[n] = c;
+	}
+	return crcTable;
+})();
+
+function crc32(string, crc){
+	// first call, crc should be set to zero
+	let bytes = bytesFor(string);
+	let n = 0;
+	crc = crc ^ -1;
+	
+	let i = 0;
+	const iTop = bytes.length;
+
+	while(i < iTop){
+		n = (crc ^ bytes[i]) & 0xff;
+		crc = (crc >>> 8) ^ CRC32_TABLE[n];
+		i++;
+	}
+	
+	crc = crc ^ -1;
+	if(crc < 0)
+		crc += 4294967296;
+	return crc;
+}
+
+function bytesFor(string){
+	const bytes = [];
+	let i = 0;
+	while(i < string.length){
+		bytes.push(string.charCodeAt(i));
+		++i;
+	}
+	return bytes;
+};
+
 var mysql = require('mysql');
 const _= require('lodash');
 var fs = require('fs');
@@ -2912,7 +2955,7 @@ function responseWrapper(request, response, params, dirs, func){
 					response.json(result);
 					response.end();
 				}else{
-					response.status(400);
+					response.status(result);
 					response.end();
 				}
 				if(connection)
@@ -2929,16 +2972,330 @@ function responseWrapper(request, response, params, dirs, func){
 	}
 }
 
-async function bumpInvoiceOrder(connection, request, response, params, dirs){
+async function getOpenAdSlots(connection, orderID, start, locID, days, daypartID, count, notRandom){
+	// Either orderID is present, for which all open slots are returned that meet the orderID item's daypart order requirements 
+	// with optional confinment to a specified date (start), or all other parameters must be provided with search results based
+	// on the parameter confinments. NOTE: If orderID is set, count is set to 1 if it is false/null, etc., and zero for all results
+	// for bumping, and bump checking.
+	// DaypartID can be false or zero to remove limiting results to a daypart schedule. 
 	
+	let result;
+	let query = `SELECT `+locConf['prefix']+`schedule.Item AS id, CONCAT(`+locConf['prefix']+`schedule.Hour, ':', LPAD(`+locConf['prefix']+`schedule.Minute, 2,'0'), '-', `+locConf['prefix']+`toc.Name) AS Name, `;
+	if(start)
+		query += `DATE_ADD('`+start+`', INTERVAL `+locConf['prefix']+`vector.number DAY) AS openDate `;
+	else
+		query += `DATE_ADD(original.dp_start, INTERVAL `+locConf['prefix']+`vector.number DAY) AS openDate `;
+	query += `FROM (`;
+	if(orderID){
+		if(count)
+			count = 0;
+		else
+			count = 1;
+		query +=``+locConf['prefix']+`orders AS original, `;
+	}
+	query += locConf['prefix']+`vector, `+locConf['prefix']+`schedule, `+locConf['prefix']+`toc, `+locConf['prefix']+`hourmap, 
+		`+locConf['prefix']+`daymap, `+locConf['prefix']+`category, `+locConf['prefix']+`category_item`;
+	if(daypartID || orderID)
+		query += `, `+locConf['prefix']+`daypart_times) `;
+	else
+		query +=`) `;
+	if(orderID){
+		query += `LEFT JOIN `+locConf['prefix']+`rest ON (`+locConf['prefix']+`schedule.Item = `+locConf['prefix']+`rest.Item AND `+locConf['prefix']+`rest.Location = original.location) 
+		LEFT JOIN `+locConf['prefix']+`orders ON (`+locConf['prefix']+`orders.location = original.location AND `+locConf['prefix']+`orders.type = 'order' 
+		AND `+locConf['prefix']+`orders.slotID = `+locConf['prefix']+`schedule.Item `;
+		if(start)
+			query += `AND `+locConf['prefix']+`orders.date = DATE_ADD('`+start+`', INTERVAL `+locConf['prefix']+`vector.number DAY)) `;
+		else
+			query += `AND `+locConf['prefix']+`orders.date = DATE_ADD(original.dp_start, INTERVAL `+locConf['prefix']+`vector.number DAY)) `;
+	}
+	else
+		query += `LEFT JOIN `+locConf['prefix']+`rest ON (`+locConf['prefix']+`schedule.Item = `+locConf['prefix']+`rest.Item AND `+locConf['prefix']+`rest.Location = `+locID+`) 
+		LEFT JOIN ar_orders ON (`+locConf['prefix']+`orders.location = `+locID+` AND `+locConf['prefix']+`orders.type = 'order' 
+		AND `+locConf['prefix']+`orders.slotID = `+locConf['prefix']+`schedule.Item 
+		AND `+locConf['prefix']+`orders.date = DATE_ADD('`+start+`', INTERVAL `+locConf['prefix']+`vector.number DAY)) `;
+	query += `WHERE `;
+	if(orderID){
+		if(start)
+			query += `original.ID = `+orderID+` AND original.type = 'order' AND original.fulfilled is NULL AND `+locConf['prefix']+`vector.number < 1 
+			AND DATE_ADD(DATE_ADD('`+start+`', INTERVAL `+locConf['prefix']+`vector.number DAY), INTERVAL `+locConf['prefix']+`schedule.Hour HOUR) > NOW() `;
+		else
+			query += `original.ID = `+orderID+` AND original.type = 'order' AND original.fulfilled is NULL AND `+locConf['prefix']+`vector.number < original.dp_range 
+			AND DATE_ADD(DATE_ADD(original.dp_start, INTERVAL `+locConf['prefix']+`vector.number DAY), INTERVAL `+locConf['prefix']+`schedule.Hour HOUR) > NOW() `;
+	}else
+		query += locConf['prefix']+`vector.number < `+days+` AND 
+		DATE_ADD(DATE_ADD('`+start+`', INTERVAL `+locConf['prefix']+`vector.number DAY), INTERVAL `+locConf['prefix']+`schedule.Hour HOUR) > NOW() `;
+	query += `AND `+locConf['prefix']+`orders.itemID IS NULL AND `+locConf['prefix']+`rest.Added IS NULL 
+			AND `+locConf['prefix']+`schedule.Day = `+locConf['prefix']+`daymap.Day 
+			AND `+locConf['prefix']+`schedule.Hour = `+locConf['prefix']+`hourmap.Hour `;
+	if(orderID){
+		query += `AND `+locConf['prefix']+`daypart_times.daypart = original.daypart AND 
+		(`+locConf['prefix']+`schedule.Location IS NULL OR `+locConf['prefix']+`schedule.Location = original.location) `;
+		if(start)
+			query += `AND `+locConf['prefix']+`daypart_times.day = DAYOFWEEK(DATE_ADD('`+start+`', INTERVAL `+locConf['prefix']+`vector.number DAY))-1 
+			AND (`+locConf['prefix']+`schedule.Month = 0 OR `+locConf['prefix']+`schedule.Month = MONTH(DATE_ADD('`+start+`', INTERVAL `+locConf['prefix']+`vector.number DAY)) ) 
+			AND (`+locConf['prefix']+`schedule.Date = 0 OR `+locConf['prefix']+`schedule.Date = DAYOFMONTH(DATE_ADD('`+start+`', INTERVAL `+locConf['prefix']+`vector.number DAY)) ) 
+			AND `+locConf['prefix']+`daymap.Map = DAYOFWEEK(DATE_ADD('`+start+`', INTERVAL `+locConf['prefix']+`vector.number DAY)) `;
+		else
+			query += `AND `+locConf['prefix']+`daypart_times.day = DAYOFWEEK(DATE_ADD(original.dp_start, INTERVAL `+locConf['prefix']+`vector.number DAY))-1 
+			AND (`+locConf['prefix']+`schedule.Month = 0 OR `+locConf['prefix']+`schedule.Month = MONTH(DATE_ADD(original.dp_start, INTERVAL `+locConf['prefix']+`vector.number DAY)) ) 
+			AND (`+locConf['prefix']+`schedule.Date = 0 OR `+locConf['prefix']+`schedule.Date = DAYOFMONTH(DATE_ADD(original.dp_start, INTERVAL `+locConf['prefix']+`vector.number DAY)) ) 
+			AND `+locConf['prefix']+`daymap.Map = DAYOFWEEK(DATE_ADD(original.dp_start, INTERVAL `+locConf['prefix']+`vector.number DAY)) `
+	}else{
+		if(daypartID)
+			query += `AND `+locConf['prefix']+`daypart_times.daypart = `+daypartID+` AND 
+			`+locConf['prefix']+`daypart_times.day = DAYOFWEEK(DATE_ADD('`+start+`', INTERVAL `+locConf['prefix']+`vector.number DAY))-1 
+			AND `+locConf['prefix']+`schedule.Hour BETWEEN `+locConf['prefix']+`daypart_times.start AND `+locConf['prefix']+`daypart_times.stop `;
+		query += `AND (`+locConf['prefix']+`schedule.Location IS NULL OR `+locConf['prefix']+`schedule.Location = `+locID+`) 
+		AND (`+locConf['prefix']+`schedule.Month = 0 OR `+locConf['prefix']+`schedule.Month = MONTH(DATE_ADD('`+start+`', INTERVAL `+locConf['prefix']+`vector.number DAY)) ) 
+		AND (`+locConf['prefix']+`schedule.Date = 0 OR `+locConf['prefix']+`schedule.Date = DAYOFMONTH(DATE_ADD('`+start+`', INTERVAL `+locConf['prefix']+`vector.number DAY)) ) 
+		AND `+locConf['prefix']+`daymap.Map = DAYOFWEEK(DATE_ADD('`+start+`', INTERVAL `+locConf['prefix']+`vector.number DAY)) `
+	}
+	query += `AND `+locConf['prefix']+`schedule.Fill = 0 AND `+locConf['prefix']+`schedule.Item = `+locConf['prefix']+`toc.ID 
+	AND `+locConf['prefix']+`schedule.Priority > 0 AND `+locConf['prefix']+`toc.Type = 'task' 
+	AND `+locConf['prefix']+`category_item.Item = `+locConf['prefix']+`schedule.Item AND `+locConf['prefix']+`category_item.Category = `+locConf['prefix']+`category.ID 
+	AND `+locConf['prefix']+`category.Name = 'Advertisement' 
+		GROUP BY openDate, id`;
+	if(!notRandom)
+		query += ` ORDER BY RAND()`;
+	else 
+		query += ` ORDER BY `+locConf['prefix']+`schedule.Hour, `+locConf['prefix']+`schedule.Minute`;
+	if(count)
+		query += ` LIMIT `+count;
+	query += ";";
+console.log("getOpenAdSlots",query);
+	try{
+		result = await asyncQuery(connection, query);
+	}catch(err){
+		return 304;
+	}
+	return result;
+}
+
+async function getOpenSlotsForDate(connection, request, response, params, dirs){
+	if(dirs[3]){
+		// get date locID and make sure it is a number.
+		let locID = parseInt(params.locID, 10);
+		if(isNaN(locID) || !locID)
+			return 400;
+		// check for permission
+		if(request.session.permission == "studio")	// studio permission is not allowed to a access this, all others are not
+			return 401;
+		let result = await getOpenAdSlots(connection, false, dirs[3], locID, 1, false, false, true);
+		return result;
+	}
+	return 400;
+}
+
+async function bumpInvoiceOrder(connection, request, response, params, dirs){	// /bump/orderID{?date=YYYY-MM-DD}{&slot=slotItemID}
+	// returns the orderID if sucessfull.
+	// date and slot are optional.  If slot is specified, date must be specified as well. 
+	// If slot is specified, date must also be specified, and the slot date combination must be open.
+	// In the slot and date case, no checking is performed to verify the bump to slot and date is available.
+	if(dirs[3]){
+		let orderID = parseInt(dirs[3], 10);
+		if(isNaN(orderID) || !orderID)
+			return 400;
+		let date = params.date;
+		let slotID = parseInt(params.slot, 10);
+		if(isNaN(slotID))
+			slotID = 0;
+		// check for permission
+		if(request.session.permission == "studio")	// studio permission is not allowed to a access this, all others are not
+			return 401;
+		let result = await bumpOrderID(connection, orderID, date, slotID);
+		if(result)
+			return {orderID: orderID};
+		return result;
+	}
+	return 400;
+}
+
+async function bumpOrderID(connection, orderID, date, slot){
+	// returns the orderID back if sucessfull, or 0 if the order could not be bumped.
+	// date and slot are optional.  If slot is specified, date must be specified as well. 
+	// If slot is specified, date must also be specified, and the slot date combination must be open.
+	// In the slot and date case, checking IS performed to verify the bump to slot and date is available.
+	if(slot){
+		// Check if the specified shot is open and a candidate for this order.
+		let candidates = await getOpenAdSlots(connection, orderID, date, false, false, false, 1);	// this gets all candidates for the orderID item
+		if(typeof candidates !== 'number'){
+			let match = false;
+			for(let i=0; i<candidates.length; i++){
+				if(slot == canbdidats[i].id){
+					match = true; 
+					break;
+				}
+			}
+			if(!match)
+				slot = false;
+		}
+	}else{
+		// get all open slots that meet the orderID's daypart order parameters, with an option to specify a new date
+		let candidate = await getOpenAdSlots(connection, orderID, date);
+		if(typeof candidate !== 'number'){
+			let rec = candidate[0];
+			if(rec){
+				slot = parseInt(rec.id);
+				if(!date)
+					date = rec.openDate;
+			}
+		}
+	}
+	if(isNaN(slot) || !slot || !date)
+		return 0;
+	try{
+		// change this record to the slot and day of the 
+		let sql = "UPDATE "+locConf['prefix']+"orders SET slotID = "+slot+", date = '"+date+"' WHERE ID = "+orderID+";";
+		let result = await asyncQuery(connection, sql);
+		if(result.changedRows)
+			return orderID;
+		else
+			return 0;
+	}catch(err){
+		return 0;
+	}
+	return 0;
 }
 
 async function postInvoice(connection, request, response, params, dirs){
-	
+	//!!
+	/*
+	if(isset($session_data['invoice']) && isset($session_data['customer'])){
+        // verified that order has not yet been posted
+        $query = "SELECT id FROM ar_invoices WHERE id = $session_data[invoice] AND customer = $session_data[customer] AND posted IS NULL";
+        $result = mysql_query($query, $con);
+        if($result && (mysql_numrows($result) == 1)){
+            $invID = mysql_result($result,0,"id");
+            if($invID){
+                $query = "UPDATE ar_orders LEFT JOIN ar_logs ON (ar_orders.type = 'order' AND ar_logs.Added = 0 AND ar_logs.Location = ar_orders.location AND ar_logs.OwnerID = ar_orders.slotID 
+									AND ar_logs.Item = ar_orders.itemID AND DATE(FROM_UNIXTIME(ar_logs.Time)) = ar_orders.date) 
+									SET ar_orders.fulfilled = FROM_UNIXTIME(ar_logs.Time) WHERE ar_orders.invoice = $session_data[invoice] AND ar_orders.fulfilled IS NULL AND ar_orders.type = 'order'";
+                $result = mysql_query($query, $con);            
+                if($result){
+                    $query = "UPDATE ar_invoices SET posted = DATE(NOW()) WHERE id = $session_data[invoice] AND customer = $session_data[customer]";
+                    $result = mysql_query($query, $con);        
+                }
+                echo "<CENTER>Now might be a good time to <A HREF='invoice_print.php' TARGET='_blank'>view</A> a printable version of this order.</CENTER><BR>\n";
+                echo "<CENTER>Click again on the orders tab to go back.</CENTER>\n";
+                return;
+            }
+        }
+    }
+    echo "<script language=\"JavaScript\">\n";
+    echo "<!-- \n";
+    echo "alert(\"For some mind numbing technical reason, the order could not be posted.\");\n";
+    echo "//--> \n";
+    echo "</script>\n";
+	*/
 }
 
-async function addInvoiceOrder(connection, request, response, params, dirs){
-	
+async function addInvDPOrder(connection, request, response, params, dirs){
+	if(dirs[3]){
+		// get ID and make sure it is a number.
+		let invID = parseInt(dirs[3], 10);
+		if(isNaN(invID) || !invID)
+			return 400;
+		let locID = parseInt(params.locID, 10);
+		if(isNaN(locID) || !locID)
+			return 400;
+		let itemID = parseInt(params.itemID, 10);
+		if(isNaN(itemID) || !itemID)
+			return 400;
+		let dpID = parseInt(params.dpID, 10);
+		if(isNaN(dpID) || !dpID)
+			return 400;
+		let start = params.start;
+		if(!start.length)
+			return 400;
+		let range = parseInt(params.days, 10);
+		if(isNaN(range) || !range)
+			return 400;
+		let qty = parseInt(params.qty, 10);
+		if(isNaN(qty) || !qty)
+			return 400;
+		let price = parseFloat(params.price, 10);
+		if(isNaN(price))
+			return 400;
+		// check for permission
+		if(request.session.permission == "studio")	// studio permission is not allowed to make changes, all others are
+			return 401;
+		let result = await getOpenAdSlots(connection, false, start, locID, range, dpID, qty, false);
+		if(typeof result === 'number')
+			return result;
+		let inserted = 0;
+		for(let i=0; i<result.length; i++){
+			// create a new order record for each result
+			let airDate = result[i].openDate;
+			let slotID = parseInt(result[i].id, 10);
+			if(isNaN(slotID) || !slotID)
+				continue;
+			let sql = "INSERT INTO "+locConf['prefix']+"orders (itemID, amount, invoice, location, type, daypart, dp_start, dp_range, slotID, date) ";
+			sql += "VALUES ("+itemID+", "+price+", "+invID+", "+locID+", 'order', "+dpID+", '"+start+"', "+range+", "+slotID+", '"+airDate+"');"
+			try{
+				await asyncQuery(connection, sql);
+			}catch(err){
+				continue;
+			}
+			inserted++;
+		}
+		let rem = qty - inserted;
+		let bumped = 0;
+		if(rem){
+			// failed to fill all requested orders.  Try to bump existing scheduled daypart items:
+			result = await getAdBumpCandidates(connection, locID, dpID, start, range);
+			if(result.length){
+				for(let i=0; i<result.length; i++){
+					let bcSlot = result[i].Slot;
+					let bcDate = result[i].Date;
+					let bcOrder = result[i].orderID;
+					if(bcOrder && bcSlot && bcDate && bcDate.length){
+						let stat = bumpOrderID(connection, orderID)
+						if(stat){
+							let sql = "INSERT INTO "+locConf['prefix']+"orders (itemID, amount, invoice, location, type, daypart, dp_start, dp_range, slotID, date) ";
+							sql += "VALUES ("+itemID+", "+price+", "+invID+", "+locID+", 'order', "+dpID+", '"+start+"', "+range+", "+bcSlot+", '"+bcOrder+"');"
+							try{
+								await asyncQuery(connection, sql);
+							}catch(err){
+								continue;
+							}
+							bumped++;
+						}
+					}
+				}
+			}
+		}
+		let status = {requested: qty, filled: inserted, bumped: bumped, failed: rem};
+		return status;
+	}
+	return 400;
+}
+
+async function getAdBumpCandidates(connection, locID, dpID, start, range){
+	let result;
+	let query = `SELECT DISTINCT `+locConf['prefix']+`orders.ID AS orderID, `+locConf['prefix']+`orders.date As Date, `+locConf['prefix']+`orders.orders.slotID AS Slot 
+	FROM (`+locConf['prefix']+`vector, `+locConf['prefix']+`schedule, `+locConf['prefix']+`orders, `+locConf['prefix']+`toc, 
+	`+locConf['prefix']+`hourmap, `+locConf['prefix']+`daymap, `+locConf['prefix']+`category, `+locConf['prefix']+`category_item, `+locConf['prefix']+`daypart_times) 
+	LEFT JOIN ar_rest ON (`+locConf['prefix']+`schedule.Item = `+locConf['prefix']+`rest.Item AND `+locConf['prefix']+`rest.Location = `+locID+`) 
+	WHERE `+locConf['prefix']+`orders.location = `+locID+` AND `+locConf['prefix']+`orders.type = 'order' AND `+locConf['prefix']+`orders.daypart > 0 AND 
+	`+locConf['prefix']+`orders.slotID = `+locConf['prefix']+`schedule.Item AND `+locConf['prefix']+`orders.date = DATE_ADD('`+start+`', INTERVAL `+locConf['prefix']+`vector.number DAY) 
+	AND `+locConf['prefix']+`orders.itemID IS NOT NULL AND `+locConf['prefix']+`orders.fulfilled IS NULL AND `+locConf['prefix']+`vector.number < `+range+` 
+	AND `+locConf['prefix']+`rest.Added IS NULL AND `+locConf['prefix']+`schedule.Day = `+locConf['prefix']+`daymap.Day AND `+locConf['prefix']+`schedule.Hour = `+locConf['prefix']+`hourmap.Hour 
+	AND `+locConf['prefix']+`daypart_times.daypart = `+dpID+` AND `+locConf['prefix']+`daypart_times.day = DAYOFWEEK(DATE_ADD('`+start+`', INTERVAL `+locConf['prefix']+`vector.number DAY))-1 
+	AND `+locConf['prefix']+`schedule.Hour BETWEEN `+locConf['prefix']+`daypart_times.start AND `+locConf['prefix']+`daypart_times.stop AND `+locConf['prefix']+`schedule.Fill = 0 
+	AND (`+locConf['prefix']+`schedule.Location IS NULL OR `+locConf['prefix']+`schedule.Location = `+locID+`) AND `+locConf['prefix']+`schedule.Priority > 0 
+	AND (`+locConf['prefix']+`schedule.Month = 0 OR `+locConf['prefix']+`schedule.Month = MONTH(DATE_ADD('`+start+`', INTERVAL `+locConf['prefix']+`vector.number DAY)) ) 
+	AND (`+locConf['prefix']+`schedule.Date = 0 OR `+locConf['prefix']+`schedule.Date = DAYOFMONTH(DATE_ADD('`+start+`', INTERVAL `+locConf['prefix']+`vector.number DAY)) ) 
+	AND `+locConf['prefix']+`daymap.Map = DAYOFWEEK(DATE_ADD('`+start+`', INTERVAL `+locConf['prefix']+`vector.number DAY)) AND `+locConf['prefix']+`schedule.Item = `+locConf['prefix']+`toc.ID 
+	AND `+locConf['prefix']+`toc.Type = 'task' AND `+locConf['prefix']+`category_item.Item = `+locConf['prefix']+`schedule.Item 
+	AND `+locConf['prefix']+`category_item.Category = `+locConf['prefix']+`category.ID AND `+locConf['prefix']+`category.Name = 'Advertisement' 
+	ORDER BY RAND();`;
+console.log("getAdBumpCandidates",query);
+	try{
+		result = await asyncQuery(connection, query);
+	}catch(err){
+		return [];
+	}
+	return result;
 }
 
 async function getInvoiceOrders(connection, request, response, params, dirs){
@@ -2955,7 +3312,15 @@ async function getInvoiceOrders(connection, request, response, params, dirs){
 `SELECT `+locConf['prefix']+`orders.ID AS ID, `+locConf['prefix']+`orders.type AS Type, `+locConf['prefix']+`orders.location AS locID, 
 	`+locConf['prefix']+`locations.Name AS Location, item.ID AS ItemID, `+locConf['prefix']+`daypart.ID AS DaypartID,
 	`+locConf['prefix']+`daypart.Name AS Daypart, `+locConf['prefix']+`orders.dp_start AS Start, `+locConf['prefix']+`orders.dp_range AS Days, 
-	IF(`+locConf['prefix']+`orders.type = 'bulk', DATE(FROM_UNIXTIME(`+locConf['prefix']+`logs.Time)), `+locConf['prefix']+`orders.date) AS OrderDate, slot.Name AS Slot, IF(`+locConf['prefix']+`orders.date >= DATE(NOW()), 'Pending', 'Complete') AS Status, 
+	IF(`+locConf['prefix']+`orders.type = 'bulk', DATE(FROM_UNIXTIME(`+locConf['prefix']+`logs.Time)), `+locConf['prefix']+`orders.date) AS OrderDate, 
+	slot.Name AS Slot, 
+	IF(`+locConf['prefix']+`orders.fulfilled IS NULL, 
+		IF(`+locConf['prefix']+`logs.Time IS NULL,
+			IF(`+locConf['prefix']+`orders.date >= DATE(NOW()), 
+				'pending', 
+				'skipped'), 
+			'Complete'),
+		'Complete') AS Status, 
 	item.Name AS Item, `+locConf['prefix']+`orders.amount AS Amount, 
 	IF(`+locConf['prefix']+`orders.type = 'bulk',`+locConf['prefix']+`logs.Comment,`+locConf['prefix']+`orders.comment) AS Comment,  
 	IF(`+locConf['prefix']+`orders.fulfilled IS NULL, TIME(FROM_UNIXTIME(`+locConf['prefix']+`logs.Time)), TIME(`+locConf['prefix']+`orders.fulfilled)) AS Fulfilled 
@@ -2973,7 +3338,7 @@ LEFT JOIN `+locConf['prefix']+`toc AS slot ON (slot.ID = `+locConf['prefix']+`or
 LEFT JOIN `+locConf['prefix']+`daypart ON (`+locConf['prefix']+`daypart.ID = `+locConf['prefix']+`orders.daypart) 
 LEFT JOIN `+locConf['prefix']+`locations ON (`+locConf['prefix']+`locations.ID = `+locConf['prefix']+`orders.location) 
 WHERE `+locConf['prefix']+`orders.invoice = '`+ID+`'  
-ORDER BY Type, Location, ItemID, Start, Days, OrderDate, DaypartID, Slot;`;
+ORDER BY Location, Type, ItemID, Start, Days, DaypartID, OrderDate, Slot, Fulfilled;`;
 		try{
 			result = await asyncQuery(connection, query);
 		}catch(err){
@@ -2986,9 +3351,20 @@ ORDER BY Type, Location, ItemID, Start, Days, OrderDate, DaypartID, Slot;`;
 			if(!parent || (result[i].locID != parent.locID) || (result[i].Type != parent.Type) || 
 							(result[i].ItemID != parent.ItemID) || (result[i].DaypartID != parent.DaypartID) ||
 							(result[i].Start != parent.Start) || (result[i].Days != parent.Days)){
+				let ghash = crc32(result[i].Type, 0);
+				if(result[i].locID)
+					ghash = crc32(result[i].locID.toString(), ghash);
+				if(result[i].ItemID)
+					ghash = crc32(result[i].ItemID.toString(), ghash);
+				if(result[i].DaypartID)
+					ghash = crc32(result[i].DaypartID.toString(), ghash);
+				if(result[i].Days)
+					ghash = crc32(result[i].Days.toString(), ghash);
+				if(result[i].Start)
+					ghash = crc32(result[i].Start, ghash);
 				parent = {ID: result[i].ID, locID: result[i].locID, Location: result[i].Location, Type: result[i].Type, Item:result[i].Item, Daypart:result[i].Daypart, 
-																		DaypartID:result[i].DaypartID, ItemID:result[i].ItemID, DaypartID: result[i].DaypartID,
-																		Start:result[i].Start, Days: result[i].Days, Amount: 0.0};
+									DaypartID:result[i].DaypartID, ItemID:result[i].ItemID, DaypartID: result[i].DaypartID, Start:result[i].Start, Days: result[i].Days, 
+									Amount: 0.0, groupHash: ghash};
 				if(result[i].Type == "bulk")
 					parent.Amount = result[i].Amount;
 				parent.children = [];
@@ -3000,6 +3376,8 @@ ORDER BY Type, Location, ItemID, Start, Days, OrderDate, DaypartID, Slot;`;
 			}else{
 				if(result[i].Type == "credit")
 					parent.Amount -= result[i].Amount;
+				else if(result[i].Status == 'skipped')
+					result[i].Amount = null;
 				else
 					parent.Amount += result[i].Amount; // order or item
 			}
@@ -5349,8 +5727,12 @@ module.exports = {
 			abortDbFileSearch(request, response);		// stops a dbFileSearch process running in the background
 		}else if(dirs[2] == 'getorders'){
 			responseWrapper(request, response, params, dirs, getInvoiceOrders); // /getorders/invoiceID
-		}else if(dirs[2] == 'addorder'){
-			addInvoiceOrder(request, response, params, dirs);	// /addorder/invoiceID
+		}else if(dirs[2] == 'openslots'){
+			responseWrapper(request, response, params, dirs, getOpenSlotsForDate); // /openslots/date(YYY-MM-DD format)?locID=value
+		}else if(dirs[2] == 'dporder'){
+			responseWrapper(request, response, params, dirs, addInvDPOrder); // /dporder/invoiceID?locID=value&itemID=value&dpID=value&start=YYYY-MM-DD&days=value&qty=value&price=value
+		}else if(dirs[2] == 'bump'){
+			responseWrapper(request, response, params, dirs, bumpInvoiceOrder); // /bump/orderID{?day=YYYY-MM-DD}{&slot=slotItemID}
 		}else{
 			response.status(400);
 			response.end();

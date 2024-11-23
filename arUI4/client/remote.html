@@ -83,8 +83,6 @@
 		let el;
 		if(!audioContext){
 			try{
-console.log(navigator);
-console.log(navigator.mediaDevices);
 				let stream = await navigator.mediaDevices.getUserMedia({ 
 					audio: {
 						noiseSuppression: false,
@@ -179,7 +177,6 @@ console.log(navigator.mediaDevices);
 				
 				window.requestAnimationFrame(remLevelsRender);
 			}catch(err){
-console.log(err);
 				let btn = document.getElementById("RemConBtn");
 				btn.textContent = "Disabled";
 				btn.disabled = true;
@@ -331,7 +328,6 @@ console.log(err);
 					let msg = data.message;
 					if(msg.direction == "incoming"){
 						msg.accept();
-console.log(msg);
 					}
 				});
 

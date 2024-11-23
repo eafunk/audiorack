@@ -11,4 +11,5 @@ ALTER TABLE [prefix]category_item ADD CONSTRAINT item_cat_constraint UNIQUE (Ite
 ALTER TABLE [prefix]rest ADD RID int(10) unsigned PRIMARY KEY AUTO_INCREMENT;
 ALTER TABLE [prefix]playlist ADD RID int(10) unsigned PRIMARY KEY AUTO_INCREMENT;
 ALTER TABLE [prefix]task ADD RID int(10) unsigned PRIMARY KEY AUTO_INCREMENT;
+INSERT INTO [prefix]category (Name) SELECT 'Advertisement' AS Name FROM [prefix]category WHERE Name = 'Advertisement' HAVING COUNT(*) = 0;
 UPDATE [prefix]info SET Value = '4.0' WHERE Property = 'Version';

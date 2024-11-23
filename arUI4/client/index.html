@@ -50,6 +50,8 @@
 						</div>
 						<input id="newOrderDesc" type="text" size="50" name="Description" value="Description" hidden/>
 					</td>
+					<td><input type="date" id="newOrderStart" name="Start" value="" onchange="invOrderDateChange()"></td>
+					<td><input id="newOrderDays" type="number" style="width: 4em" min="0" max="90" step="1" name="Days"/></td>
 					<td style="position: relative;">
 						<button id="newOrderDaypartBtn" class="editbutton" data-id="0" onclick="toggleShowSearchList(event)">[None]</button>
 						<div class="search-list">
@@ -57,9 +59,15 @@
 							<input id="invOrderDaypartFilterText" type="text" onkeyup="filterSearchList(event)" placeholder="Enter Search..."></input>
 							<div id="invOrderDaypartList"></div>
 						</div>
+						<div id="newOrderSlotDiv" hidden>
+							<label for="newOrderSlotBtn">Slot:<br></label><button id="newOrderSlotBtn" class="editbutton" data-id="0" onclick="toggleShowSearchList(event)">[None]</button>
+							<div class="search-list">
+								<button class="editbutton" onclick="refreshInvSlotList()">Refresh List</button><br>
+								<input id="invOrderSlotFilterText" type="text" onkeyup="filterSearchList(event)" placeholder="Enter Search..."></input>
+								<div id="invOrderSlotList"></div>
+							</div>
+						</div>
 					</td>
-					<td><input type="date" id="newOrderStart" name="Start" value="" onchange="invOrderDateChange()"></td>
-					<td><input id="newOrderDays" type="number" style="width: 4em" min="0" max="90" step="1" name="Days"/></td>
 					<td><input id="newOrderPrice" type="number" style="width: 6.8em" min="0.00" max="10000.00" step="0.01" name="Price"/>
 					<span id="newOrderPrUnit" hidden>Per Play</span>
 					</td>
@@ -286,9 +294,9 @@
 					<button class="editbutton" style="position:absolute; right:60px; top:1px;" onclick="closeScriptTab(event)">DJ Scripts<i class="fa fa-caret-down"></i></button>
 					<div id="scriptList" class="scroll" style="text-align: left; border: 1px solid #000; boader-width: 1px;">
 					</div>
-					<div class="container" style="flex:0 0 70%; flex-flow: column; padding: 12px;">
+					<div class="container" style="flex:0 0 80%; flex-flow: column; padding: 12px;">
 						<div id="scriptName" style="padding: 5px;"></div>
-						<div id="scriptContent" class="scroll" style="text-align: left; border: 1px solid #000; boader-width: 1px;"></div>
+						<div id="scriptContent" class="scroll" style="text-align: left; font-size: 133%; border: 1px solid #000; boader-width: 1px;"></div>
 						<div>
 							Read By DJ: <input id="scriptReadDJ" style="margin: 0 auto;"type="text" size="20" name="DJName" value="" onchange="scriptReaderChange()">
 							<button id="scriptReadBtn" class="editbutton" style="width: 100px; margin: 0 auto;" onclick="readScriptAction(event)" disabled>Read/Log</button>
@@ -690,8 +698,8 @@
 					<button id="invNewbtn" class="editbutton" onclick="invCreateNew(event)" disabled>New Invoice</button>
 					<br>A customer must be selected to create a new order.
 				</div>
-				<div class="boxed" id="invInfoBox" style="display: none; height:100%; justify: center;" >
-					<span style='float: right;'><button id="invClosebtn" class="editbutton" onclick="invRecClose()">Close</button></span>
+				<div class="boxed" id="invInfoBox">
+					<span style="text-align: right;"><button id="invClosebtn" class="editbutton" onclick="invRecClose()">Close</button></span>
 					<legend>Invoice/Order Record</legend>
 					<table class="tablealtj" style="table-layout: fixed;">
 						<tr><td>Invoice Number:</td><td colspan="3"><div id="invID"></div></td></tr>
@@ -703,8 +711,11 @@
 						<tr><td>Posted:</td><td colspan="2"><div id="invPosted"></div></td>
 							<td><button id="invPostBtn" class="editbutton" onclick="invPost(event)" disabled>Post Invoice</button></div></td></tr>
 					</table>
-					<button class="editbutton" id="invUpdateBtn" onclick="invSaveRecord(event)">Update</button>
-					<div class="scroll" id="invOrdersDiv">
+					<span style="text-align: center;"><button class="editbutton" id="invUpdateBtn" onclick="invSaveRecord(event)">Update</button></span>
+					<div class="scroll">
+						Total Amount:<span id="invTotal">0.00</span>
+						<div id="invOrdersDiv">
+						</div>
 					</div>
 				</div>
 			</div>
