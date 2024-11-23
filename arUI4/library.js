@@ -3028,8 +3028,9 @@ async function getOpenAdSlots(connection, orderID, start, locID, days, daypartID
 			AND `+locConf['prefix']+`schedule.Day = `+locConf['prefix']+`daymap.Day 
 			AND `+locConf['prefix']+`schedule.Hour = `+locConf['prefix']+`hourmap.Hour `;
 	if(orderID){
-		query += `AND `+locConf['prefix']+`daypart_times.daypart = original.daypart AND 
-		(`+locConf['prefix']+`schedule.Location IS NULL OR `+locConf['prefix']+`schedule.Location = original.location) `;
+		query += `AND `+locConf['prefix']+`daypart_times.daypart = original.daypart 
+		AND `+locConf['prefix']+`schedule.Hour BETWEEN `+locConf['prefix']+`daypart_times.start AND `+locConf['prefix']+`daypart_times.stop
+		AND (`+locConf['prefix']+`schedule.Location IS NULL OR `+locConf['prefix']+`schedule.Location = original.location) `;
 		if(start)
 			query += `AND `+locConf['prefix']+`daypart_times.day = DAYOFWEEK(DATE_ADD('`+start+`', INTERVAL `+locConf['prefix']+`vector.number DAY))-1 
 			AND (`+locConf['prefix']+`schedule.Month = 0 OR `+locConf['prefix']+`schedule.Month = MONTH(DATE_ADD('`+start+`', INTERVAL `+locConf['prefix']+`vector.number DAY)) ) 
@@ -3062,7 +3063,6 @@ async function getOpenAdSlots(connection, orderID, start, locID, days, daypartID
 	if(count)
 		query += ` LIMIT `+count;
 	query += ";";
-console.log("getOpenAdSlots",query);
 	try{
 		result = await asyncQuery(connection, query);
 	}catch(err){
@@ -3158,7 +3158,7 @@ async function bumpOrderID(connection, orderID, date, slot){
 }
 
 async function postInvoice(connection, request, response, params, dirs){
-	//!!
+	//!! handle bulk type
 	/*
 	if(isset($session_data['invoice']) && isset($session_data['customer'])){
         // verified that order has not yet been posted
@@ -3289,7 +3289,6 @@ async function getAdBumpCandidates(connection, locID, dpID, start, range){
 	AND `+locConf['prefix']+`toc.Type = 'task' AND `+locConf['prefix']+`category_item.Item = `+locConf['prefix']+`schedule.Item 
 	AND `+locConf['prefix']+`category_item.Category = `+locConf['prefix']+`category.ID AND `+locConf['prefix']+`category.Name = 'Advertisement' 
 	ORDER BY RAND();`;
-console.log("getAdBumpCandidates",query);
 	try{
 		result = await asyncQuery(connection, query);
 	}catch(err){
@@ -3308,8 +3307,7 @@ async function getInvoiceOrders(connection, request, response, params, dirs){
 		if(request.session.permission == "studio")	// studio permission is not allowed to make changes, all others are
 			return 401;
 		let result;
-		let query = 
-`SELECT `+locConf['prefix']+`orders.ID AS ID, `+locConf['prefix']+`orders.type AS Type, `+locConf['prefix']+`orders.location AS locID, 
+		let query = `SELECT `+locConf['prefix']+`orders.ID AS ID, `+locConf['prefix']+`orders.type AS Type, `+locConf['prefix']+`orders.location AS locID, 
 	`+locConf['prefix']+`locations.Name AS Location, item.ID AS ItemID, `+locConf['prefix']+`daypart.ID AS DaypartID,
 	`+locConf['prefix']+`daypart.Name AS Daypart, `+locConf['prefix']+`orders.dp_start AS Start, `+locConf['prefix']+`orders.dp_range AS Days, 
 	IF(`+locConf['prefix']+`orders.type = 'bulk', DATE(FROM_UNIXTIME(`+locConf['prefix']+`logs.Time)), `+locConf['prefix']+`orders.date) AS OrderDate, 
