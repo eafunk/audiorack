@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<title>Print Form</title>
+	</head>
+	<style>
+		.mainGrid {
+			display: grid;
+			grid-gap: 2px;
+			padding: 2px;
+			margin: 0px;
+			font-size: 9px;
+			overflow-wrap: break-word;
+			text-align: center;
+			grid-template-areas: 
+				"customer heading"
+				"invoice invoice"
+				"orders orders";
+			grid-template-columns: 1fr 2fr;
+			grid-template-rows: 100px 120px auto;
+		}
+		.boxed {
+			border: 1px solid #000;
+			padding: 2px;
+			margin: 2px;
+			justify-content: center;
+			align-content: center;
+		}
+		.tablealtj {
+			table-layout: fixed;
+			margin: 0 auto;
+		}
+		.tablealtj td:nth-child(odd) {
+			text-align: right;
+		}
+		.tablealtj td:nth-child(even) {
+			text-align: left;
+			position: relative;
+		}
+		h1 {
+			font-size: 32px;
+			justify-content: center;
+			align-content: center;
+		}
+		@media print {
+			body {transform: scale(0.95)}
+			table { page-break-after:auto }
+			tr    { page-break-inside:avoid; page-break-after:auto }
+			td    { page-break-inside:avoid; page-break-after:auto }
+			thead { display:table-header-group }
+			tfoot { display:table-footer-group }
+		}
+	</style>
+	<script>
+		window.onload = function() {
+			var parent = window.opener;
+			var invRec = parent.lastInvRec;
+			// populate the customer info. box
+			if(invRec.custData){
+				console.log(invRec.custData);
+				let content = invRec.custData.name;
+				content += "<br>ATTN: "+invRec.custData.contact;
+				content += "<br>"+invRec.custData.address1;
+				if(invRec.custData.address2)
+					content += "<br>"+invRec.custData.address2;
+				content += "<br>"+invRec.custData.city+", "+invRec.custData.state+" "+invRec.custData.postcode;
+				if(invRec.custData.country)
+					content += "<br>"+invRec.custData.country;
+				window.document.getElementById("custBox").innerHTML = content;
+			}
+			// populate the invoice info. box
+			if(invRec.posted == '0000-00-00'){
+				window.document.getElementById("invPosted").innerText = "Not Yet Posted";
+				window.document.getElementById("invDue").innerText = "Not Yet Posted";
+			}else{
+				window.document.getElementById("invPosted").innerText = invRec.posted;
+				let date = new Date(invRec.posted);
+				let days = parseInt(invRec.terms);
+				if(days)
+					date.setDate(date.getDate() + days);
+				window.document.getElementById("invDue").innerText = date.toISOString().split('T')[0];
+			}
+			window.document.getElementById("invDesc").innerText = invRec.comment;
+			window.document.getElementById("invTerms").innerText = invRec.terms + " Days";
+			window.document.getElementById("invRep").innerText = invRec.salesrep;
+			window.document.getElementById("invCustRep").innerText = invRec.repCust;
+			window.document.getElementById("invID").innerText = invRec.id;
+			
+			// populate the order table
+			let el = window.document.getElementById("invOrdersDiv");
+			let fields = {Amount:parent.financialFormat, children:parent.invExpandTreeAll};
+			let colWidth = {action:"18px", children:"50px", Type:"70px", Days:"43px", Amount:"70px", Daypart:"125px", Start:"104px", Location:"100px"};
+			let headings = {children:"Qty", Type: "Type", Location:"Location", Item:"Campaign", Start:"Start", Days:"Days", Daypart:"Daypart", Amount:"Amount", 
+								locID:false, showChldn:false, ID:false, DaypartID:false, ItemID:false, groupHash:false, Pending: false};
+			parent.genPopulateTableFromArray(parent.lastOrdersRec, el, headings, false, false, false, false, false, fields, colWidth, false, false);
+			
+			let total = 0.0;
+			for(let i=0; i<parent.lastOrdersRec.length; i++)
+				total += parent.lastOrdersRec[i].Amount;
+			window.document.getElementById("invTotal").innerText = parent.financialFormat(total);
+			window.focus();
+			window.print();
+			window.close();
+		}
+		
+	</script>
+	<body>
+		<div class="mainGrid">
+			<h1 style="grid-area:heading;">REPORT</h1>
+			<div id="custBox" class="boxed" style="grid-area:customer;">This is customer</div>
+			<div class="boxed" style="grid-area:invoice;">
+				<table class="tablealtj">
+					<tr><td>Invoice:</td><td colspan="3"><div id="invID"></div></td></tr>
+					<tr><td>Description:</td><td colspan="3"><div id="invDesc"></div></td></tr>
+					<tr><td>Payment Terms:</td><td colspan="3"><div id="invTerms"></div></td>
+					<tr><td>Sales Rep.:</td><td><div id="invRep"></div><td>Customer's Rep.:</td><td><div id="invCustRep"></div></td></tr>
+					<tr><td>Posted:</td><td colspan="3"><div id="invPosted"></div></td>
+					<tr><td>Due:</td><td colspan="3"><div id="invDue"></div></td>
+				</table>
+			</div>
+			<div style="grid-area:orders;">
+				<div id="invOrdersDiv"></div>
+				<h2>Total Amount:<span id="invTotal">0.00</span></h2>
+			</div>
+		</div>
+	</body>
+</html>

@@ -13292,7 +13292,6 @@ async function campSaveRecord(evt){
 		// create a new aritem: Type, Name, Script AND Set category
 		let script = document.getElementById("camp-itemScript").value;
 		let dur = 0.0;
-		let type = "file";
 		if(type != "Audio"){
 			 // include durration for non-audio
 			dur = timeParse(document.getElementById("camp-itemDur").value);
@@ -14428,6 +14427,19 @@ function invExpandTree(colValue, rec, i){
 	}
 }
 
+function invExpandTreeAll(colValue, rec, i){
+	if(!colValue.length)
+		return "";
+	else{
+		let div = document.createElement('div');
+		let colWidth = {Status:"75px", OrderDate:"75px", Slot:"120px", Fulfilled:"75px", Amount:"70px", action:"36px"};
+		let fields = {Status: "<input type='hidden' name='Status' data-id='$ID'></input>$val", Amount:financialFormat};
+		let headings = {Status:"Status", OrderDate:"Date", Slot:"Slot", Fulfilled:"Fulfilled", Comment:"Comment", Amount:"Amount", locID:false, Location: false, Type:false, Item:false, ID:false, Daypart:false, DaypartID:false, ItemID:false, Start: false, Days:false};
+		genPopulateTableFromArray(colValue, div, headings, false, false, false, false, false, fields, colWidth, false, false);
+		return {div:div, thisCell:colValue.length};
+	}
+}
+
 function invRedisplayRecord(el){
 	let haction = false;
 	let rowAction = false;
@@ -14442,7 +14454,7 @@ function invRedisplayRecord(el){
 	}
 	let colWidth = {action:"18px", children:"50px", Type:"70px", Days:"43px", Amount:"70px", Daypart:"125px", Start:"104px", Location:"100px"};
 	let headings = {children:"Qty", Type: "Type", Location:"Location", Item:"Campaign", Start:"Start", Days:"Days", Daypart:"Daypart", Amount:"Amount", 
-						locID:false, showChldn:false, ID:false, DaypartID:false, ItemID:false, groupHash:false};
+						locID:false, showChldn:false, ID:false, DaypartID:false, ItemID:false, groupHash:false, Pending: false};
 	unhookNewOrderRows();
 	genPopulateTableFromArray(lastOrdersRec, el, headings, false, false, false, rowAction, haction, fields, colWidth, false, false);
 	// move "newOrderRow" hidden to first table row.
@@ -14457,6 +14469,23 @@ async function invLoadOrders(invID){
 	let total = 0.0;
 	let el = document.getElementById("invOrdersDiv");
 	el.innerHTML = "<div class='center'><i class='fa fa-circle-o-notch fa-spin' style='font-size:48px'></i></div>";
+	// Update download control list with templates
+	let list = [];
+	let resp = await fetchContent("inv-template");
+	if(resp && resp.ok)
+		list = await resp.json();
+	el = document.getElementById("invExportType");
+	if(el){
+		let inner = "<option value='gnucash'>gnuCash</option>";
+		for(let i=0; i < list.length; i++){
+			let parts = list[i].split(".");
+			if(parts[1] == "html")
+				inner += "<option value='"+list[i]+"'>"+parts[0]+"</option>";
+		}
+		el.innerHTML = inner;
+	}
+	// get associated order data
+	el = document.getElementById("invOrdersDiv");
 	resp = await fetchContent("library/getorders/"+invID, {
 			method: 'GET',
 			headers: {
@@ -14466,7 +14495,9 @@ async function invLoadOrders(invID){
 		});
 	if(resp instanceof Response){
 		if(resp.ok){
+			let pending = false;
 			let resultRec = await resp.json();
+			let lastOrderDate;
 			if(lastOrdersRec){
 				// remember which rows are expanded
 				for(let i=0; i<lastOrdersRec.length; i++){
@@ -14479,11 +14510,14 @@ async function invLoadOrders(invID){
 				}
 			}
 			lastOrdersRec = resultRec;
-			for(let i=0; i<lastOrdersRec.length; i++)
+			for(let i=0; i<lastOrdersRec.length; i++){
 				total += lastOrdersRec[i].Amount;
+				if(lastOrdersRec[i].Pending)
+					pending = true;
+			}
 			document.getElementById("invTotal").innerText = financialFormat(total);
 			invRedisplayRecord(el);
-			return;
+			return pending;
 		}
 	}
 	// handle failure
@@ -14493,6 +14527,7 @@ async function invLoadOrders(invID){
 	else
 		alert("Failed to fetch data from the server.");  
 	invRecClose();
+	return false;
 }
 
 async function invLoadRecord(){
@@ -14539,6 +14574,7 @@ async function invLoadRecord(){
 						data = data[0]; // should be only one record
 						lastInvRec.customerName = data.name;
 						lastInvRec.repCust = data.salesrep;
+						lastInvRec.custData = data;
 					}
 				}
 			}
@@ -14555,6 +14591,7 @@ async function invLoadRecord(){
 				document.getElementById("invDesc").readOnly = true;
 				document.getElementById("invTerms").readOnly = true;
 				document.getElementById("invRep").readOnly = true;
+				
 			}
 			document.getElementById("invClient").innerText = lastInvRec.customerName;
 			document.getElementById("invClientID").innerText = lastInvRec.customer;
@@ -14563,12 +14600,18 @@ async function invLoadRecord(){
 			document.getElementById("invTerms").value = lastInvRec.terms;
 			document.getElementById("invRep").value = lastInvRec.salesrep;
 			document.getElementById("invCustRep").innerText = "Customer's Rep: "+lastInvRec.repCust;
-			
 		}
 		document.getElementById("invID").innerText = invID;
 
-		invLoadOrders(invID);
-		
+		let pending = await invLoadOrders(invID);
+		if(lastInvRec.posted == '0000-00-00'){
+			if(pending){
+				document.getElementById("invPosted").innerText += ", PENDING";
+				document.getElementById("invPostBtn").disabled = true;
+			}else
+				document.getElementById("invPostBtn").disabled = false;
+		}else
+			document.getElementById("invPostBtn").disabled = true;
 	}else{
 		// load empty/new record properties
 		lastInvRec = false;
@@ -14587,6 +14630,53 @@ async function invLoadRecord(){
 		document.getElementById("invClient").innerText = lastCustName.getValue();
 		document.getElementById("invClientID").innerText = selCustID;
 		document.getElementById("invCustRep").innerText = "Customer's Rep: "+lastCustRec.salesrep;
+		document.getElementById("invPostBtn").disabled = true;
+	}
+}
+
+async function invExport(evt){
+	evt.preventDefault();
+	let invID = lastInvNum.getValue();
+	if(invID){
+		let type = document.getElementById("invExportType").value;
+		if(type == "gnucash"){
+			//!! handle customer record too
+			
+		}else{
+			let pwindow = window.open("/inv-template/"+type, "", "height=600,width=800");
+		}
+	}
+}
+
+async function invPost(evt){
+	evt.preventDefault();
+	let invID = lastInvNum.getValue();
+	if(invID){
+		let api = "library/postinv/"+invID;
+		let resp = await fetchContent(api, {
+				method: 'GET',
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp){
+			if(resp.ok){
+				let repData = await resp.json();
+				if(!repData.affectedRows){
+					alert("Failed to post invoice.\n");
+					return;
+				}
+			}else{
+				alert("Got an error posting invoice from server.\n"+resp.statusText);
+				return;
+			}
+		}else{
+			alert("Failed to post invoiuce from the server.");
+			return;
+		}
+		alert("Posted invoice.");
+		invLoadRecord();
 	}
 }
 

@@ -229,6 +229,25 @@ function listControlDirFilesFunc(request, response){
 	}
 }
 
+function listInvTemplateDirFilesFunc(request, response){
+	if(request.session.loggedin == true){
+		fs.readdir(__dirname+"/client/inv-template", function(err, files){
+			if(err){
+				console.log("Error getting template directory listing: ", err);
+				response.status(500);
+				response.end();
+			}else{
+				response.status(200);
+				response.json(files);
+				response.end();
+			}
+		});
+	}else{
+		response.status(403);
+		response.end();
+	}
+}
+
 function listTmpDirFilesFunc(request, response){
 	if(request.session.loggedin == true){
 		let files = config['files'];
@@ -1388,6 +1407,9 @@ app.get('/remote.html', function(request, response){
 // for loading control surface mapping js modules
 app.use('/control/', express.static(__dirname + '/client/control'));
 app.use('/control', listControlDirFilesFunc); // shows the file list
+// for loading invoice tamplate pages
+app.use('/inv-template/', express.static(__dirname + '/client/inv-template'));
+app.use('/inv-template', listInvTemplateDirFilesFunc); // shows the file list
 
 // everything else assumed to be requests from the client directory
 app.use('/', express.static(__dirname + '/client'));

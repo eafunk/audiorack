@@ -102,7 +102,7 @@
 					el = document.getElementById("remChSelMatrix");
 					el.hidden = false;
 				}
-				audioContext = new AudioContext();
+				audioContext = new AudioContext({latencyHint:"playback"}); // or "balanced"
 				peerDest = audioContext.createMediaStreamDestination();
 				var sourceNode = audioContext.createMediaStreamSource(stream);
 				gainNode = audioContext.createGain();
@@ -132,6 +132,7 @@
 				}
 				el.selectedIndex = 0;
 				analyserNodes[0] = audioContext.createAnalyser();
+				analyserNodes[0].fftSize = 8;
 				
 				el = document.getElementById("remRightSource");
 				while(el.options.length) el.remove(0);
@@ -145,6 +146,7 @@
 				else
 					el.selectedIndex = 0;
 				analyserNodes[1] = audioContext.createAnalyser();
+				nalyserNodes[1].fftSize = 8;
 				
 				remoteInChgAction();	// make input channel connections
 				
@@ -365,11 +367,9 @@ console.log("Call ended");
 						for(let i = 0; i < senderList.length; i++)
 							sipCall.connection.removeTrack(senderList[i]);
 						// add destination track
-console.log('add audio track to peer');
 						let tracks = peerDest.stream.getAudioTracks();
 						sipCall.connection.addTrack(tracks[0]);
 						sipCall.connection.addEventListener("track", (e) => { 
-console.log('add audio track from peer');
 							if(remSrc) remSrc.disconnect();
 							remSrc = audioContext.createMediaStreamSource(e.streams[0]);
 							remSrc.connect(audioContext.destination);
@@ -377,7 +377,6 @@ console.log('add audio track from peer');
 						
 						//Handle Browser not allowing access to mic and speaker
 						sipCall.on('getusermediafailed', function(DOMError) {
-console.log('Get User Media Failed Call Event ' + DOMError );
 							remstatusmsg.innerText = "No browser media access";
 						});
 					}

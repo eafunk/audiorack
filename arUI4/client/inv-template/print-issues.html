@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<title>Print Form</title>
+	</head>
+	<style>
+		.boxed {
+			border: 2px solid #000;
+			padding: 5px;
+			margin: 5px;
+			justify-content: center;
+			align-content: center;
+		}
+		.oneperpage {
+			page-break-after: always;
+		}
+		@media print {
+			body {transform: scale(0.95)}
+			table { page-break-after:auto }
+			tr    { page-break-inside:avoid; page-break-after:auto }
+			td    { page-break-inside:avoid; page-break-after:auto }
+			thead { display:table-header-group }
+			tfoot { display:table-footer-group }
+		}
+	</style>
+	<script>
+		window.onload = async function() {
+			var parent = window.opener;
+			var ordersRec = parent.lastOrdersRec;
+			// populate the order table
+			let lastItem = 0;
+			for(let i=0; i<ordersRec.length; i++){
+				let order = ordersRec[i];
+				let box = document.createElement("div");
+				box.classList.add("boxed");
+				box.classList.add("oneperpage");
+				let item = parseInt(order.ItemID);
+				if(item != lastItem){
+					lastItem = item;
+					// get name & script for arItem
+					let data;
+					let resp = await parent.fetchContent("library/get/toc/"+item, {
+							method: 'GET',
+							headers: {
+								"Content-Type": "application/json",
+								"Accept": "application/json"
+							}
+						});
+					if(resp && resp.ok)
+						data = await resp.json();
+					if(data && data.length){
+						let div = document.createElement("div");
+						let title = document.createElement("center");
+						title.innerText = data[0].Name;
+						div.appendChild(title);
+						let script = document.createElement("div");
+						script.innerText = decodeURIComponent(data[0].Script);
+						div.appendChild(script);
+						box.appendChild(div);
+					}
+				}
+				let tree = parent.invExpandTreeAll(order.children, order, i);
+				if(tree){
+					tree.div.classList.add("boxed");
+					box.appendChild(tree.div);
+				}
+				window.document.getElementById("invOrdersDiv").appendChild(box);
+			}
+			window.focus();
+			window.print();
+			window.close();
+		}
+	</script>
+	<body>
+		<div id="invOrdersDiv"></div>
+		</div>
+	</body>
+</html>

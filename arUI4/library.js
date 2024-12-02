@@ -2927,7 +2927,6 @@ function searchFor(request, response, params, dirs){
 					connection.release(); // return the connection to pool
 					return;
 				}
-console.log(select, from, where, tail);
 				restQueryRequest(connection, table, request, response, select, from, where, tail, sort, 0); // NOTE: connection will be returned to the pool.
 			}
 		});
@@ -2950,7 +2949,10 @@ function responseWrapper(request, response, params, dirs, func){
 				return;
 			}
 			func(connection, request, response, params, dirs).then(async (result) => {
-				if(typeof result !== 'number'){
+				if(result == false){
+					// the function took care of all the response contentes
+					response.end();
+				}else if(typeof result !== 'number'){
 					response.status(201);
 					response.json(result);
 					response.end();
@@ -3157,36 +3159,150 @@ async function bumpOrderID(connection, orderID, date, slot){
 	return 0;
 }
 
+async function exportInvoice(connection, request, response, params, dirs){
+	if(dirs[3]){
+		let invID = parseInt(dirs[3], 10);
+		if(isNaN(invID) || !invID)
+			return 400;
+		// check for permission
+		if(request.session.permission == "studio")	// studio permission is not allowed to a access this, all others are
+			return 401;
+		let type = params.type;
+		if(type == "gnucash"){
+
+			let data = "";
+/*
+	$query = "SELECT id, comment, customer, posted, DATE_ADD(posted, INTERVAL terms DAY) as due, discount FROM ar_invoices WHERE id = $id";
+	$result = mysql_query($query, $con);
+	if($result && (mysql_numrows($result) > 0)){
+		$id=mysql_result($result, 0, "id");
+		$comment=mysql_result($result, 0, "comment");
+		$cust=mysql_result($result, 0, "customer");
+		$posted=mysql_result($result, 0, "posted");
+		$due=mysql_result($result, 0, "due");
+		$discount=mysql_result($result, 0, "discount");
+		
+		$query = "SELECT ar_orders.date AS idate, slot.Name AS slot, item.Name AS item, ar_orders.amount AS amount, ";
+		$query = $query . "ar_daypart.Name AS daypart, ar_orders.comment AS Comment, ar_locations.Name AS location, ";
+		$query = $query . "ar_orders.type AS Type, TIME(ar_orders.fulfilled) AS fulfilled ";
+		$query = $query . "FROM ar_orders ";
+		$query = $query . "LEFT JOIN ar_toc AS item ON (item.ID = ar_orders.itemID) ";
+		$query = $query . "LEFT JOIN ar_toc AS slot ON (slot.ID = ar_orders.slotID) ";
+		$query = $query . "LEFT JOIN ar_daypart ON (ar_daypart.ID = ar_orders.daypart) ";
+		$query = $query . "LEFT JOIN ar_locations ON (ar_locations.ID = ar_orders.location) ";
+		$query = $query . "WHERE ar_orders.invoice = $id ";
+		$query = $query . "ORDER BY Date ASC, Slot";
+		$result = mysql_query($query, $con);
+		if($result){
+			$num = mysql_numrows($result);
+			$i = 0;
+			$id = $id + 10000;
+			while($i < $num){
+				$orderDate=mysql_result($result,$i,"idate");
+				if($orderDate == '0000-00-00')
+					$orderDate = "";
+				$orderSlot=mysql_result($result,$i,"slot");
+				$orderItem=mysql_result($result,$i,"item");
+				$orderAmount=mysql_result($result,$i,"amount");
+				$orderDaypart=mysql_result($result,$i,"daypart");
+				$orderComment=mysql_result($result,$i,"comment");
+				$orderLocation=mysql_result($result,$i,"location");
+				$orderType=mysql_result($result,$i,"type");
+				$orderFulfilled=mysql_result($result,$i,"fulfilled");
+
+				$theDate = date_create_from_format('Y-m-d', $orderDate);
+				if(!empty($theDate))
+					$formatDate = $theDate->format('m/d/Y');
+				else
+					$formatDate = "";
+				if($orderType == 'order'){
+					if(empty($orderDaypart))
+						$orderDaypart = "Fixed Slot";
+					if(empty($orderFulfilled)){
+						$orderFulfilled = "Bumped";
+						$adjusted = "0.00";
+					}else
+						$adjusted = number_format($orderAmount * (1 - ($discount/100)), 2, '.', '');
+					$note = "$orderItem/$orderLocation/$orderSlot/$orderDaypart ($formatDate $orderFulfilled)";
+				}elseif($orderType == 'credit'){
+					$adjusted = number_format($orderAmount * (1 - ($discount/100)), 2, '.', '');
+					if(!empty($orderItem) && !empty($orderLocation) && !empty($orderSlot))
+						$note = "credit: $orderItem/$orderLocation/$orderSlot: $orderComment";
+					else
+						$note = "credit: $orderComment";
+				}elseif($orderType == 'payment'){
+					// payments are ignored - handled by GnuCash manually
+					$i++;
+					continue;
+				}else{
+					if($orderAmount > 0){
+						$adjusted = number_format($orderAmount * (1 - ($discount/100)), 2, '.', '');
+						$note = "$orderItem/$orderLocation/$orderSlot/$orderDaypart ($formatDate $orderFulfilled)";
+						$type = $orderDaypart;
+					}else{
+						$adjusted = number_format($orderAmount * (1 - ($discount/100)), 2, '.', '');
+						$note = "credit $orderComment";
+					}
+				}
+				$listStr = $listStr . "$id;$posted;$cust;;$comment;$orderDate;$note;;Income:Advertising;1;$adjusted;;;$discount;;;;$posted;$due;Assets:Accounts Receivable;Posted by import;X\n";
+				$i++;
+			}
+
+ 			response.type("application/octet-stream");
+			response.attachment("gnuCashInvoiceTMS_"+invID+".csv");
+			response.send(data);
+*/
+			return false; // false indicates we handled the response contents here.
+		}
+	}
+	return 400;
+}
+
 async function postInvoice(connection, request, response, params, dirs){
-	//!! handle bulk type
-	/*
-	if(isset($session_data['invoice']) && isset($session_data['customer'])){
-        // verified that order has not yet been posted
-        $query = "SELECT id FROM ar_invoices WHERE id = $session_data[invoice] AND customer = $session_data[customer] AND posted IS NULL";
-        $result = mysql_query($query, $con);
-        if($result && (mysql_numrows($result) == 1)){
-            $invID = mysql_result($result,0,"id");
-            if($invID){
-                $query = "UPDATE ar_orders LEFT JOIN ar_logs ON (ar_orders.type = 'order' AND ar_logs.Added = 0 AND ar_logs.Location = ar_orders.location AND ar_logs.OwnerID = ar_orders.slotID 
-									AND ar_logs.Item = ar_orders.itemID AND DATE(FROM_UNIXTIME(ar_logs.Time)) = ar_orders.date) 
-									SET ar_orders.fulfilled = FROM_UNIXTIME(ar_logs.Time) WHERE ar_orders.invoice = $session_data[invoice] AND ar_orders.fulfilled IS NULL AND ar_orders.type = 'order'";
-                $result = mysql_query($query, $con);            
-                if($result){
-                    $query = "UPDATE ar_invoices SET posted = DATE(NOW()) WHERE id = $session_data[invoice] AND customer = $session_data[customer]";
-                    $result = mysql_query($query, $con);        
-                }
-                echo "<CENTER>Now might be a good time to <A HREF='invoice_print.php' TARGET='_blank'>view</A> a printable version of this order.</CENTER><BR>\n";
-                echo "<CENTER>Click again on the orders tab to go back.</CENTER>\n";
-                return;
-            }
-        }
-    }
-    echo "<script language=\"JavaScript\">\n";
-    echo "<!-- \n";
-    echo "alert(\"For some mind numbing technical reason, the order could not be posted.\");\n";
-    echo "//--> \n";
-    echo "</script>\n";
-	*/
+	if(dirs[3]){
+		let invID = parseInt(dirs[3], 10);
+		if(isNaN(invID) || !invID)
+			return 400;
+		let unpost = params.unpost;
+		// check for permission
+		if(request.session.permission == "studio")	// studio permission is not allowed to a access this, all others are
+			return 401;
+		if(unpost){
+			let sql = "UPDATE "+locConf['prefix']+"orders SET orders.fulfilled = NULL ";
+			sql += "WHERE invoice = "+invID+" AND fulfilled IS NOT NULL AND type = 'order'";
+			try{
+				await asyncQuery(connection, sql);
+			}catch(err){
+				return 400;
+			}
+			sql = "UPDATE "+locConf['prefix']+"invoices SET posted = NULL WHERE id = "+invID+" AND posted IS NOT NULL;";
+			try{
+				let result = await asyncQuery(connection, sql);
+				return result;
+			}catch(err){
+				return 400;
+			}
+		}else{
+			let sql = "UPDATE "+locConf['prefix']+"orders LEFT JOIN "+locConf['prefix']+"logs ON ("+locConf['prefix']+"orders.type = 'order' AND "+locConf['prefix']+"logs.Added = 0 ";
+			sql += "AND "+locConf['prefix']+"logs.Location = "+locConf['prefix']+"orders.location AND "+locConf['prefix']+"logs.OwnerID = "+locConf['prefix']+"orders.slotID ";
+			sql += "AND "+locConf['prefix']+"logs.Item = "+locConf['prefix']+"orders.itemID AND DATE(FROM_UNIXTIME("+locConf['prefix']+"logs.Time)) = "+locConf['prefix']+"orders.date) ";
+			sql += "SET "+locConf['prefix']+"orders.fulfilled = FROM_UNIXTIME("+locConf['prefix']+"logs.Time) ";
+			sql += "WHERE "+locConf['prefix']+"orders.invoice = "+invID+" AND "+locConf['prefix']+"orders.fulfilled IS NULL AND "+locConf['prefix']+"orders.type = 'order';";
+			try{
+				await asyncQuery(connection, sql);
+			}catch(err){
+				return 400;
+			}
+			sql = "UPDATE "+locConf['prefix']+"invoices SET posted = DATE(NOW()) WHERE id = "+invID+" AND posted IS NULL;";
+			try{
+				let result = await asyncQuery(connection, sql);
+				return result;
+			}catch(err){
+				return 400;
+			}
+		}
+	}
+	return 400;
 }
 
 async function addInvDPOrder(connection, request, response, params, dirs){
@@ -3376,8 +3492,11 @@ ORDER BY Location, Type, ItemID, Start, Days, DaypartID, OrderDate, Slot, Fulfil
 					parent.Amount -= result[i].Amount;
 				else if(result[i].Status == 'skipped')
 					result[i].Amount = null;
-				else
+				else{
 					parent.Amount += result[i].Amount; // order or item
+					if(result[i].Status == "pending")
+						parent.Pending = true;
+				}
 			}
 		}
 		return base;
@@ -5731,6 +5850,10 @@ module.exports = {
 			responseWrapper(request, response, params, dirs, addInvDPOrder); // /dporder/invoiceID?locID=value&itemID=value&dpID=value&start=YYYY-MM-DD&days=value&qty=value&price=value
 		}else if(dirs[2] == 'bump'){
 			responseWrapper(request, response, params, dirs, bumpInvoiceOrder); // /bump/orderID{?day=YYYY-MM-DD}{&slot=slotItemID}
+		}else if(dirs[2] == 'postinv'){
+			responseWrapper(request, response, params, dirs, postInvoice); // /postinv/invoiceID{?unpost=1}
+		}		else if(dirs[2] == 'expinv'){
+			responseWrapper(request, response, params, dirs, exportInvoice); // /postinv/invoiceID&?type={gnucash,some-ther-type-todo}
 		}else{
 			response.status(400);
 			response.end();

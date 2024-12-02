@@ -710,6 +710,11 @@
 							<td>Sales Rep.:</td><td><input type="text" name="rep" id="invRep" value="" size="25"><div id="invCustRep"></div></td></tr>
 						<tr><td>Posted:</td><td colspan="2"><div id="invPosted"></div></td>
 							<td><button id="invPostBtn" class="editbutton" onclick="invPost(event)" disabled>Post Invoice</button></div></td></tr>
+						<tr><td>Export Invoice:</td><td colspan="2">
+								<select id="invExportType">
+									<option value='gnucash' selected>gnuCash</option>
+								</select></td>
+							<td><button id="invExportBtn" class="editbutton" onclick="invExport(event)">Download</button></div></td></tr>
 					</table>
 					<span style="text-align: center;"><button class="editbutton" id="invUpdateBtn" onclick="invSaveRecord(event)">Update</button></span>
 					<div class="scroll">
