@@ -63,6 +63,16 @@ function bytesFor(string){
 	return bytes;
 };
 
+function financialFormat(val){
+	if(typeof val === 'undefined')
+		return ""; // empty string
+	let num = Number.parseFloat(val);
+	if(isNaN(num))
+		return ""; // empty string
+	let str = num.toLocaleString('en-US', {maximumFractionDigits: 2, minimumFractionDigits: 2});
+	return str;
+}
+
 var mysql = require('mysql');
 const _= require('lodash');
 var fs = require('fs');
@@ -79,6 +89,7 @@ var sse = require('./sse.js');
 var prefix_list = [];
 var libpool = undefined;
 var locConf = undefined;
+var trafConf = undefined;
 var tmpDir = "";
 var mediaDir = "";
 var supportDir = "";
@@ -2949,7 +2960,7 @@ function responseWrapper(request, response, params, dirs, func){
 				return;
 			}
 			func(connection, request, response, params, dirs).then(async (result) => {
-				if(result == false){
+				if(result === false){
 					// the function took care of all the response contentes
 					response.end();
 				}else if(typeof result !== 'number'){
@@ -3159,100 +3170,137 @@ async function bumpOrderID(connection, orderID, date, slot){
 	return 0;
 }
 
-async function exportInvoice(connection, request, response, params, dirs){
+async function exportTrafficRec(connection, request, response, params, dirs){	// /exptraffic/ID&?type={format: gnucash-inv,gnucash-cust,some-ther-type-todo}
 	if(dirs[3]){
-		let invID = parseInt(dirs[3], 10);
-		if(isNaN(invID) || !invID)
+		let id = parseInt(dirs[3], 10);
+		if(isNaN(id))
 			return 400;
 		// check for permission
 		if(request.session.permission == "studio")	// studio permission is not allowed to a access this, all others are
 			return 401;
 		let type = params.type;
-		if(type == "gnucash"){
-
-			let data = "";
-/*
-	$query = "SELECT id, comment, customer, posted, DATE_ADD(posted, INTERVAL terms DAY) as due, discount FROM ar_invoices WHERE id = $id";
-	$result = mysql_query($query, $con);
-	if($result && (mysql_numrows($result) > 0)){
-		$id=mysql_result($result, 0, "id");
-		$comment=mysql_result($result, 0, "comment");
-		$cust=mysql_result($result, 0, "customer");
-		$posted=mysql_result($result, 0, "posted");
-		$due=mysql_result($result, 0, "due");
-		$discount=mysql_result($result, 0, "discount");
-		
-		$query = "SELECT ar_orders.date AS idate, slot.Name AS slot, item.Name AS item, ar_orders.amount AS amount, ";
-		$query = $query . "ar_daypart.Name AS daypart, ar_orders.comment AS Comment, ar_locations.Name AS location, ";
-		$query = $query . "ar_orders.type AS Type, TIME(ar_orders.fulfilled) AS fulfilled ";
-		$query = $query . "FROM ar_orders ";
-		$query = $query . "LEFT JOIN ar_toc AS item ON (item.ID = ar_orders.itemID) ";
-		$query = $query . "LEFT JOIN ar_toc AS slot ON (slot.ID = ar_orders.slotID) ";
-		$query = $query . "LEFT JOIN ar_daypart ON (ar_daypart.ID = ar_orders.daypart) ";
-		$query = $query . "LEFT JOIN ar_locations ON (ar_locations.ID = ar_orders.location) ";
-		$query = $query . "WHERE ar_orders.invoice = $id ";
-		$query = $query . "ORDER BY Date ASC, Slot";
-		$result = mysql_query($query, $con);
-		if($result){
-			$num = mysql_numrows($result);
-			$i = 0;
-			$id = $id + 10000;
-			while($i < $num){
-				$orderDate=mysql_result($result,$i,"idate");
-				if($orderDate == '0000-00-00')
-					$orderDate = "";
-				$orderSlot=mysql_result($result,$i,"slot");
-				$orderItem=mysql_result($result,$i,"item");
-				$orderAmount=mysql_result($result,$i,"amount");
-				$orderDaypart=mysql_result($result,$i,"daypart");
-				$orderComment=mysql_result($result,$i,"comment");
-				$orderLocation=mysql_result($result,$i,"location");
-				$orderType=mysql_result($result,$i,"type");
-				$orderFulfilled=mysql_result($result,$i,"fulfilled");
-
-				$theDate = date_create_from_format('Y-m-d', $orderDate);
-				if(!empty($theDate))
-					$formatDate = $theDate->format('m/d/Y');
-				else
-					$formatDate = "";
-				if($orderType == 'order'){
-					if(empty($orderDaypart))
-						$orderDaypart = "Fixed Slot";
-					if(empty($orderFulfilled)){
-						$orderFulfilled = "Bumped";
-						$adjusted = "0.00";
-					}else
-						$adjusted = number_format($orderAmount * (1 - ($discount/100)), 2, '.', '');
-					$note = "$orderItem/$orderLocation/$orderSlot/$orderDaypart ($formatDate $orderFulfilled)";
-				}elseif($orderType == 'credit'){
-					$adjusted = number_format($orderAmount * (1 - ($discount/100)), 2, '.', '');
-					if(!empty($orderItem) && !empty($orderLocation) && !empty($orderSlot))
-						$note = "credit: $orderItem/$orderLocation/$orderSlot: $orderComment";
-					else
-						$note = "credit: $orderComment";
-				}elseif($orderType == 'payment'){
-					// payments are ignored - handled by GnuCash manually
-					$i++;
-					continue;
-				}else{
-					if($orderAmount > 0){
-						$adjusted = number_format($orderAmount * (1 - ($discount/100)), 2, '.', '');
-						$note = "$orderItem/$orderLocation/$orderSlot/$orderDaypart ($formatDate $orderFulfilled)";
-						$type = $orderDaypart;
-					}else{
-						$adjusted = number_format($orderAmount * (1 - ($discount/100)), 2, '.', '');
-						$note = "credit $orderComment";
-					}
-				}
-				$listStr = $listStr . "$id;$posted;$cust;;$comment;$orderDate;$note;;Income:Advertising;1;$adjusted;;;$discount;;;;$posted;$due;Assets:Accounts Receivable;Posted by import;X\n";
-				$i++;
+		if(type == "gnucash-inv" && id){
+			let result;
+			let sql = "SELECT id, comment, customer, posted, DATE_ADD(posted, INTERVAL terms DAY) as due, discount FROM "+locConf['prefix']+"invoices WHERE id = "+id+";";
+			try{
+				result = await asyncQuery(connection, sql);
+			}catch(err){
+				return 400;
 			}
-
- 			response.type("application/octet-stream");
-			response.attachment("gnuCashInvoiceTMS_"+invID+".csv");
+			if(!result || !result.length)
+				return 400;
+			let iRec = result[0];
+			if(!iRec.due)
+				iRec.due = "";
+			sql = `SELECT `+locConf['prefix']+`orders.date AS odate, slot.Name AS slot, item.Name AS item, `+locConf['prefix']+`orders.amount AS amount, 
+						`+locConf['prefix']+`daypart.Name AS daypart, `+locConf['prefix']+`orders.comment AS comment, `+locConf['prefix']+`locations.Name AS location, 
+						`+locConf['prefix']+`orders.type AS type, TIME(`+locConf['prefix']+`orders.fulfilled) AS fulfilled 
+						FROM `+locConf['prefix']+`orders 
+						LEFT JOIN `+locConf['prefix']+`toc AS item ON (item.ID = `+locConf['prefix']+`orders.itemID) 
+						LEFT JOIN `+locConf['prefix']+`toc AS slot ON (slot.ID = `+locConf['prefix']+`orders.slotID) 
+						LEFT JOIN `+locConf['prefix']+`daypart ON (`+locConf['prefix']+`daypart.ID = `+locConf['prefix']+`orders.daypart) 
+						LEFT JOIN `+locConf['prefix']+`locations ON (`+locConf['prefix']+`locations.ID = `+locConf['prefix']+`orders.location) 
+						WHERE `+locConf['prefix']+`orders.invoice = `+id+` 
+						ORDER BY Date ASC, Slot;`;
+			try{
+				result = await asyncQuery(connection, sql);
+			}catch(err){
+				return 400;
+			}
+			if(!result || !result.length)
+				return 400;
+			let data = "";
+			// offset from settings
+			let offset= false;
+			if(trafConf)
+				offset = parseInt(trafConf["inv_exp_offset"]);
+			if(offset)
+				id = id + offset;
+			for(let i=0; i<result.length; i++){
+				let orderDate = result[i].odate;
+				if(orderDate == '0000-00-00')
+					orderDate = "";
+				let orderFulfilled = result[i].fulfilled;
+				let orderSlot = result[i].slot;
+				let orderItem = result[i].item;
+				let orderAmount = result[i].amount;
+				let orderDaypart = result[i].daypart;
+				let orderComment = result[i].comment;
+				let orderLocation = result[i].location;
+				let orderType = result[i].type;
+				let adjusted;
+				let note = "";
+				if(orderType == 'order'){
+					if(!orderDaypart)
+						orderDaypart = "Fixed Slot";
+					if(!orderFulfilled)
+						orderFulfilled = "skipped";
+					else
+						adjusted = orderAmount * (1 - (iRec.discount/100.0));
+					note = orderItem+"/"+orderLocation+"/"+orderSlot+"/"+orderDaypart+" ("+orderDate+" "+orderFulfilled+")";
+				}else if(orderType == 'credit'){
+					adjusted = orderAmount * (1 - (iRec.discount/100.0));
+					if(orderItem && orderLocation && orderSlot)
+						note = "credit: "+orderItem+"/"+orderLocation+"/"+orderSlot+": "+orderComment;
+					else
+						note = "credit: "+orderComment;
+				}else if(orderType == 'payment'){
+					// payments are ignored - handled by GnuCash manually
+					continue;
+				}else if(orderType == 'bulk'){
+					adjusted = orderAmount * (1 - (iRec.discount/100.0));
+					if(orderItem && orderLocation)
+						note = "bulk: "+orderItem+"/"+orderLocation;
+					else
+						note = "bulk: "+orderComment;
+				}else{
+					adjusted = orderAmount * (1 - (iRec.discount/100.0));
+					note = "item: "+orderComment;
+				}
+				adjusted = financialFormat(adjusted);
+				data += id+";"+iRec.posted+";"+iRec.customer+";;"+iRec.comment+";"+orderDate+";"+note+";;Income:Advertising;1;"+adjusted+";;;"+iRec.discount+";;;;"+iRec.posted+";"+iRec.due+";Assets:Accounts Receivable;Posted by import;X\n";
+			}
+			response.set({
+				'Cache-Control': 'no-cache',
+				'Content-Type': 'text/plain',
+				'Content-Length': Buffer.byteLength(data, 'utf8'),
+				'Content-Disposition': 'attachment; filename=gnuCashInvoiceTMS_'+id+'.csv'
+			});
+			response.status(201);
 			response.send(data);
-*/
-			return false; // false indicates we handled the response contents here.
+			connection.release();
+			return false; // we handled the response here for file download
+		}else if(type == "gnucash-cust"){ // id = 0 for an all customers dump
+			let result;
+			let sql = "SELECT id, name, address1, address2, city, state, postcode, country, contact, phone, email FROM ar_client";
+			if(id)
+				sql += " WHERE id = "+id+";";
+			else
+				sql += " ORDER BY id ASC;";
+			try{
+				result = await asyncQuery(connection, sql);
+			}catch(err){
+				return 400;
+			}
+			if(!result || !result.length)
+				return 400;
+			let data = "";
+			for(let i=0; i<result.length; i++){
+				let rec = result[i];
+				data += rec.id+";"+rec.name+";"+rec.contact+";"+rec.address1+";"+rec.address2+";"+rec.city+", "+rec.state+";"+rec.postcode+" "+rec.country+";"+rec.phone+";;"+rec.email+";;;;;;;;;\n";
+			}
+			if(!id)
+				id = "ALL";
+			response.set({
+				'Cache-Control': 'no-cache',
+				'Content-Type': 'text/plain',
+				'Content-Length': Buffer.byteLength(data, 'utf8'),
+				'Content-Disposition': 'attachment; filename=gnuCashCustomersTMS_'+id+'.csv'
+			});
+			response.status(201);
+			response.send(data);
+			connection.release();
+			return false; // we handled the response here for file download
 		}
 	}
 	return 400;
@@ -5723,6 +5771,14 @@ module.exports = {
 			}
 			console.log('Lib Configuration done.');
 		}
+		let adc = config['traffic'];
+		if(adc){
+			if(_.isEqual(adc, trafConf) == false){
+				console.log('Traffic Configuration changed.');
+				trafConf = _.cloneDeep(adc);
+			}
+			console.log('Traffic Configuration done.');
+		}
 		if(libpool)
 			getLibraryFingerprint();
 		return true;
@@ -5852,8 +5908,8 @@ module.exports = {
 			responseWrapper(request, response, params, dirs, bumpInvoiceOrder); // /bump/orderID{?day=YYYY-MM-DD}{&slot=slotItemID}
 		}else if(dirs[2] == 'postinv'){
 			responseWrapper(request, response, params, dirs, postInvoice); // /postinv/invoiceID{?unpost=1}
-		}		else if(dirs[2] == 'expinv'){
-			responseWrapper(request, response, params, dirs, exportInvoice); // /postinv/invoiceID&?type={gnucash,some-ther-type-todo}
+		}else if(dirs[2] == 'exptraffic'){
+			responseWrapper(request, response, params, dirs, exportTrafficRec); // /exptraffic/ID&?type={format: gnucash-inv,gnucash-cust,some-ther-type-todo}
 		}else{
 			response.status(400);
 			response.end();

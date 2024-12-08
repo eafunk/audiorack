@@ -3338,18 +3338,25 @@ async function itemExport(evt){
 				alert("Got an error retreaving file from server.\n"+resp.statusText);
 				return;
 			}
-			let blob = await resp.blob();
-			let contentDisposition = resp.headers.get("content-disposition");
-			let fileName = contentDisposition.substring(contentDisposition.indexOf("filename=")+9);
-			el = document.getElementById("filedltarget");
-			el.href = window.URL.createObjectURL(blob);
-			el.download = fileName;
-			el.click();
+			await responsToFile(resp);
 		}else{
 			alert("Failed to retreaving file from server.");
 			return;
 		}
 	}
+}
+
+async function responsToFile(resp){
+	let blob = await resp.blob();
+	let contentDisposition = resp.headers.get("content-disposition");
+	let fileName = contentDisposition.substring(contentDisposition.indexOf("filename=")+9);
+	let el = document.createElement("a");
+	el.style.display = "none";
+	el.href = window.URL.createObjectURL(blob);
+	el.download = fileName;
+	document.body.appendChild(el);
+	el.click();
+	document.body.removeChild(el);
 }
 
 function itemRemoveRow(evt){
@@ -5231,7 +5238,6 @@ async function showTocItem(panel, container){
 						Add offset (seconds) to times: <input type='text' id='itemtimeoffset' size='5' value='0'></input>`;
 		else if(itemProps.ID)
 			inner += `<p><button id='expitembut' onclick='itemExport(event)'>Download</button> jSON File`;
-		inner += `<a id="filedltarget" style="display: none"></a>`;
 	}
 	inner += `<p><button onclick='itemSendToStash(event)'>Item to Stash</button><button onclick='itemSendToQueue(event)'>Item to Queue</button>`;
 	if(itemProps.Type == "file")
@@ -5746,7 +5752,7 @@ function loadConfigTypeTable(el, type){
 	if(type === "confusers"){
 		hidden = {salt: false};
 		actions = `<button class="editbutton" onclick="updateConf(event, '`+type+`')">Update</button>
-						<button class="editbutton" onclick="delConf(event, '`+type+`')">-</button>`;getconf/studioAutoMode
+						<button class="editbutton" onclick="delConf(event, '`+type+`')">-</button>`;
 		haction = `<button class="editbutton" onclick="newConf(event, '`+type+`')">+</button>`;
 		fields = {id: "<input type='text' name='id' value='$val'/>", 
 					password: "<input type='text' name='password' value='' placeholder='New Password'></input>",
@@ -12996,7 +13002,7 @@ async function refreshCampCats(evt){
 		}
 	}
 }
-
+//!! change below to pull from UI servere settings
 function recallCampCat(){
 	let obj = JSON.parse(localStorage.getItem("trafficDefCampCat"));
 	let el = document.getElementById("campItemCatBtn");
@@ -14301,7 +14307,7 @@ function hookNewOrderRows(tbl){
 }
 
 async function invBulkUpdateRec(evt, save){
-	// for now, just days, come back and add Start, and Price
+	//!! for now, just days, come back and add Start, and Price
 	let cell = evt.target.parentNode;
 	let row = cell.parentNode;
 	let idx = parseInt(row.firstChild.firstChild.getAttribute("data-idx"));
@@ -14468,57 +14474,47 @@ async function invLoadOrders(invID){
 	unhookNewOrderRows();
 	let total = 0.0;
 	let el = document.getElementById("invOrdersDiv");
-	el.innerHTML = "<div class='center'><i class='fa fa-circle-o-notch fa-spin' style='font-size:48px'></i></div>";
-	// Update download control list with templates
-	let list = [];
-	let resp = await fetchContent("inv-template");
-	if(resp && resp.ok)
-		list = await resp.json();
-	el = document.getElementById("invExportType");
-	if(el){
-		let inner = "<option value='gnucash'>gnuCash</option>";
-		for(let i=0; i < list.length; i++){
-			let parts = list[i].split(".");
-			if(parts[1] == "html")
-				inner += "<option value='"+list[i]+"'>"+parts[0]+"</option>";
-		}
-		el.innerHTML = inner;
-	}
-	// get associated order data
-	el = document.getElementById("invOrdersDiv");
-	resp = await fetchContent("library/getorders/"+invID, {
-			method: 'GET',
-			headers: {
-				"Content-Type": "application/json",
-				"Accept": "application/json"
-			}
-		});
-	if(resp instanceof Response){
-		if(resp.ok){
-			let pending = false;
-			let resultRec = await resp.json();
-			let lastOrderDate;
-			if(lastOrdersRec){
-				// remember which rows are expanded
-				for(let i=0; i<lastOrdersRec.length; i++){
-					let rec = lastOrdersRec[i];
-					if(rec.showChldn){
-						let obj = findPropObjInArray(resultRec, "groupHash", rec.groupHash)
-						if(obj)
-							obj.showChldn = 1;
+	if(invID){
+		el.innerHTML = "<div class='center'><i class='fa fa-circle-o-notch fa-spin' style='font-size:48px'></i></div>";
+		// get associated order data
+		el = document.getElementById("invOrdersDiv");
+		resp = await fetchContent("library/getorders/"+invID, {
+				method: 'GET',
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp instanceof Response){
+			if(resp.ok){
+				let pending = false;
+				let resultRec = await resp.json();
+				let lastOrderDate;
+				if(lastOrdersRec){
+					// remember which rows are expanded
+					for(let i=0; i<lastOrdersRec.length; i++){
+						let rec = lastOrdersRec[i];
+						if(rec.showChldn){
+							let obj = findPropObjInArray(resultRec, "groupHash", rec.groupHash)
+							if(obj)
+								obj.showChldn = 1;
+						}
 					}
 				}
+				lastOrdersRec = resultRec;
+				for(let i=0; i<lastOrdersRec.length; i++){
+					total += lastOrdersRec[i].Amount;
+					if(lastOrdersRec[i].Pending)
+						pending = true;
+				}
+				document.getElementById("invTotal").innerText = financialFormat(total);
+				invRedisplayRecord(el);
+				return pending;
 			}
-			lastOrdersRec = resultRec;
-			for(let i=0; i<lastOrdersRec.length; i++){
-				total += lastOrdersRec[i].Amount;
-				if(lastOrdersRec[i].Pending)
-					pending = true;
-			}
-			document.getElementById("invTotal").innerText = financialFormat(total);
-			invRedisplayRecord(el);
-			return pending;
 		}
+	}else{
+		genPopulateTableFromArray(false, el);
+		return;
 	}
 	// handle failure
 	genPopulateTableFromArray(false, el);
@@ -14537,6 +14533,21 @@ async function invLoadRecord(){
 	el = document.getElementById("invInfoBox");
 	el.style.display = "flex";
 	el = document.getElementById("invOrdersDiv");
+	// Update download control list with templates
+	let list = [];
+	let resp = await fetchContent("inv-template");
+	if(resp && resp.ok)
+		list = await resp.json();
+	el = document.getElementById("invExportType");
+	if(el){
+		let inner = "<option value='gnucash'>gnuCash</option>";
+		for(let i=0; i < list.length; i++){
+			let parts = list[i].split(".");
+			if(parts[1] == "html")
+				inner += "<option value='"+list[i]+"'>"+parts[0]+"</option>";
+		}
+		el.innerHTML = inner;
+	}
 	if(invID){
 		// load invoice record
 		let resp = await fetchContent("library/get/invoices/"+invID, {
@@ -14631,6 +14642,7 @@ async function invLoadRecord(){
 		document.getElementById("invClientID").innerText = selCustID;
 		document.getElementById("invCustRep").innerText = "Customer's Rep: "+lastCustRec.salesrep;
 		document.getElementById("invPostBtn").disabled = true;
+		invLoadOrders(0);
 	}
 }
 
@@ -14640,9 +14652,38 @@ async function invExport(evt){
 	if(invID){
 		let type = document.getElementById("invExportType").value;
 		if(type == "gnucash"){
-			//!! handle customer record too
-			
+			let api = "library/exptraffic/"+invID+"?type=gnucash-inv";
+			let resp = await fetchContent(api, {
+					method: 'GET',
+					headers: {
+						"Content-Type": "application/json",
+						"Accept": "application/json"
+					}
+				});
+			if(resp){
+				if(resp.ok){
+					await responsToFile(resp);
+					api = "library/exptraffic/"+lastInvRec.customer+"?type=gnucash-cust";
+					resp = await fetchContent(api, {
+							method: 'GET',
+							headers: {
+								"Content-Type": "application/json",
+								"Accept": "application/json"
+							}
+						});
+					if(resp){
+						if(resp.ok){
+							await responsToFile(resp);
+							return;
+						}
+					}
+					alert("Failed to download customer export from the server.");
+					return;
+				}
+			}
+			alert("Failed to download invoice and customer export from the server.");
 		}else{
+			// handle print tempalate 
 			let pwindow = window.open("/inv-template/"+type, "", "height=600,width=800");
 		}
 	}

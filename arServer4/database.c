@@ -2171,7 +2171,7 @@ uint32_t dbGetNextScheduledItem(void **result, time_t *targetTime, short *priori
 		db_set_errtag(instance, "dbGetNextScheduledItem");
 		// select all items scheduled for insert between the from and to times.  Group by Item ID, using the latest time
 		// and highest priority of any duplicate items are scheduled in that time range.
-		// NOTE (BUG): If from and to times are split across a day rollover, the latest item befor the roll over will be 
+		// NOTE (BUG): If from and to times are split across a day rollover, the latest item before the roll over will be 
 		// selected for the case where multiple duplicate items are scheduled.
 		str_setstr(&sql, "SELECT [prefix]schedule.Item AS Item, MAX(([prefix]hourmap.Map * 60) + [prefix]schedule.Minute) AS Minutes, ");
 		str_appendstr(&sql, "MAX([prefix]schedule.Priority) AS Priority FROM ([prefix]schedule, [prefix]hourmap) ");

@@ -45,12 +45,13 @@
 			align-content: center;
 		}
 		@media print {
-			body {transform: scale(0.95)}
-			table { page-break-after:auto }
-			tr    { page-break-inside:avoid; page-break-after:auto }
-			td    { page-break-inside:avoid; page-break-after:auto }
-			thead { display:table-header-group }
-			tfoot { display:table-footer-group }
+			body {transform: scale(1.0)}
+			div   { page-break-inside:avoid; }
+			table { page-break-after:auto; }
+			tr    { page-break-inside:avoid; page-break-after:auto; }
+			td    { page-break-inside:avoid; page-break-after:auto; }
+			thead { display:table-header-group; }
+			tfoot { display:table-footer-group; }
 		}
 	</style>
 	<script>
