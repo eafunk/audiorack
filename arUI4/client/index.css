@@ -226,7 +226,6 @@ iframe{
 	text-align: center;
 	padding: 5px;
 	margin: 5px;
-	height: 100%;
 }
 
 .schedGrid {
@@ -248,8 +247,8 @@ iframe{
 	grid-template-areas: 
 		"outs"
 		"status"
-		"queue"
 		"ins"
+		"queue"
 		"accord"
 		"admin";
 	grid-template-rows: 150px 150px 684px 329px minmax(200px, auto-fit) minmax(200px, auto-fit);

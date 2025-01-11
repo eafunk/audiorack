@@ -1322,7 +1322,7 @@ function setIn(request, response, params, dirs){
 					if(['meta', 'rest', 'category_item', 'playlist', 'task'].includes(table))
 						// tables where row ID is named RID, rather than just ID
 						where = " WHERE RID ="+libpool.escape(dirs[4])+";";
-					if(['client', 'campaign', 'invoices'].includes(table))
+					else if(['client', 'campaign', 'invoices'].includes(table))
 						where = " WHERE id ="+libpool.escape(dirs[4])+";";
 					else
 						where = " WHERE ID ="+libpool.escape(dirs[4])+";";
@@ -2991,7 +2991,7 @@ async function getOpenAdSlots(connection, orderID, start, locID, days, daypartID
 	// on the parameter confinments. NOTE: If orderID is set, count is set to 1 if it is false/null, etc., and zero for all results
 	// for bumping, and bump checking.
 	// DaypartID can be false or zero to remove limiting results to a daypart schedule. 
-	
+//!! MODIFY TO HANDLE WEEK OF MONTH
 	let result;
 	let query = `SELECT `+locConf['prefix']+`schedule.Item AS id, CONCAT(`+locConf['prefix']+`schedule.Hour, ':', LPAD(`+locConf['prefix']+`schedule.Minute, 2,'0'), '-', `+locConf['prefix']+`toc.Name) AS Name, `;
 	if(start)
@@ -3436,6 +3436,7 @@ async function addInvDPOrder(connection, request, response, params, dirs){
 
 async function getAdBumpCandidates(connection, locID, dpID, start, range){
 	let result;
+//!! MODIFY TO HANDLE WEEK OF MONTH
 	let query = `SELECT DISTINCT `+locConf['prefix']+`orders.ID AS orderID, `+locConf['prefix']+`orders.date As Date, `+locConf['prefix']+`orders.orders.slotID AS Slot 
 	FROM (`+locConf['prefix']+`vector, `+locConf['prefix']+`schedule, `+locConf['prefix']+`orders, `+locConf['prefix']+`toc, 
 	`+locConf['prefix']+`hourmap, `+locConf['prefix']+`daymap, `+locConf['prefix']+`category, `+locConf['prefix']+`category_item, `+locConf['prefix']+`daypart_times) 
@@ -3449,7 +3450,10 @@ async function getAdBumpCandidates(connection, locID, dpID, start, range){
 	AND (`+locConf['prefix']+`schedule.Location IS NULL OR `+locConf['prefix']+`schedule.Location = `+locID+`) AND `+locConf['prefix']+`schedule.Priority > 0 
 	AND (`+locConf['prefix']+`schedule.Month = 0 OR `+locConf['prefix']+`schedule.Month = MONTH(DATE_ADD('`+start+`', INTERVAL `+locConf['prefix']+`vector.number DAY)) ) 
 	AND (`+locConf['prefix']+`schedule.Date = 0 OR `+locConf['prefix']+`schedule.Date = DAYOFMONTH(DATE_ADD('`+start+`', INTERVAL `+locConf['prefix']+`vector.number DAY)) ) 
-	AND `+locConf['prefix']+`daymap.Map = DAYOFWEEK(DATE_ADD('`+start+`', INTERVAL `+locConf['prefix']+`vector.number DAY)) AND `+locConf['prefix']+`schedule.Item = `+locConf['prefix']+`toc.ID 
+	
+	AND `+locConf['prefix']+`daymap.Map = DAYOFWEEK(DATE_ADD('`+start+`', INTERVAL `+locConf['prefix']+`vector.number DAY)) 
+	
+	AND `+locConf['prefix']+`schedule.Item = `+locConf['prefix']+`toc.ID 
 	AND `+locConf['prefix']+`toc.Type = 'task' AND `+locConf['prefix']+`category_item.Item = `+locConf['prefix']+`schedule.Item 
 	AND `+locConf['prefix']+`category_item.Category = `+locConf['prefix']+`category.ID AND `+locConf['prefix']+`category.Name = 'Advertisement' 
 	ORDER BY RAND();`;
@@ -3459,6 +3463,106 @@ async function getAdBumpCandidates(connection, locID, dpID, start, range){
 		return [];
 	}
 	return result;
+}
+
+async function getLocationOrders(connection, request, response, params, dirs){ // /showorders/locID?{date=YYYY-MM-DD}{?range=days}
+	// if not specified, date is set to today, and range set to 7 days.
+if(dirs[3]){
+		// get ID and make sure it is a number.
+		let locID = parseInt(dirs[3], 10);
+		if(isNaN(ID) || !ID)
+			return 400;
+		let range = parseInt(params.range, 10);
+		if(isNaN(range) || !range)
+			range = 7;
+		let date = params.date;
+		if(!date)
+			date = dateToISOLocal(new Date());
+		// check for permission
+		if(request.session.permission == "studio")	// studio permission is not allowed to make changes, all others are
+			return 401;
+		let result;
+//!!
+
+
+		let query = `SELECT `+locConf['prefix']+`orders.ID AS ID, `+locConf['prefix']+`orders.type AS Type, `+locConf['prefix']+`orders.location AS locID, 
+	item.ID AS ItemID, `+locConf['prefix']+`daypart.Name AS Daypart, `+locConf['prefix']+`orders.dp_start AS Start, `+locConf['prefix']+`orders.dp_range AS Days, 
+	IF(`+locConf['prefix']+`orders.type = 'bulk', DATE(FROM_UNIXTIME(`+locConf['prefix']+`logs.Time)), `+locConf['prefix']+`orders.date) AS OrderDate, 
+	slot.Name AS Slot, 
+	IF(`+locConf['prefix']+`orders.fulfilled IS NULL, 
+		IF(`+locConf['prefix']+`logs.Time IS NULL,
+			IF(`+locConf['prefix']+`orders.date >= DATE(NOW()), 
+				'pending', 
+				'skipped'), 
+			'Complete'),
+		'Complete') AS Status, 
+	item.Name AS Item,  
+	`+locConf['prefix']+`orders.comment) AS Comment,  
+	IF(`+locConf['prefix']+`orders.fulfilled IS NULL, TIME(FROM_UNIXTIME(`+locConf['prefix']+`logs.Time)), TIME(`+locConf['prefix']+`orders.fulfilled)) AS Fulfilled 
+FROM `+locConf['prefix']+`orders 
+LEFT JOIN `+locConf['prefix']+`logs ON (`+locConf['prefix']+`logs.Added = 0 AND `+locConf['prefix']+`logs.Location = `+locConf['prefix']+`orders.location 
+	AND `+locConf['prefix']+`logs.Item = `+locConf['prefix']+`orders.itemID AND 
+	(
+		(`+locConf['prefix']+`orders.type = 'bulk' AND DATE(FROM_UNIXTIME(`+locConf['prefix']+`logs.Time)) BETWEEN `+locConf['prefix']+`orders.dp_start 
+			AND DATE_ADD(`+locConf['prefix']+`orders.dp_start, INTERVAL `+locConf['prefix']+`orders.dp_range DAY)) OR 
+		(`+locConf['prefix']+`orders.type = 'order' AND `+locConf['prefix']+`logs.OwnerID = `+locConf['prefix']+`orders.slotID AND DATE(FROM_UNIXTIME(`+locConf['prefix']+`logs.Time)) = `+locConf['prefix']+`orders.date) 
+	)
+)
+LEFT JOIN `+locConf['prefix']+`toc AS item ON (item.ID = `+locConf['prefix']+`orders.itemID) 
+LEFT JOIN `+locConf['prefix']+`toc AS slot ON (slot.ID = `+locConf['prefix']+`orders.slotID) 
+LEFT JOIN `+locConf['prefix']+`daypart ON (`+locConf['prefix']+`daypart.ID = `+locConf['prefix']+`orders.daypart) 
+LEFT JOIN `+locConf['prefix']+`locations ON (`+locConf['prefix']+`locations.ID = `+locConf['prefix']+`orders.location) 
+WHERE `+locConf['prefix']+`orders.invoice = '`+ID+`'  
+ORDER BY Location, Type, ItemID, Start, Days, DaypartID, OrderDate, Slot, Fulfilled;`;
+		try{
+			result = await asyncQuery(connection, query);
+		}catch(err){
+			return 304;
+		}
+		// Create branches
+		let parent = false;
+		let base = [];
+		for(let i=0; i<result.length; i++){
+			if(!parent || (result[i].locID != parent.locID) || (result[i].Type != parent.Type) || 
+							(result[i].ItemID != parent.ItemID) || (result[i].DaypartID != parent.DaypartID) ||
+							(result[i].Start != parent.Start) || (result[i].Days != parent.Days)){
+				let ghash = crc32(result[i].Type, 0);
+				if(result[i].locID)
+					ghash = crc32(result[i].locID.toString(), ghash);
+				if(result[i].ItemID)
+					ghash = crc32(result[i].ItemID.toString(), ghash);
+				if(result[i].DaypartID)
+					ghash = crc32(result[i].DaypartID.toString(), ghash);
+				if(result[i].Days)
+					ghash = crc32(result[i].Days.toString(), ghash);
+				if(result[i].Start)
+					ghash = crc32(result[i].Start, ghash);
+				parent = {ID: result[i].ID, locID: result[i].locID, Location: result[i].Location, Type: result[i].Type, Item:result[i].Item, Daypart:result[i].Daypart, 
+									DaypartID:result[i].DaypartID, ItemID:result[i].ItemID, DaypartID: result[i].DaypartID, Start:result[i].Start, Days: result[i].Days, 
+									Amount: 0.0, groupHash: ghash};
+				if(result[i].Type == "bulk")
+					parent.Amount = result[i].Amount;
+				parent.children = [];
+				base.push(parent);
+			}
+			parent.children.push(result[i])
+			if(result[i].Type == "bulk"){
+				delete result[i].Amount;
+			}else{
+				if(result[i].Type == "credit")
+					parent.Amount -= result[i].Amount;
+				else if(result[i].Status == 'skipped')
+					result[i].Amount = null;
+				else{
+					parent.Amount += result[i].Amount; // order or item
+					if(result[i].Status == "pending")
+						parent.Pending = true;
+				}
+			}
+		}
+		return base;
+	}
+	return 400;
 }
 
 async function getInvoiceOrders(connection, request, response, params, dirs){
@@ -5900,6 +6004,8 @@ module.exports = {
 			abortDbFileSearch(request, response);		// stops a dbFileSearch process running in the background
 		}else if(dirs[2] == 'getorders'){
 			responseWrapper(request, response, params, dirs, getInvoiceOrders); // /getorders/invoiceID
+		}else if(dirs[2] == 'showorders'){
+			responseWrapper(request, response, params, dirs, getLocationOrders); // /showorders/locID?{date=YYYY-MM-DD}{?days=range}
 		}else if(dirs[2] == 'openslots'){
 			responseWrapper(request, response, params, dirs, getOpenSlotsForDate); // /openslots/date(YYY-MM-DD format)?locID=value
 		}else if(dirs[2] == 'dporder'){

@@ -1248,13 +1248,13 @@ void dbPick(taskRecord *parent){
 								str_insertstr(&tmp, "[database] dbPick-", 0);
 								serverLogMakeEntry(tmp);
 								free(tmp);
-							}else{								
+							}else{
 								// increase the parent target time by the new item's duration
 								if(targetTime){
 									targetTime = targetTime + GetMetaFloat(newUID, "Duration", NULL);
 									SetMetaData(parent->UID, "TargetTime", (tmp = fstr(targetTime, 1)));
 									free(tmp);
-								}								
+								}
 							}
 						}
 					}
@@ -2148,9 +2148,13 @@ uint32_t dbGetNextScheduledItem(void **result, time_t *targetTime, short *priori
 	
 	if(!result)
 		return 0;
-	if(difftime(to_t, from_t) > 10800)
+	if(difftime(to_t, from_t) > 10800){
 		// greater than three hours bug trap???
+		char buf[128];
+		snprintf(buf, sizeof buf, "[database] dbGetNextScheduledItem-3hr from-to trap: from = %lld, to = %lld.", (long long)from_t, (long long)to_t );
+		serverLogMakeEntry(buf); 
 		return 0;
+	}
 	localtime_r(&from_t, &from_rec);
 	localtime_r(&to_t, &to_rec);
 	ID = 0;
@@ -2287,10 +2291,16 @@ uint32_t dbGetNextScheduledItem(void **result, time_t *targetTime, short *priori
 		}	  
 		str_appendstr(&sql, "GROUP BY [prefix]schedule.Item ORDER BY Priority DESC, Minutes ASC");
 		dbMacroReplace(&sql);
+		
+		//!!! debug vvv for more than 30 minutes from/to range
+		if(difftime(to_t, from_t) > 1800)
+			serverLogMakeEntry(sql); 
+
 		// perform the sql query function
 		if(db_query(instance, sql)){
 			goto cleanup;
 		}
+		
 	}
 	// get next row from query result
 	if(db_result_next_row(instance)){
@@ -2331,6 +2341,7 @@ cleanup:
 	return ID;
 }
 
+//!! THIS IS NOT USED
 void dbSaveFilePos(uint32_t UID, float position){
 	dbInstance *instance = NULL;
 	uint32_t ID;
@@ -2355,6 +2366,7 @@ void dbSaveFilePos(uint32_t UID, float position){
 	free(prefix);
 }
 
+//!! THIS IS NOT USED
 char *dbGetReqestComment(time_t theTime){
 	dbInstance *instance = NULL;
 	const char *Str;
@@ -2415,6 +2427,7 @@ cleanup:
 	return result;
 }
 
+//!! THIS IS NOT USED
 char *dbGetCurrentMSG(void){
 	dbInstance *instance = NULL;
 	const char *Str;

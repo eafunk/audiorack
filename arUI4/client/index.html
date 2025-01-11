@@ -19,6 +19,7 @@
 			</div>
 			<div class="Rpanel" id="infopane">
 				<button style="float:right;" onclick="closeInfo(event)">&gt;</button>
+				<audio id='itemcueplayer' width='100%' onloadstart ='cuePlayerLoading(event);' oncanplay='cuePlayerReady(event);'><source id='itemcuesource'>Your browser does not support the audio tag.</audio>
 				<div id="infodata" class="scroll" style="text-align: left;">
 					<p>Info Panel</p>
 				</div>
@@ -93,7 +94,7 @@
 			<button id="showinfobtn" onclick="showInfo(event)">&lt;</button>
 			<div id="about" class="tabcontent">
 				<h2>Welcome to AudioRack v4.0.9</h2>
-				<p>Copyright &copy2021-2024; Ethan Funk</p>
+				<p>Copyright &copy2021-2025; Ethan Funk</p>
 				<p>This is the Audiorack User Interface Web Application and Node-js Application Server</p>
 				<p>Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
  documentation files (the "Software"), to deal in the Software without restriction, including without limitation 
@@ -728,7 +729,7 @@
 				</div>
 			</div>
 			<div id="trafsched" class="tabcontent">
-				<p>Radio is fun...</p>
+				<div></p><input type="date" id="trafSchedDate" name="shcedDate" step="7" min="2015-01-04" onchange="schDateChange()"></div>
 			</div>
 			<div id="trafdp" class="tabcontent">
 				<p>Radio is fun...</p>

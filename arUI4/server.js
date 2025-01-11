@@ -905,7 +905,7 @@ app.get('/stadmin', function(request, response){
 								<div id="stConsole" class="accpanel" style="display: flex;">
 									<textarea id="stConsRep" rows="19" width=100% readonly=""></textarea>
 									<div>
-										<input type="text" id="conCommand" placeholder="command" style="float: left; width: calc(100% - 35px)"></input>
+										<input type="text" id="conCommand" placeholder="command" style="float: left; width: calc(100% - 40px)"></input>
 										<button class="editbutton" type="submit" onClick="stConsSend()" style="float: right; width: 32px;">Send</button>
 									</div>
 								</div>
@@ -979,7 +979,7 @@ app.get('/stadmin', function(request, response){
 										</tr>
 									</table>
 								</div>
-								<div id="stConfLib" class="accpanel" style="text-align: left; height: 303px;">
+								<div id="stConfLib" class="accpanel" style="text-align: left;">
 									<div class="boxed">
 										<button onclick="stConfDbCopy(event)">Copy & Apply from Library Settings</button><br>
 										<table class="tableleftj">
@@ -995,7 +995,7 @@ app.get('/stadmin', function(request, response){
 										<input id="stConfDbMark" type="checkbox" onchange="stConfDbMarkChange(event)"> Mark Missing -- only one studio should have this set
 									</div>
 								</div>
-								<div id="stConfMixer" class="accpanel" style="text-align: left; height: 303px;">
+								<div id="stConfMixer" class="accpanel" style="text-align: left;">
 									<table class="tableleftj">
 										<tr>
 											<td>Defaults:
@@ -1017,7 +1017,7 @@ app.get('/stadmin', function(request, response){
 										</tr>
 									</table>
 								</div>
-								<div id="stConfAuto" class="accpanel" style="text-align: left; height: 303px;">
+								<div id="stConfAuto" class="accpanel" style="text-align: left;">
 									<table class="tableleftj">
 										<tr>
 											<td>Automation state at Startup:
@@ -1052,7 +1052,7 @@ app.get('/stadmin', function(request, response){
 										</tr>
 									</table>
 								</div>
-								<div id="stConfSIP" class="accpanel" style="text-align: left; height: 303px;">
+								<div id="stConfSIP" class="accpanel" style="text-align: left;">
 									<table class="tableleftj">
 										<tr>
 											<td>
@@ -1079,7 +1079,7 @@ app.get('/stadmin', function(request, response){
 										</tr>
 									</table>
 								</div>
-								<div id="stConfRoute" class="accpanel" style="text-align: left; height: 303px;">
+								<div id="stConfRoute" class="accpanel" style="text-align: left;">
 									<div id="stConfJackConns">
 									</div>
 								</div>
@@ -1157,8 +1157,7 @@ app.get('/nav', async function(request, response){
 			}
 			html += `</div>`;
 			// live remote 
-			html += `<button class="tabitem" onclick="dropClick(event)" data-childdiv="remotediv" data-showcb="loadRemoteTab">Live Remote
-						<i class="fa fa-caret-down"></i>
+			html += `<button class="tabitem" onclick="dropClick(event)" data-showcb="loadRemoteTab">Live Remote
 					</button>
 					<div id="remotediv"></div>`;
 		}

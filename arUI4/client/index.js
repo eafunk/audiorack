@@ -37,7 +37,6 @@ class watchableValue {
 /***** Global Variables *****/
 
 includeScript("vumeter.js");
-includeScript("jssip-3.10.0.min.js");	// for live remote
 
 var infoWidth = "450px";
 var scriptHeight = "375px";
@@ -512,15 +511,18 @@ async function getMediaLocs(){
 /***** Navigation  Functions *****/
 
 async function dropClick(evt){
-	let id = evt.currentTarget.getAttribute("data-childdiv");
+	let content;
 	let cb = evt.currentTarget.getAttribute("data-showcb");
-	let content = document.getElementById(id);
-	if(content.style.display === "block")
+	let id = evt.currentTarget.getAttribute("data-childdiv");
+	if(id)
+		content = document.getElementById(id);
+	if(content && (content.style.display === "block"))
 		content.style.display = "none";
 	else{
 		if(cb)
 			await window[cb](evt);	// call the update callback function prior to showing
-		content.style.display = "block";
+		if(content)
+			content.style.display = "block";
 	}
 }
 
@@ -3966,7 +3968,9 @@ async function refreshItemLocationDep(val){
 	}
 }
 
-async function refreshItemHistory(){
+async function refreshItemHistory(evt){
+	evt.preventDefault();
+	evt.stopPropagation();
 	let div = document.getElementById("itemhistlist");
 	if(div && itemProps){
 		await showItem({tocID: itemProps.ID}, itemProps.canEdit, true);
@@ -4144,7 +4148,7 @@ async function reloadItemSection(el, type){
 		}
 		if(itemProps.history){
 			let inner = "<form id='histitemform'>";
-			inner += "Before date: <input type='date' id='histdatesel' name='histdate' value='"+histdateVal+"' onchange='refreshItemHistory()'></input>";
+			inner += "Before date: <input type='date' id='histdatesel' name='histdate' value='"+histdateVal+"' onchange='refreshItemHistory(event)'></input>";
 			inner += "<input type='number' id='histlimsel' name='histlimit' onchange='refreshItemHistory()' value='"+histlimitVal+"' max='310' min='10' step='50'></input>"
 			inner += "<div id='itemhistlist'></div>"
 			el.innerHTML = inner + "</form>";
@@ -5180,11 +5184,25 @@ async function showPlayerItem(panel, container){
 	}
 }
 
-async function showTocItem(panel, container){
-	let inner = "<center id='itemName'>"+quoteattr(itemProps.Name)+"</center><br>";
-	if(itemProps.ID && (itemProps.Type === "file"))
-		inner += "<audio controls id='itemcueplayer' width='100%'><source id='itemcuesource' src='library/download/"+itemProps.ID+"''>Your browser does not support the audio tag.</audio>";
+function cuePlayerLoading(evt){
+	evt.target.controls = false;
+}
 
+function cuePlayerReady(evt){
+	controls = evt.target.controlslist;
+	evt.target.controls = true;
+}
+
+async function showTocItem(panel, container){
+	let audio = document.getElementById("itemcueplayer");
+	audio.controls = false;
+	if(itemProps.ID && (itemProps.Type === "file")){
+		let source = document.getElementById("itemcuesource");
+		source.src = "library/download/"+itemProps.ID;
+		audio.load();
+	}
+
+	let inner = "<center id='itemName'>"+quoteattr(itemProps.Name)+"</center><br>";
 	inner += `<button class="accordion" id="genbut" name='general' onclick="selectAccordType(event, reloadItemSection, 'general')">General</button>
 	<div class="accpanel">
 	</div>`;
@@ -13002,7 +13020,7 @@ async function refreshCampCats(evt){
 		}
 	}
 }
-//!! change below to pull from UI servere settings
+
 function recallCampCat(){
 	let obj = JSON.parse(localStorage.getItem("trafficDefCampCat"));
 	let el = document.getElementById("campItemCatBtn");
@@ -13200,7 +13218,7 @@ async function campLoadRecord(){
 													if(resp.ok){
 														let data = await resp.json();
 														if(data && data.length){
-															lastCampRec.item.Missing = parseInt(data.Missing);
+															lastCampRec.item.Missing = parseInt(data[0].Missing);
 														}
 													}
 												}
@@ -13302,7 +13320,8 @@ async function campSaveRecord(evt){
 			 // include durration for non-audio
 			dur = timeParse(document.getElementById("camp-itemDur").value);
 			type = "item";
-		}
+		}else
+			type = "file";
 	
 		let api = "library/set/toc";
 		let resp = await fetchContent(api, {
@@ -13378,7 +13397,7 @@ async function campSaveRecord(evt){
 				return;
 			}
 		}
-		if(type == "Audio"){
+		if(type == "file"){
 			let params = {};
 			campSetFileItemDefaults(params);
 			if(params.length){
@@ -14307,7 +14326,6 @@ function hookNewOrderRows(tbl){
 }
 
 async function invBulkUpdateRec(evt, save){
-	//!! for now, just days, come back and add Start, and Price
 	let cell = evt.target.parentNode;
 	let row = cell.parentNode;
 	let idx = parseInt(row.firstChild.firstChild.getAttribute("data-idx"));
@@ -14358,9 +14376,12 @@ async function invBulkUpdateRec(evt, save){
 				return;
 			}
 			alert("Update bulk order record.");
-			lastOrdersRec[idx].Days = post.dp_start;
-			lastOrdersRec[idx].Start = post.dp_range
-			lastOrdersRec[idx].Amount = post.amount;
+			if(typeof post.dp_start != "undefined")
+				lastOrdersRec[idx].Days = post.dp_start;
+			if(typeof post.dp_range != "undefined")
+				lastOrdersRec[idx].Start = post.dp_range
+			if(typeof post.amount != "undefined")
+				lastOrdersRec[idx].Amount = post.amount;
 
 		}
 	}else{
@@ -14799,6 +14820,22 @@ async function invSaveRecord(evt){
 	}
 }
 
+/***** Ad manager - Schedule functions *****/
+
+function schDateSetSunday(){
+	let el = document.getElementById("trafSchedDate");
+	if(el){
+		let date = new Date();
+		let offset = 0 - date.getDay();;
+		date.setDate(date.getDate() + offset);
+		el.valueAsDate = date;
+	}
+}
+
+function schDateChange(){
+	//!!
+}
+
 /**** startup and load functions *****/
 
 function credCompare(auth){
@@ -14852,7 +14889,7 @@ async function startupContent(auth){
 }
 
 function loadRemoteTab(evt){
-	let el = document.getElementById("remotediv");
+/*	let el = document.getElementById("remotediv");
 	if(el){
 		if(!el.firstChild){
 			// no iframe loaded yet... run remote in it's own iframe
@@ -14867,6 +14904,16 @@ function loadRemoteTab(evt){
 					}, 
 					video: false 
 				}).then(function(result){
+*/
+	let targetWin = window.open("","Remote", 
+			"width=110,height=180");
+	if(targetWin.location == "about:blank")
+		// load the window
+		targetWin.location.href = "remote.html";
+	// focus on the window
+	targetWin.focus();
+/*				});
+
 					let iframe = document.createElement("iframe");
 					iframe.src = "remote.html";
 					iframe.width = "125";
@@ -14874,8 +14921,8 @@ function loadRemoteTab(evt){
 					iframe.setAttribute("allow","microphone");
 					el.appendChild(iframe);
 				});
-		}
-	}
+//		}
+	}*/
 }
 
 document.onclick = function(event){
@@ -14940,4 +14987,5 @@ window.onload = function(){
 	startupContent();
 	loadStashRecallOnLoad();
 	pTemplate = document.querySelector("#playerTemplate");
+	schDateSetSunday();
 }

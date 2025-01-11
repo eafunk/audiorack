@@ -4,32 +4,34 @@
 	<meta charset="utf-8">
 	<title>Remote</title>
 	<link rel="stylesheet" href="index.css">
+	<link rel="stylesheet" href="font-awesome/css/font-awesome.min.css">
 </head>
-<body style="font-size: 8px;">
-	<div id="remChSelMatrix">
-		<label for="remLeftSource">L </label><select id="remLeftSource" onchange="remoteInChgAction()"></select>
-		<label for="remRightSource">R </label><select id="remRightSource" onchange="remoteInChgAction()"></select>
-	</div>
-	<input id="remSrcGain" type="range" min="-20" max="20" value="0" step="0.05" style=" width: 100px; height: 12px;" 
-		oninput="remoteGainAction(event);"></input><br>
-	<div id="remInVU"></div>
-	Compressor<input id="remCompChk" type="checkbox" onchange="remCompEnable(event)"><meter id="remGainRedEl" high="0" max="20" value="0"></meter><br>
-	PlayTru<input id="remPTChk" type="checkbox" onchange="remPTEnable(event)">Dim <input id="remPTTrackChk" type="checkbox" onchange="remPTTrackEnable(event)" disabled="disabled">
-	<hr>
-	<div id="remstatusmsg">Not Connected</div>
-	<label for="remstu">To Studio:</label>
-	<select id="remstu">
-	</select>
-	Name: <input id="remotename" type="text" size="8" value="Remote">
-	<center><button class="editbutton" id="RemConBtn" onclick="remCallAction()">Connect</button></center>
+<body style="font-size: 8px;padding: 5px;">
+	<center>
+		<div id="remChSelMatrix">
+			<label for="remLeftSource">L </label><select id="remLeftSource" onchange="remoteInChgAction()"></select>
+			<label for="remRightSource">R </label><select id="remRightSource" onchange="remoteInChgAction()"></select>
+		</div>
+		<input id="remSrcGain" type="range" min="-20" max="20" value="0" step="0.05" style=" width: 100px; height: 12px;" 
+			oninput="remoteGainAction(event);"></input><br>
+		<div id="remInVU"></div>
+		Compressor<input id="remCompChk" type="checkbox" onchange="remCompEnable(event)"><meter id="remGainRedEl" high="0" max="20" value="0"></meter><br>
+		PlayTru<input id="remPTChk" type="checkbox" onchange="remPTEnable(event)">Dim <input id="remPTTrackChk" type="checkbox" onchange="remPTTrackEnable(event)" disabled="disabled">
+		<hr>
+		<div id="remstatusmsg">Not Connected</div>
+		<label for="remstu">To Studio:</label>
+		<select id="remstu">
+		</select>
+		<br>Name: <input id="remotename" type="text" size="8" value="Remote">
+		<center><button class="editbutton" id="RemConBtn" onclick="remCallAction()">Connect</button></center>
+	</center>
 </body>
 </html>
 
 <script type="text/javascript">
-
 	includeScript("vumeter.js");
 	includeScript("jssip-3.10.0.min.js");
-
+	
 	var sipUa;
 	var sipCall;
 	var audioContext;
@@ -132,7 +134,7 @@
 				}
 				el.selectedIndex = 0;
 				analyserNodes[0] = audioContext.createAnalyser();
-				analyserNodes[0].fftSize = 8;
+				analyserNodes[0].fftSize = 32;
 				
 				el = document.getElementById("remRightSource");
 				while(el.options.length) el.remove(0);
@@ -146,7 +148,7 @@
 				else
 					el.selectedIndex = 0;
 				analyserNodes[1] = audioContext.createAnalyser();
-				nalyserNodes[1].fftSize = 8;
+				analyserNodes[1].fftSize = 32;
 				
 				remoteInChgAction();	// make input channel connections
 				
@@ -155,6 +157,8 @@
 					vu.removeChild(vu.lastChild);
 				vu.vumeters = [];
 				for(let c = 0; c < 2; c++){
+					if(c)
+						vu.appendChild(document.createElement('br'));
 					canv = document.createElement("canvas");
 					canv.setAttribute('width',100);
 					canv.setAttribute('height',8);
@@ -179,6 +183,7 @@
 				
 				window.requestAnimationFrame(remLevelsRender);
 			}catch(err){
+				console.log(err);
 				let btn = document.getElementById("RemConBtn");
 				btn.textContent = "Disabled";
 				btn.disabled = true;
@@ -392,7 +397,11 @@ console.log("Call ended");
 					}
 				}
 				if(host && host.length)
-					sipCall = sipUa.call('sip:'+studioName+'@'+host+':5060', { 'mediaConstraints' : { 'audio': true, 'video': false } } );
+					sipCall = sipUa.call('sip:'+studioName+'@'+host+':5060', 
+						{
+							'mediaConstraints' : { 'audio': true, 'video': false } 
+						}
+					);
 				else{
 					btn.textContent = "Connect";
 					btn.disabled = false;

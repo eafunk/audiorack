@@ -164,7 +164,7 @@ uint32_t AddItem(int pos, char *URLstr, char *adder, uint32_t adderUID){
 		programLogUIDEntry(newID, 1, 0);
 		
 		// send out notifications
-		notifyData	data;
+		notifyData data;
 		data.reference = 0;
 		data.senderID = getSenderID();
 		data.value.iVal = 0;
@@ -570,7 +570,6 @@ void MoveItem(int sourcePos, int destPos, unsigned char clearTimes){
 void setSegTimes(inChannel *thisp, inChannel *nextp, int nextNum){
 	double seginT, segoutT, dur, defseg;
 	int t_priority, n_priority;
-	char *tmp;
 	   
 	if(thisp == NULL)
 		return;
@@ -592,6 +591,7 @@ void setSegTimes(inChannel *thisp, inChannel *nextp, int nextNum){
 		// disable level segue if a specific segOut was set
 		thisp->levelSeg = 0.0;
 	}
+	defseg = 0.0;
 	dur = GetMetaFloat(thisp->UID, "Duration", NULL);
 	if(dur){
 		if(segoutT == 0.0){
@@ -620,9 +620,15 @@ void setSegTimes(inChannel *thisp, inChannel *nextp, int nextNum){
 	if(segoutT < 0.0) 
 		segoutT = 0.0;
 		
-	if(!segoutT)
-		serverLogMakeEntry("[automation] setSegTimes-:segout time set to zero bug!");
-
+	if(!segoutT){
+		char *tmp;
+		char buf[256];
+		tmp = GetMetaData(thisp->UID, "Name", false);
+		snprintf(buf, sizeof buf, "[automation] setSegTimes-segout time set to zero bug: Name=%s, sout=%f, defso=%f, sin=%f, dur=%f", tmp, GetMetaFloat(thisp->UID, "SegOut", NULL), defseg, seginT, dur);
+		free(tmp);
+		serverLogMakeEntry(buf);
+	}
+	
 	n_priority = GetMetaInt(nextp->UID, "Priority", NULL);
 	t_priority = GetMetaInt(thisp->UID, "Priority", NULL);
 	if((n_priority > 9) && (t_priority < n_priority)){ // priority 10 or higher forces fade into next at exact time
@@ -641,7 +647,7 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 	inChannel *thisIn, *nextIn;
 	queueRecord *instance, *next;
 	int result, nextp, priority;
-	uint32_t status, busses;
+	uint32_t status, nstat, busses;
 	double targetTime, dur;
 	unsigned char force;
 	char *type;
@@ -694,11 +700,16 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 		// if this type != item or has target time > than 10 min. old, do the following 
 		if(strcmp(type, "item") || ((targetTime + 600.0) < curTime)){
 			if(next = (queueRecord *)getNextNode((LinkedListEntry *)instance)){
-				if(checkPnumber(next->player-1)){
-					status = getQueueRecStatus(next, &nextIn);
-					if((nextIn && nextIn->managed) && (status & status_playing) && ((nextIn->busses & 2L) == 0)){
-						// next item IS playing, and IS NOT in cue... and it WAS NOT put there manually - delete this item
-						releaseQueueRecord((queueRecord	*)&queueList, instance, 0);
+					nstat = getQueueRecStatus(next, &nextIn);
+					if((nextIn && nextIn->managed) && (nstat & status_playing) && ((nextIn->busses & 2L) == 0)){
+						// next item IS playing, and IS NOT in cue... and it WAS NOT put there manually
+						if(!strcmp(type, "task") && (status & status_running)){
+							// This is a running task - swap it with next item
+//!!! this is new!
+							moveAfterNode((LinkedListEntry *)instance, (LinkedListEntry *)next, (LinkedListEntry *)&queueList);
+						}else{
+							// Not a running task - delete this item
+							releaseQueueRecord((queueRecord	*)&queueList, instance, 0);
 						free(type);
 						return;
 					}
@@ -746,7 +757,7 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 			}
 		}
 	} 
-	
+//!! consider this v
 	*firstp = instance->player-1;
 	status = getQueueRecStatus(instance, &thisIn);
 	if(status & status_standby){
@@ -796,7 +807,7 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 //		// If this is a task, skip it... use the the next returned current player as the returned current player 
 //		*firstp = nextp;
 //	}
-	
+//!! consider this v
 	if(*firstp == -1){
 		if(strcmp(type, "stop"))
 			*firstp = nextp;
@@ -811,7 +822,7 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 						if(plRunning && strcmp(type, "stop")){
 							priority = GetMetaInt(nextIn->UID, "Priority", NULL);
 							targetTime = GetMetaFloat(nextIn->UID, "TargetTime", NULL);
-							if(((targetTime < 0) && (priority > 9)) || (thisIn->segNext != (nextp+1))){
+							if(((targetTime > 0.0) && (priority > 9)) || (thisIn->segNext != (nextp+1))){
 									setSegTimes(thisIn, nextIn, nextp);
 							}
 						}else{
@@ -1171,6 +1182,10 @@ void AutomatorTask(void){
 	static time_t lastSchedTime = 0;
 	uint32_t flags;
 	
+	//!!! debug vvv
+	static uint32_t oldAutoState = 0;	// debug
+	char buf[96];
+	
 	// Play List Filling
 	flags = GetMetaInt(0, "auto_live_flags", NULL);
 	if((autoState == auto_unatt) || ((autoState == auto_live) && (flags & live_fill))){
@@ -1180,6 +1195,11 @@ void AutomatorTask(void){
 		if(strlen(fillStr))
 			str_setstr(&fillStr, "");
 		pthread_rwlock_unlock(&queueLock);
+	}
+	//!!! debug vvv
+	if(oldAutoState != oldAutoState){
+		snprintf(buf, sizeof buf, "[automation] AutomatorTask-auto state changed: Entry sched Time = %lld.", (long long)lastSchedTime );
+		serverLogMakeEntry(buf); 
 	}
 	
 	// Schedule Inserts
@@ -1197,7 +1217,13 @@ void AutomatorTask(void){
 		// not doing schedule checks...
 		lastSchedTime = 0;
 	} */
-
+	
+	if(oldAutoState != oldAutoState){
+		snprintf(buf, sizeof buf, "[automation] AutomatorTask-auto state changed: Exit sched Time = %lld.", (long long)lastSchedTime );
+		serverLogMakeEntry(buf); 
+		oldAutoState = autoState;
+	}
+	
 	// Target Time adjustments
 	if((autoState == auto_unatt) || (autoState == auto_live && (flags & live_target))){
 		pthread_rwlock_wrlock(&queueLock);
@@ -1290,7 +1316,23 @@ void QueManagerTask(unsigned char *stop){
 				if(!npwait && checkPnumber(firstp)){
 					instance = &mixEngine->ins[firstp];
 					instance->requested = instance->requested | change_play;
-					serverLogMakeEntry("[automation] -:Nothing playing.  Starting first loaded player.");
+					serverLogMakeEntry("[automation] -Nothing playing: Starting first loaded player.");
+//!! debug
+					char buf[128], i;
+					snprintf(buf, sizeof buf, "[debug] NextListItem-Nothing playing:firstp=%d,sbtime=%.2f,isPlaying=%d", firstp, sbtime, isPlaying);
+					serverLogMakeEntry(buf);
+					serverLogMakeEntry("[debug] -trap player status:\npNum\tstatus\tmeta-UID\tbus\tpos\tnext\tseg\tfade");
+					for(i=0;i<mixEngine->inCount;i++){
+						instance = &mixEngine->ins[i];
+						if(instance->status & (status_standby | status_loading)){
+							snprintf(buf, sizeof buf, "%u\t%u\t%08x\t%06x\t%.2f\t%d\t%.2f\t%.2f", 
+								i, (unsigned int)instance->status, (unsigned int)instance->UID,
+								(instance->busses & 0x00ffffff), instance->pos, instance->segNext - 1, instance->posSeg, instance->fadePos);
+						}else{
+							snprintf(buf, sizeof buf, "%u\t%d", (unsigned int)i, 0);
+						}
+						serverLogMakeEntry(buf);
+					}
 				}
 			}
 		}

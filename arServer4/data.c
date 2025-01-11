@@ -951,6 +951,7 @@ void UpdateQueueEndTimes(unsigned char sort){
 	int size;
 	uint32_t flags, stat;
 	itemGroupRec first, next;
+	char buf[256];
 	
 	flags = status_hasPlayed | status_cueing | status_remove | status_delete;
 	
@@ -987,17 +988,21 @@ void UpdateQueueEndTimes(unsigned char sort){
 					if(((targetTime > 0) && (stat & status_hasPlayed) == 0) && ((targetTime + 600) < (double)time(NULL))){ 
 						// target time set to 10 or more minutes BEFORE now... delete!
 						// Deleting is OK because we are itterating through the list from end to start,
-						// so he previous item (next) will still be there after we delete this one.
-						char buf[256];
+						// so the previous item (next) will still be there after we delete this one.
 						char *tmp;
 						tmp = GetMetaData(rec->UID, "Name", false);
-						snprintf(buf, sizeof buf, "[data] UpdateQueueEndTimes-Item deleted: UID=%08x, Name=%s, Target time too older.", (unsigned int)rec->UID, tmp);
+						snprintf(buf, sizeof buf, "[data] UpdateQueueEndTimes-Item deleted: UID=%08x, Name=%s, Target time too old.", (unsigned int)rec->UID, tmp);
 						free(tmp);
 						serverLogMakeEntry(buf);
 						releaseQueueRecord((queueRecord *)&queueList, rec, 0);
 					}else if((locFillTime > 0) && (fillTime > locFillTime)){
 						if(fillTime < startTime){
 							// Again, Deleting is OK because we are itterating backwards through the list.
+							char *tmp;
+							tmp = GetMetaData(rec->UID, "Name", false);
+							snprintf(buf, sizeof buf, "[data] UpdateQueueEndTimes-Item deleted: UID=%08x, Name=%s, Filltime time too old.", (unsigned int)rec->UID, tmp);
+							free(tmp);
+							serverLogMakeEntry(buf);
 							releaseQueueRecord((queueRecord *)&queueList, rec, 0);
 						}else
 							fillTime = locFillTime;
