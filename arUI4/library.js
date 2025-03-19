@@ -2700,7 +2700,7 @@ function searchFor(request, response, params, dirs){
 					table = "client"
 					select = "SELECT "+locConf['prefix']+"client.name AS Name, ";
 					select += locConf['prefix']+"client.id AS ID, ";
-					select += "MAX(IF("+locConf['prefix']+"orders.date, "+locConf['prefix']+"orders.date, DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range DAY))) AS lastOrder ";
+					select += "MAX(IF("+locConf['prefix']+"orders.date, "+locConf['prefix']+"orders.date, DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range-1 DAY))) AS lastOrder ";
 					from = buildFromString(from, "client");
 					if(params.datetype && (params.datetype == "Posted") && yr){
 						from = buildFromString(from, "invoices");
@@ -2775,7 +2775,7 @@ function searchFor(request, response, params, dirs){
 					table = "campaign"
 					select = "SELECT "+locConf['prefix']+"toc.name AS Name, "+locConf['prefix']+"toc.ID AS ItemID, ";
 					select += locConf['prefix']+"campaign.id AS ID, "+locConf['prefix']+"client.name AS Customer,";
-					select += "MAX(IF("+locConf['prefix']+"orders.date, "+locConf['prefix']+"orders.date, DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range DAY))) AS lastOrder ";
+					select += "MAX(IF("+locConf['prefix']+"orders.date, "+locConf['prefix']+"orders.date, DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range-1 DAY))) AS lastOrder ";
 					from = buildFromString(from, "campaign");
 					from = buildFromString(from, "toc");
 					from = buildFromString(from, "client");
@@ -2858,7 +2858,7 @@ function searchFor(request, response, params, dirs){
 					table = "invoices"
 					select = "SELECT "+locConf['prefix']+"invoices.id AS ID, ";
 					select += locConf['prefix']+"client.name AS Customer,";
-					select += "MAX(IF("+locConf['prefix']+"orders.date, "+locConf['prefix']+"orders.date, DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range DAY))) AS lastOrder ";
+					select += "MAX(IF("+locConf['prefix']+"orders.date, "+locConf['prefix']+"orders.date, DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range-1 DAY))) AS lastOrder ";
 					from = buildFromString(from, "invoices");
 					from = buildFromString(from, "client");
 					where = "WHERE "+locConf['prefix']+"invoices.customer = "+locConf['prefix']+"client.id ";
@@ -3636,7 +3636,7 @@ ORDER BY Location, Type, ItemID, Start, Days, DaypartID, OrderDate, Slot, Fulfil
 				parent.children = [];
 				base.push(parent);
 			}
-			parent.children.push(result[i])
+			parent.children.push(result[i]);
 			if(result[i].Type == "bulk"){
 				delete result[i].Amount;
 			}else{
@@ -5811,7 +5811,7 @@ function bulkReads(request, response, params, dirs){
 				let where = "WHERE "+locConf['prefix']+"orders.location = "+locID+" AND ";
 				where += locConf['prefix']+"orders.type = 'bulk' AND "+locConf['prefix']+"orders.date IS NOT TRUE AND ";
 				where += locConf['prefix']+"toc.ID = ar_orders.itemID AND ";
-				where += "DATE(NOW()) BETWEEN "+locConf['prefix']+"orders.dp_start AND DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range DAY) ";
+				where += "DATE(NOW()) BETWEEN "+locConf['prefix']+"orders.dp_start AND DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range - 1 DAY) ";
 				let tail = "ORDER BY Name ASC;";
 				restQueryRequest(connection, "orders", request, response, select, from, where, tail, false, 0); // NOTE: connection will be returned to the pool.
 			}

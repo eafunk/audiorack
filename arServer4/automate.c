@@ -550,6 +550,19 @@ void MoveItem(int sourcePos, int destPos, unsigned char clearTimes){
 		toRec = getNthNode((LinkedListEntry *)&queueList, countNodesAfter((LinkedListEntry *)&queueList));
 		
 	if(fromRec = moveAfterNode(fromRec, toRec, (LinkedListEntry *)&queueList)){
+		// clear segtimes if either record is loaded in a player
+		rec = (queueRecord *)fromRec;
+		if(checkPnumber(rec->player-1)){
+			instance = &mixEngine->ins[rec->player-1];
+			instance->segNext = 0;	// setting these are atomic/thread safe
+			instance->posSeg = 0.0;	// setting these are atomic/thread safe
+		}
+		rec = (queueRecord *)toRec;
+		if(checkPnumber(rec->player-1)){
+			instance = &mixEngine->ins[rec->player-1];
+			instance->segNext = 0;
+			instance->posSeg = 0.0;
+		}
 		if(destPos >= mixEngine->inCount){
 			// unload from player if loaded
 			UnloadItem(destPos, NULL);
@@ -1333,6 +1346,7 @@ void QueManagerTask(unsigned char *stop){
 						}
 						serverLogMakeEntry(buf);
 					}
+					
 				}
 			}
 		}

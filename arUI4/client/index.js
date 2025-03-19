@@ -4489,7 +4489,7 @@ async function reloadItemSection(el, type){
 				inner += "'";
 			inner += "></input>";
 			inner += "<tr><td>Don't Log</td><td>";
-			if(meta.NoLog)
+			if(meta.NoLog && parseInt(meta.NoLog))
 				inner += "<input type='checkbox' name='NoLog' checked";
 			else
 				inner += "<input type='checkbox' name='NoLog'";
@@ -13314,7 +13314,7 @@ async function campSaveRecord(evt){
 	// arItem properties
 	if(!tocID){
 		// create a new aritem: Type, Name, Script AND Set category
-		let script = document.getElementById("camp-itemScript").value;
+		let script = encodeURIComponent(document.getElementById("camp-itemScript").value);
 		let dur = 0.0;
 		if(type != "Audio"){
 			 // include durration for non-audio
@@ -13518,7 +13518,7 @@ async function campSaveRecord(evt){
 				itemParams.Name = el.value;
 			el = document.getElementById("camp-itemScript");
 			if(el.value != lastCampRec.item.Script)
-				itemParams.Script = el.value;
+				itemParams.Script = encodeURIComponent(el.value);
 			if(type != "Audio"){
 				el = document.getElementById("camp-itemDur");
 				let durSec = timeParse(el.value);
@@ -14205,13 +14205,16 @@ async function invAddDupOrder(evt){
 		if(parentRec.Type == "order"){
 			let invid = lastInvNum.getValue();
 			if(parentRec.locID && parentRec.ItemID && parentRec.DaypartID && parentRec.Days && parentRec.Start && parentRec.Start.length){
+				let amount = parentRec.Amount;
+				if(parentRec.children.length())
+					amount.parentRec.children[0].Amount;	// use the price of the first child, not the total of all the children
 				let api = "library/dporder/"+invid;
 				let reply;
 				let resp = await fetchContent(api, {
 						method: 'POST',
 						body: JSON.stringify({locID: parentRec.locID, 
 							itemID: parentRec.ItemID, // needs to be an item, not campaign
-							price: parentRec.Amount, 
+							price: amount,
 							dpID: parentRec.DaypartID,
 							start: parentRec.Start,
 							days: parentRec.Days,

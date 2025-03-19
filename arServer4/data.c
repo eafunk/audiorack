@@ -996,7 +996,7 @@ void UpdateQueueEndTimes(unsigned char sort){
 						serverLogMakeEntry(buf);
 						releaseQueueRecord((queueRecord *)&queueList, rec, 0);
 					}else if((locFillTime > 0) && (fillTime > locFillTime)){
-						if(fillTime < startTime){
+						if((fillTime + 600) < startTime){
 							// Again, Deleting is OK because we are itterating backwards through the list.
 							char *tmp;
 							tmp = GetMetaData(rec->UID, "Name", false);

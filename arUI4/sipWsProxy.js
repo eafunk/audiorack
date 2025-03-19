@@ -1,5 +1,5 @@
 /*
- Copyright (c) 2021 Ethan Funk
+ Copyright (c) 2024 Ethan Funk
  
  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
  documentation files (the "Software"), to deal in the Software without restriction, including without limitation 
@@ -125,7 +125,6 @@ function routePacket(dataLines, dest, insertVia){
 
 function processWSsip(msg, socket, svr){
 	msg = msg.toString();
-console.log("WS:", msg);
 	let dest = false;
 	let viaLine = false;
 	let lines = msg.split("\n");
@@ -203,7 +202,7 @@ console.log("WS:", msg);
 
 function processUDPsip(msg, rinfo){
 	msg = msg.toString();
-console.log("UDP:", msg);
+	let dest = false;
 	let dest = false;
 	let viaLine = false;
 	let lines = msg.split("\n");

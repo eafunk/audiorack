@@ -1,4 +1,4 @@
-Updated Aug. 29, 2024
+Updated Feb. 13, 2025
 
 *** WHAT IS AUDIORACK4? ***
 
@@ -16,19 +16,19 @@ Details of the original project can be found at...
 project in the docs directory.
 
 Audio engines for other POSIX compliant operating systems matured in the
-decade since I started coding AudioRack. I am now moving away from OSX, 
+decades since I started coding AudioRack. I am now moving away from OSX, 
 and it's proprietary CoreAudio API, to instead make use of the cross-
 platform jack2 audio server system. 
 
-This project is the start of a port of the entire AudioRack system to 
-make use of jack2, gstreamer, and hopefully be buildable on any POSIX 
-operating system.  It is a huge job, and it needs to start some where. 
-That starting point is here with the arserver4, a CLI interface audio 
-engine, automation system, and music database client.
+This project is a port of the entire AudioRack system to make use of 
+jack2, gstreamer, and hopefully be buildable on any POSIX operating 
+system.  It is a huge job, and it needs to start some where. That 
+starting point is here with the arserver4, a CLI interface audio engine, 
+automation system, and music database client.
  
-arserver4 is the evolution the original OS X arserver. Rewriten from C++
-back to good old plain C, because that is my preference. Much of the 
-originbal design principles from the OS X arserver are being maintained 
+arserver4 is the evolution the original OS X arserver. Rewriten from 
+C++ back to plain C, because that is my preference. Much of the 
+original design principles from the OS X arserver are being maintained 
 with this new version, with some new functiuonality added as it relates 
 to extra features available in jack2, and some original functionality, 
 such as AudioUnit effects hosting, being removed since jack handles this
@@ -47,23 +47,23 @@ arServer4, and two helper programs: arPlayer4, and arRecorder4.
 arServer4 continues to handle automation, scheduling, playlist queue 
 management, and audio mixing functionality. However, arserver no longer 
 plays or records any audio.  Instead it instantiats arPlayer instances, 
-which connect themselves back to the arServer mixer, via jack, for playing 
-file/stream media. On the other side, arServer4 instantiates arRecorder 
-instances for capturing and encoding audio from arServer's mix buses, again 
-via jack audio interconnections.  A custom control proptocol has been 
-implementedon top of jack's midi system to allow arServer to control the 
-attached players and recorders. This allows arSrevre to load, play, stop 
-and unload players through jack interconnects even though the media 
-players are separate programs.  As a bonus, arPlayer4 and arRecorder4 
-are independent CLI programs that can be used with other jack programs 
-independent of arServer if you wish.  And any jack audio 
-source/destrinantion can be routed to/from the arServer mix engine as 
-well.  
+which connect themselves back to the arServer mixer, via jack, for 
+playing file/stream media. On the other side, arServer4 instantiates, 
+arRecorder instances for capturing and encoding audio from arServer's 
+mix buses, again via jack audio interconnections.  A custom control 
+proptocol has been implementedon top of jack's midi system to allow 
+arServer to control the attached players and recorders. This allows 
+arSrevre to load, play, stop and unload players through jack 
+interconnects even though the media players are separate programs.  As 
+a bonus, arPlayer4 and arRecorder4 are independent CLI programs that 
+can be used with other jack programs independent of arServer if you 
+wish.  And any jack audio source/destrinantion can be routed to/from 
+the arServer mix engine as well.  
 
 The old GUI applications have been replaced with a single web-base GUI.
-This package included a node-js GUI server, which then hosts a javascript
-GUI application to a client web browser. This is how you would use and
-manage audiorack.
+This package included a node-js GUI server, which then hosts a 
+javascript GUI application to a client web browser. This is how you 
+would use and manage audiorack.
 
 Documentation is nonexistant other than the source code, and the "help" 
 command after you have started arServer4 running and you connect to it's
@@ -75,19 +75,20 @@ referenced in the AudioRack3 documentation.
 In order to handle differences in how various operating systems mounts 
 disks, either physical or network shares, changes have been made to the 
 underlying music library database structure to handle platform dependent
-mount searches paths. A new arServer settings property called "file_prefixes" 
-specifies the search paths for database music items that might reside on
-disks or network file shares, using BLOB wildcards for matching to the 
-disk/mount name. The default value for this setting should be sufficient
-for most use. This is a departure from the original approach where the 
-mount search path was specified in the database, not with a setting in 
-the program on a partitular computer.  Since different OS platforms can 
-have very different disk and share mount points, it make sense for this 
-setting to go with the computer, not the database, which might be 
-supporting many different operating systems.  The original version also 
-didn't support BLOB wildcard searches, which is required to handle mount
-locations which include user ID numbers in the mount path on some 
-operating systems (I'm looking at you gnome).
+mount searches paths. A new arServer settings property called 
+"file_prefixes" specifies the search paths for database music items 
+that might reside on disks or network file shares, using BLOB wildcards 
+for matching to the disk/mount name. The default value for this setting 
+should be sufficient for most use. This is a departure from the 
+original approach where the mount search path was specified in the 
+database, not with a setting in the program on a partitular computer.  
+Since different OS platforms can have very different disk and share 
+mount points, it make sense for this setting to go with the computer, 
+not the database, which might be supporting many different operating 
+systems.  The original version also didn't support BLOB wildcard 
+searches, which is required to handle mount locations which include 
+user ID numbers in the mount path on some operating systems (I'm 
+looking at you gnome).
 
 So... An existing AudioRack3 database can be updated with the "dbinit" 
 command in this new version to accomidate the changes, and allow for 
@@ -107,26 +108,26 @@ installed on your system to build the project as well. This usually
 implies the developer version of these packages must be intsalled:
 
 gstreamer1		including all good, bad and ugly plugins, bad may 
-					require manual install.
+				require manual install.
 					
 gstreamer-pbutils
 
 jackd 			version 2, and any support libraries/programs for 
-					you to set up and manage audio on your system. I
-					recommend you have the Carla program installed to 
-					manage audio processing with jack (Carla is cross-
-					platform).
+				you to set up and manage audio on your system. I
+				recommend you have the Carla program installed to 
+				manage audio processing with jack (Carla is cross-
+				platform).
 
-arServer4, in addition, depends on the following libraries:
+arServer4, in addition, depends on the following library:
 
 libmysqlclient
 
 The User Interface Server requires the following programs to be 
 installed:
 
-nodejs	The node.js runtime system, v.12.10 or newer.
+nodejs			The node.js runtime system, v.12.10 or newer.
 
-npm		The node.js package manager
+npm				The node.js package manager
 
 *** BUILDING ***
 
@@ -321,12 +322,12 @@ as the GUI server.
 
 Now that the GUI is configured, you will need to initialize the library 
 database if it doesn't already exist.  Go to the Library tab, select the 
-Manage sub-tab. In the Initialize/Update Library Database area on the top, 
-with Current Library (from settings) option selected, click the execute 
-button.  If all is coinfigure properly with your database server, a new 
-empty library will be created, or if a libray already exists, it will 
-be updated to the latest version. No harm is an existing database is
-the latest version.
+Manage sub-tab. In the Initialize/Update Library Database area on the 
+top, with Current Library (from settings) option selected, click the 
+execute button.  If all is coinfigure properly with your database 
+server, a new empty library will be created, or if a libray already 
+exists, it will be updated to the latest version. No harm is an existing 
+database is the latest version.
 
 Next you can create a new location under the Mange Locations area. 
 Generaly each studio/station will have it's own location, for which 
@@ -334,46 +335,48 @@ play logs and automation schedules are independently maintained.
 When you get a studio configured and running, you will set up the 
 studio to use one of the locations set here.
 
-The Stash tab gives you access to a local (to the computer/web browser your 
-running the GUI client in) working list of items.  This is used for moving 
-things around the GUI.
+The Stash tab gives you access to a local (to the computer/web browser 
+your running the GUI client in) working list of items.  This is used 
+for moving things around the GUI.
 
-The File tab is where you get access to the temporary media directory.  Under 
-this tab, you can upload music/items from your computer running the GUI client 
-in a web browser to the temporary media directory.  Once in this idrectory, 
-you can import items into the music library for perminent storage, or for a 
-short period of time (tmpMediaAgeLimitHrs) the items will remain in this 
-director for access/playout by the studios.
+The File tab is where you get access to the temporary media directory.  
+Under this tab, you can upload music/items from your computer running 
+the GUI client in a web browser to the temporary media directory.  Once 
+in this idrectory, you can import items into the music library for 
+perminent storage, or for a short period of time (tmpMediaAgeLimitHrs) 
+the items will remain in this director for access/playout by the 
+studios.
 
-Using the Library tab, Browse sub-tab, you can now browse through items added
-to the library, edit item properties, add and edit categories, playlists, etc.
-This included creating scheduling automation rotations, pick tasks, and such
-to build a programming schedule for a station.  Please have a look at the old
-AudioRack 3x users guide for details on how automation work in the previous
-version of audiorack.  The user interface is now different here on version 4
-but the concepts are the same.
+Using the Library tab, Browse sub-tab, you can now browse through items 
+added to the library, edit item properties, add and edit categories, 
+playlists, etc. This included creating scheduling automation rotations, 
+pick tasks, and such to build a programming schedule for a station.  
+Please have a look at the old AudioRack 3x users guide for details on 
+how automation work in the previous version of audiorack. The user 
+interface is now different here on version 4 but the concepts are the 
+same.
 
-You should already have a studio set up in the GUI settings. Now is the time
-to get that studio running (via the GUI settings), and configure it.
-Configuration can be done via the STudio tab of the GUI, and selecting the
-you want to manage by selecting it's name in the sub-tab list (you may 
-have configured more than one). If you are logged into the GUI with as a 
-user with full administrator priveleges (as set up in the GUI setting Users
-panel), then you will see a box of 8 tabs near the bottom.  This is the 
-configuration box.  The Console tab give you access to set command to the 
-studio's arServer control port and see the responses; useful for low level 
-configuration.
+You should already have a studio set up in the GUI settings. Now is the 
+time to get that studio running (via the GUI settings), and configure 
+it. Configuration can be done via the STudio tab of the GUI, and 
+selecting the you want to manage by selecting it's name in the sub-tab 
+list (you may have configured more than one). If you are logged into 
+the GUI with as a user with full administrator priveleges (as set up in 
+the GUI setting Users panel), then you will see a box of 8 tabs near 
+the bottom. This is the configuration box. The Console tab give you 
+access to set command to the studio's arServer control port and see 
+the responses; useful for low level configuration.
 
 The Output tab allows you to configure each of the 5 (default)
-output groups the arServer mixer has. Give each output you desire to use a 
-unique one-word name, set up jack audio routing for where you want the
-output to go (device and ports for each stereo channel), which mixer bus 
-is routed to the output, and what level ducking should be applied when 
-cue or one of three mutes are activated. You likely will want to create 
-Monitor, Cue, Headphones, and Main outputs:
+output groups the arServer mixer has. Give each output you desire to 
+use a unique one-word name, set up jack audio routing for where you 
+want the output to go (device and ports for each stereo channel), which 
+mixer bus is routed to the output, and what level ducking should be 
+applied when cue or one of three mutes are activated. You likely will 
+want to create Monitor, Cue, Headphones, and Main outputs:
 
-Monitor from the monitor bus going to your studio speakers and fully muting
-on MuteAand ducking apx. 6 to 12 dB on Cue. Cue going to the
+Monitor from the monitor bus going to your studio speakers and fully 
+muting on MuteA, and ducking apx. 6 to 12 dB on Cue.
 
 Cue from the cue bus going to a set of cue speakers, or maybe you studio 
 monitors fully muting on MuteA as well.
@@ -437,46 +440,48 @@ doesn't do anything in the studio for more than this timeout period.
 Finally, queue behavior is set, including the minimum number of items 
 the automation queue filler should always keepin the queue, the default 
 segue overlap time from end of a playing item to the start of the next, 
-and a level base segue holdoff.  The default segue time is used for ietms
-that do not already have a segue time set.  If an item already has a time
-set in it's library properties, that time is used instead.  The level 
-based segue holdoff works with the segue time (either default of set for 
-an item) to keep the segue form happening beyond the segue time until the 
-audio level of the playing item drops below the specified level. Recomended
-settings are 8 minimum queue item, 7 second segue overlap, and -26 dB segue
-holdoff level.
+and a level base segue holdoff.  The default segue time is used for 
+items that do not already have a segue time set.  If an item already 
+has a time set in it's library properties, that time is used instead.  
+The level based segue holdoff works with the segue time (either default 
+of set for an item) to keep the segue form happening beyond the segue 
+time until the audio level of the playing item drops below the specified 
+level. Recomended settings are 8 minimum queue item, 7 second segue 
+overlap, and -26 dB segue holdoff level.
 
-VoIP settings control how arServer integrates with the baresip VoIP client.
-See the later section in this document called OPTIONAL SIP VoIP integartion 
-for details on how to set up baresip to work with arServer.  This panel 
-controls the arServer side of this integration. The first item sets the 
-control port that arServer uses to connect to baresip to monitor and control
-calles that come into baresip.  Again, see the OPTIONAL SIP VoIP integartion
-section for details.  All the other ists in this settings tab set up specific
-properties for how a caller is connected to the mixer, live the default 
-input levels, mix-minus feed levels, mixer and feed bus assignments, and feed 
-cue and/or talkback behavior.
+VoIP settings control how arServer integrates with the baresip VoIP 
+client. See the later section in this document called OPTIONAL SIP 
+VoIP integartion for details on how to set up baresip to work with 
+arServer.  This panel controls the arServer side of this integration. 
+The first item sets the control port that arServer uses to connect to 
+baresip to monitor and control calles that come into baresip.  Again, 
+see the OPTIONAL SIP VoIP integartion section for details.  All the 
+other ists in this settings tab set up specific properties for how a 
+caller is connected to the mixer, live the default input levels, mix-
+minus feed levels, mixer and feed bus assignments, and feed cue and/or 
+talkback behavior.
 
-Wire settings control persisten jack audio connection between various audio
-devices and port to allow you to route audio through processing and such 
-outside of and beyond the Live Inputs and Output settings above. 
-Any connections you make in this list will be persistent: when arServer runs, 
-it will make sure the connections are made if not already present. If a 
-device goes away breaking the connection, arServer will reconnect them when 
-the device comes back. If a connection is removed from this list, arServer 
-will disconnect the devices and ports that were specified and remove the 
-connection from it's Spersistent connection list.
+Wire settings control persisten jack audio connection between various 
+audio devices and port to allow you to route audio through processing 
+and such outside of and beyond the Live Inputs and Output settings 
+above. Any connections you make in this list will be persistent: when 
+arServer runs, it will make sure the connections are made if not 
+already present. If a device goes away breaking the connection, 
+arServer will reconnect them when the device comes back. If a 
+connection is removed from this list, arServer will disconnect the 
+devices and ports that were specified and remove the connection from 
+it's Spersistent connection list.
 
-Example of use: a arServer Output group may have been 
-created to route the main mix bus to two output channels of an audio device
-to feed an air chain. You might want to insert an audio level comprerssor 
-plugin into that path before it goes to the audio devive.  You would need
-run the program that hosts the compressor plugin (such as Carla), and then 
-set the arServer output to route to the two (L&R) inputs of the compressor 
-instead of the audio device.  Then in this Wire list you would add two 
-connections for the left output of the compressor to the desired audio 
-interface channel, and from the right output to another audio interface 
-channel.
+Example of use: a arServer Output group may have been created to route 
+the main mix bus to two output channels of an audio device to feed an 
+air chain. You might want to insert an audio level comprerssor plugin 
+into that path before it goes to the audio devive.  You would need run 
+the program that hosts the compressor plugin (such as Carla), and then 
+set the arServer output to route to the two (L&R) inputs of the 
+compressor instead of the audio device.  Then in this Wire list you 
+would add two connections for the left output of the compressor to the 
+desired audio interface channel, and from the right output to another 
+audio interface channel.
 
 *** RUNNING arServer low level details ***
 
@@ -488,17 +493,18 @@ configuration found in the /opt/audiorack/support/ directory.
 This default configuration will create a .audiorack directory in the 
 user's account that runs the program.  This directory is used to store
 program settings, and on first run, will have a copy of the startup file
-/opt/audiorack/support/user_startup.conf copied into it as ars_startup.conf.
-You can edit the .audiorack/ars_startup.conf file to customize it. At 
-startup, an empty triggers directory is created if it doesn't already 
-exist in the .audiorack directory, in which you can place command files 
-that are executed at start and stop of mute busses, inputs with matching 
-names, etc. Also at startup, a templates directory is created, if it 
-doesn't already exist, and filled with copies of all the recorder creation 
-template files found in /opt/audiorack/support/templates.  Existing files
-are not overwritten, so you can customized these recorder templates. These
-files are specified by name when the newrec command is executed to pre-load
-a newly created recorder instance with some base settings for the desired
+/opt/audiorack/support/user_startup.conf copied into it as 
+ars_startup.conf. You can edit the .audiorack/ars_startup.conf file to 
+customize it. At startup, an empty triggers directory is created if it 
+doesn't already exist in the .audiorack directory, in which you can 
+place command files that are executed at start and stop of mute busses, 
+inputs with matching names, etc. Also at startup, a templates directory 
+is created, if it doesn't already exist, and filled with copies of all 
+the recorder creation template files found in 
+/opt/audiorack/support/templates.  Existing files are not overwritten, 
+so you can customized these recorder templates. These files are 
+specified by name when the newrec command is executed to pre-load a 
+newly created recorder instance with some base settings for the desired
 recorder type, such as mp3file.rec, wavfile.rec, etc.
 
 An alternate startup file can contain pre-load configuration flags which
@@ -517,41 +523,43 @@ arServer crashes, it's watchdog launcher will restart it automagically.
 To see all the command line options for arServer:
 /opt/audiorack/bin/arServer4 ?
 
-Once running, you can connect to the TCP control socket to issue commands
-and get responses from arServer4.  The default TCP socket is on port 9550.
-So you could connect, for example, using telnet on the same computer:
+Once running, you can connect to the TCP control socket to issue 
+commands and get responses from arServer4.  The default TCP socket 
+is on port 9550. So you could connect, for example, using telnet on 
+the same computer:
 
 tellnet localhost 9550
 
 The help command will show the extensive list of all the control socket
 commands.  You will need to set up the database, audio input and output
-groups, etc.  The old audiorack documentation should server as a starting
-point, but keep in mind that the command for defining audio input and
-output properties have been changed from the original version to work
-with jack2.  So please also consult the "help" command results to see 
-the required format in this new version.
+groups, etc.  The old audiorack documentation should server as a 
+starting point, but keep in mind that the command for defining audio 
+input and output properties have been changed from the original version 
+to work with jack2.  So please also consult the "help" command results 
+to see the required format in this new version.
 
-If yoiu woulkd like to runn multiple arServer instances on a single machine,
-you can create copies of the .audiorack directory with a unique name for 
-each directory to go with each instance. Edit the ars_prefs.conf file
-in each new directory you created changing all the references to .
-audiorack to be the new directory name you created that contain the 
-particular ars_prefs.conf you are editing. Next, the ars_startup.conf 
-file also in each directory changing the "-p 9550" to something like
-"-p 955x" where x is a unique control port number for each arServer 
-instance.  For example, 9551, 9552, 9553, etc. Also changing all the 
-references to .audiorack to be the new directory name you created that 
-contain the particular ars_prefs.conf you are editing.
+If yoiu woulkd like to runn multiple arServer instances on a single 
+machine, you can create copies of the .audiorack directory with a 
+unique name for each directory to go with each instance. Edit the 
+ars_prefs.conf file in each new directory you created changing all the 
+references to audiorack to be the new directory name you created that 
+contain the particular ars_prefs.conf you are editing. Next, the 
+ars_startup.conf file also in each directory changing the "-p 9550" 
+to something like "-p 955x" where x is a unique control port number 
+for each arServer instance.  For example, 9551, 9552, 9553, etc. 
+Also changing all the references to .audiorack to be the new directory 
+name you created that contain the particular ars_prefs.conf you are 
+editing.
 
 When you start the corrisponding arServer instance, add the -c option to
 the shell command and specify the file path to that instance's 
-ars_startup.conf file. This arServer instance will now load the specoified
-config file, with the unique port change. For example:
+ars_startup.conf file. This arServer instance will now load the 
+specified config file, with the unique port change. For example:
 
 /opt/audiorack/bin/arServer4 -k -c /home/someuser/studioB/ars_startup.conf
 
-Where someuser if the account you are running the instance from, and studioB 
-is the customized copy of .audiorack directory you created.
+Where someuser if the account you are running the instance from, and 
+studioB is the customized copy of .audiorack directory you created.
 
 You will also need a working MySQL or MariaDB server on your computer
 or on your network with a working MySQL account that can has sufficient
@@ -561,16 +569,16 @@ account already set up, with a password and such, for audiorack to use.
 
 *** OPTIONAL SIP VoIP integartion ***
 
-Audiorack4 can make use of the "baresip" sip client for integrations with 
-SIP based VoIP telephone systems.  If you want make use of this 
+Audiorack4 can make use of the "baresip" sip client for integrations 
+with SIP based VoIP telephone systems.  If you want make use of this 
 functionality, you need to install baresip, and configure it to work
 with both your telephone system, and to talk to audiorack4. Note that
-Audiorack4 requires basesip version 1.0 or later, as changes were made to
-baresip in this version to help it play nicely with audiorack. Configuring 
-baresip to work with your telephone system is beyond the scope of this 
-document. Baresip must be running on the same computer as arServer in order
-for audio to be shared via jack-audio. Configuration for audiorack4 
-integration involves the following:
+Audiorack4 requires basesip version 1.0 or later, as changes were made 
+to baresip in this version to help it play nicely with audiorack. 
+Configuring baresip to work with your telephone system is beyond the 
+scope of this document. Baresip must be running on the same computer 
+as arServer in order for audio to be shared via jack-audio. 
+Configuration for audiorack4 integration involves the following:
 
 1. Create an account/phone line with your VOIP provider or server
 and configure baresip to register with that provider. Edit the baresip 
@@ -580,14 +588,14 @@ following line with the registeration information.
 <sip:LineID@VOIPProviderServerAddress>;auth_pass=VOIPServerSuperSecretPassWord;answermode=auto
 
 ... where LineID is the account user/line identification for this line, 
-VOIPProviderServerAddress is the domain name or address of the VOIP provider 
-or server, and VOIPServerSuperSecretPassWord is the password the provider requires
-for registration.
+VOIPProviderServerAddress is the domain name or address of the VOIP 
+provider or server, and VOIPServerSuperSecretPassWord is the password 
+the provider requires for registration.
 
 2. Ensure the folowing baresip modules are enabled (not commented out).  
 Edit the baresip configuration file (usually found at ~/.baresip/config) 
-either changing the settings show, or creating them if they do not already 
-exist in the file. See baresip documentation for details.
+either changing the settings show, or creating them if they do not 
+already exist in the file. See baresip documentation for details.
 
 module			jack.so
 module			cons.so
@@ -602,18 +610,18 @@ module_tmp		account.so
 
 3. Ensure baresip has the following audio setting to work with arServer:
 
-sip_listen		0.0.0.0:5060	# Set a static SIP port so the WebRTC  
-										# interface knows how to reach this studio 
-audio_player		jack
-audio_source		jack
-ausrc_srate			48000		# Agree with jack-audio session sample rate
-auplay_srate		48000		# Agree with jack-audio session sample rate
-ausrc_channels		2			# The arServer input channel width (2 for stereo)
-auplay_channels	2			# The arServer input channel width (2 for stereo)
-ausrc_format		float		# s16, float, ..
-auplay_format		float		# s16, float, ..
-auenc_format		s16		# s16, float, ..
-audec_format		s16		# s16, float, ..
+sip_listen		0.0.0.0:5060	# Set a static SIP port so WebRTC bridge
+								# can address reach this studio 
+audio_player	jack
+audio_source	jack
+ausrc_srate		48000	# Agree with jack-audio session sample rate
+auplay_srate	48000	# Agree with jack-audio session sample rate
+ausrc_channels	2		# The arServer input channel width (2, stereo)
+auplay_channels	2		# The arServer input channel width (2, stereo)
+ausrc_format	float	# s16, float, ..
+auplay_format	float	# s16, float, ..
+auenc_format	s16		# s16, float, ..
+audec_format	s16		# s16, float, ..
 ice_turn		no
 
 4. Ensure that the baresip console module is configured to be reachable
@@ -627,164 +635,193 @@ We want arServer to manage jack connections.
 
 jack_connect_ports	no
 
-6. It's a good idea to limit the number of calls that baresip will accept
-at a any one time.
+6. It's a good idea to limit the number of calls that baresip will 
+accept at a any one time.
 
 call_max_calls		2	# two calls at a time max.
 
 7. Set the arServer setting "sip_ctl_port" to the port noted above.
 This is the TCP port on the local computer that arServer will connect 
 to to manage jack-audio connections and calls from baresip. As mentioned
-above, baresip must be running on the same computer with arServer, therefore, 
-"localhost" is used as the TCP address, and only a port number needs to be 
-specified. The example commands below are arServer console commands to set 
-the setting, and then save all the settings in the .audiorack/ars_setting 
-file, for recall on next arServer startup as well.
+above, baresip must be running on the same computer with arServer, 
+therefore, "localhost" is used as the TCP address, and only a port 
+number needs to be specified. The example commands below are arServer 
+console commands to set the setting, and then save all the settings in 
+the .audiorack/ars_setting file, for recall on next arServer startup 
+as well.
 
 set sip_ctl_port 5555
 saveset
 
-OR use the Web GUI studio setting VOIP tab when logged in as admin to set this.
+OR use the Web GUI studio setting VOIP tab when logged in as admin to 
+set this.
 
-8. Run baresip.  arServer is already assumed to be running.  You can uncomment 
-a line in the ~/.audiorack/ars_startup.conf which will cause arServer to run 
-baresip via the runifnot script, which is commented out by default, to have 
-arServer run baresip when arServer starts up.  Just search for baresip in the 
-file to find it. The run path for baresip specified in the line may need to be 
-adjusted to the install location of baresip in your particular operating system.
+8. Run baresip.  arServer is already assumed to be running.  You can 
+uncomment a line in the ~/.audiorack/ars_startup.conf which will cause 
+arServer to run baresip via the runifnot script, which is commented out 
+by default, to have arServer run baresip when arServer starts up.  Just 
+search for baresip in the file to find it. The run path for baresip 
+specified in the line may need to be adjusted to the install location 
+of baresip in your particular operating system.
 
-Note that this will run baresip via the runifnot script, which assumes that if 
-baresip is already running, it was run via that script.  So if you ran baresip 
-manually, you will want to quit it before you restart arServer and let arServer
-run it.
+Note that this will run baresip via the runifnot script, which assumes 
+that if baresip is already running, it was run via that script. So if 
+you ran baresip manually, you will want to quit it before you restart 
+arServer and let arServer run it.
 
-Calls received by baresip should now be answered by arServer and routed to
-an free arServer mixer input. The arServer console command "stat" will show 
-you if arServer is connected to baresip, and baresip's registeration status 
-with the SIP server you (presumably) have configured baresip to talk to. Again, 
-configuration of baresip to talk to your telephone system is beyond the scope 
-of this document.
+Calls received by baresip should now be answered by arServer and routed 
+to an free arServer mixer input. The arServer console command "stat" 
+will show you if arServer is connected to baresip, and baresip's 
+registeration status with the SIP server you (presumably) have 
+configured baresip to talk to. Again, configuration of baresip to talk 
+to your telephone system is beyond the scope of this document.
 
 *** OPTIONAL WebRTC live remote functionality ***
 
-The WebRTC live remote capability is designed to work entirely on an private
-network, like all other aspects of Audiorack.  If you want to use this feature 
-from outside via the public internet, which seems to be the obvious application,
-you will need to set up a VPN to your inside private network giving authorized 
-outside users access to your private network.  If you make any part of Audiorack 
-system accessable from the public Internet 
+The WebRTC live remote capability is designed to work entirely on an 
+private network, like all other aspects of Audiorack. If you want to 
+use this feature from outside via the public internet, which seems to 
+be the obvious application, you will need to set up a VPN to your 
+inside private network giving authorized outside users access to your 
+private network.  If you make any part of Audiorack system accessable 
+from the public Internet 
 
-Live remotes are implemented using web browser WebRTC functionality, which is
-accessable via the Live Remote left tab in the Audiorack web GUI, when you are 
-logged in as a user with studio access permission. The browser will connect to 
-a WebSocket-to-UDP-SIP bridge built into the GUI server. This bridge in turn 
-will connect to the baresip application associated with the studio the WebRTC 
-instance is trying to reach. 
+Live remotes are implemented using web browser WebRTC functionality, 
+which is accessable via the Live Remote left tab in the Audiorack web 
+GUI, when you are logged in as a user with studio access permission. 
+The browser will connect to a WebSocket-to-UDP-SIP bridge built into 
+the GUI server. This bridge in turn will connect to the baresip 
+application associated with the studio the WebRTC instance is trying 
+to reach. 
 
-For all this to work, the GUI server must have it's WebSocket-to-UDP-SIP bridge
-configured, and baresip must have an account set up from which it will accept
-calls from the WebRTC instance via the bridge.
+For all this to work, the GUI server must have it's WebSocket-to-UDP-SIP 
+bridge configured, and baresip must have an account set up from which 
+it will accept calls from the WebRTC instance via the bridge.
 
 1. Additional baresip configuration:
-You must alread have baresip configured and running (as above) for each arServer
-(studio instance) you want to be able to do a live remote to. Additionally, 
-baresip needs an account configured for accepting WebRTC calls. 
-Edit the baresip accounts file (usually found at ~/.baresip/accounts), adding the 
-following line.
+You must alread have baresip configured and running (as above) for 
+each arServer (studio instance) you want to be able to do a live remote 
+to. Additionally, baresip needs an account configured for accepting 
+WebRTC calls. Edit the baresip accounts file (usually found at 
+~/.baresip/accounts), adding the following line.
 
 <sip:StudioName@localhost>;regint=0;mediaenc=dtls_srtp;medianat=ice;answermode=auto
 
-... where StudioName is the exact name given to the corrisponding studio in the 
-GUI server studio configuration. Important:  The name must match exactly because 
-the web GUI will use that name to dial the call. 
+... where StudioName is the exact name given to the corrisponding studio 
+in the GUI server studio configuration. Important: The name must match 
+exactly because the web GUI will use that name to dial the call. 
  
 You will need to restart baresip for the new account to take affect.
 
 2. WebSocket-to-UDP-SIP bridge configuration:
-Use the web GUI (log in as a user with  admin permissions) to set the following 
-three items found on the configure panel under "HTTP Settings" tab:
+Use the web GUI (log in as a user with  admin permissions) to set the 
+following three items found on the configure panel under "HTTP Settings" 
+tab:
 
 sipproxy_udp_port: 5062 
 
-This is the UDP port number that the bridge will send and receive SIP packets to/from
-when translating packet from/to the WebSocket interface. Any non-zero port will wenable 
-the WebSocket-to-UDP-SIP bridge, but 5062 is a good number to use since it is the 
-standard  SIP port number of 5060 plus 1.  Notethat baresip was previously configured 
-to take the 5060 port number.  When enabled, the WebSocket-to-UDP-SIP bridge will
-use the existing web GUI http and HTTPS server ports for the web socket side of the 
-bridge.  IMPORTANT:  WebRTC only works with a secure web connection, so you MUST have 
-Secure HTTPS already set up (with appropriet certificates, etc.) on the web GUI server.
+This is the UDP port number that the bridge will send and receive SIP 
+packets to/from when translating packet from/to the WebSocket interface. 
+Any non-zero port will wenable the WebSocket-to-UDP-SIP bridge, but 5062 
+is a good number to use since it is the standard  SIP port number of 
+5060 plus 1.  Notethat baresip was previously configured to take the 
+5060 port number.  When enabled, the WebSocket-to-UDP-SIP bridge will
+use the existing web GUI http and HTTPS server ports for the web socket 
+side of the bridge.  IMPORTANT:  WebRTC only works with a secure web 
+connection, so you MUST have Secure HTTPS already set up (with 
+appropriet certificates, etc.) on the web GUI server.
 
 sipproxy_udp_id: <Local IP Address of the machine running the web GUI>
 
-Set this to the private network IP address of the computer running the web GUI. The 
-bridge will modify all SIP packets passing through it to include this address in the
-packet routing information, so the client (baresip) on the other end knows to respond 
-through this bridge and not try to reply directly to the WebRTC client.
+Set this to the private network IP address of the computer running the 
+Web GUI. The bridge will modify all SIP packets passing through it to 
+include this address in the packet routing information, so the client 
+(baresip) on the other end knows to respond through this bridge and not 
+try to reply directly to the WebRTC client.
 
 sipproxy_websocket_id: <Local IP Address of the machine running the web GUI>
 
-Set this to the private network IP address of the computer running the web GUI. The 
-bridge will modify all SIP packets passing through it to include this address in the
-packet routing information, so the client (WebRTC session) on the other end knows to respond 
-through this bridge and not try to reply directly to the WebRTC client.
+Set this to the private network IP address of the computer running the 
+web GUI. The bridge will modify all SIP packets passing through it to 
+include this address in the packet routing information, so the client 
+(WebRTC session) on the other end knows to respond through this bridge 
+and not try to reply directly to the WebRTC client.
 
-Note that sipproxy_udp_id and sipproxy_websocket_id are usually set to the same address but
-are two different settings just incase the machine running the web GUI has two different 
-network interfaces and you want to split Web Socket and UDP-SIP between them.
+Note that sipproxy_udp_id and sipproxy_websocket_id are usually set to 
+the same address but are two different settings just incase the machine 
+running the web GUI has two different network interfaces and you want 
+to split Web Socket and UDP-SIP between them.
 
-You should now be able to "call in" to a studio via the Live Remote tab in the hosted web 
-GUI when you connect to the web GUI server via a secure web connection (https) on the port
-configured on the web GUI server for Secure HTTP.
+You should now be able to "call in" to a studio via the Live Remote tab 
+in the hosted web GUI when you connect to the web GUI server via a 
+secure web connection (https) on the port configured on the web GUI 
+server for Secure HTTP.
 
 *** OPTIONAL Carla integartion ***
 
-Carla is a nice, cross platform jack-audio GUI and audio processing host.
+Carla is a nice, cross platform jack-audio GUI and audio processing 
+host.
 
-To configuring Carla after installing it, (1) get arServer up and running. 
-(2) run Carla. (3) set up all your processing as desired with processing ports 
-wired to/from arServer ports. (4) Disconnect any Carla to arServer connections 
-to the arServer mixer inputs. (5) Save Carla settings to ~/.audiorack/fx.carxp. 
-(6) (Re)Define arServer input groups to use the Carla outputs that you disconnected 
-prior to saving. 
+To configuring Carla after installing it, (1) get arServer up and 
+running. (2) run Carla. (3) set up all your processing as desired with 
+processing ports wired to/from arServer ports. (4) Disconnect any Carla 
+to arServer connections to the arServer mixer inputs. (5) Save Carla 
+settings to ~/.audiorack/fx.carxp. (6) (Re)Define arServer input groups 
+to use the Carla outputs that you disconnected prior to saving. 
 
-This sequency is needed to allow arServer to control connections from Carla sources
-to arServer mixer inputs, such as a microphone processing chain. Otherwise Carla will 
-make the connections that were saved, even if arServer hasn't loaded the desired input 
-group yet, or if some other source is using the input that was wired at the time of the 
-carla save.  We want arServer to control the jack connections for inputs when loaded,
- and not Carla.
+This sequency is needed to allow arServer to control connections from 
+Carla sources to arServer mixer inputs, such as a microphone processing 
+chain. Otherwise Carla will make the connections that were saved, even 
+if arServer hasn't loaded the desired input group yet, or if some other 
+source is using the input that was wired at the time of the carla save. 
+We want arServer to control the jack connections for inputs when loaded, 
+and not Carla.
 
-To have arServer run carla next time it is started, uncommented the associated 
-line in the .audiorack.ars_startup.conf file.  Note that this will run Carla
-via the runifnot script, which assumes that if Carla is already running, it was 
-run via that script.  So if you ran Carla manually, you will want to quit it
-befor you restart arServer, and let it run Carla.
+To have arServer run carla next time it is started, uncommented the 
+associated line in the .audiorack.ars_startup.conf file.  Note that 
+this will run Carla via the runifnot script, which assumes that if 
+Carla is already running, it was run via that script.  So if you ran 
+Carla manually, you will want to quit it before you restart arServer, 
+and let it run Carla.
 
 *** Using Pipewire to emulate Jack-Audio ***
 
-Pipewire has a replacement jack library file which provides application all of the 
-functions of jack up front, but use pipewire as the audio backend when the usually 
-optional pipewire-jack package is installed along with pipewire itself. The pw-jack 
-program then allows the launch of programs with the library change made via run 
-environmental variables.  Unfortuantly, arServer itself runs additonal programs 
-(like arPlayer and arRecorder) which do not inherit the environmental variable set 
-by pw-jack. So here is how you can get most linux OSs to change the library from jack
-to the pipewire implementation by default, with out actually removing the native jack 
-libraries:
+I recomend installing the ubuntustudio-installer and 
+ubuntustudio-audio packages to your system. This will help enable
+low-latency audio at the kernal level, and add a lot of useful audio
+processing tools, as well as a GUI for setting pipewire audio system 
+latency for jack-audio api applications, of which arServer is one.
 
-This is for pipewire version 1.0, and would likely need to be modified for future 
-versions of pipewire, and assumes your OS uses glibc at it's base for library loading.
+If you are not using ubuntustudio, you should be able to force a 
+particular audio latency, for example 256 sample at 48,000 samples a 
+second, by puting the following text into a file at
+~/.conf/pipewire/jack.conf.d/custom.conf 
 
-You need to create the file /etc/ld.so.conf.d/pipewire-jack-x86_64-linux-gnu.conf as 
-the root user, with the following contents for Ubuntu 24.04.  Other operating systems 
-may have the library files for jack in a different location:
+jack.properties = {
+	node.force-quantum = 256
+    node.rate          = 1/48000
+    node.lock-quantum  = true
+}
 
-/usr/lib/x86_64-linux-gnu/pipewire-0.3/jack/
 
-Then run sudo ldconfig. This overrides the default linker search path so that
-every program that runs and tries to use the jack client libraries, will instead 
-load the pipewire implimentation.
+If you did installed ubunustudio, the ubuntustudio-pipewire-config tool 
+will run a script after the system boots overriding the pipewire
+configuration.  You should use the tools GUI to set the desired latency.
 
-If you want way to do this with out making use of the linux shell, I recommend 
-installing UbuntuStudio, which provides a nice interfeace to do these things.
+NOTE:  This next step may or maynot be required in recent OS 
+implementatiojns of pipewire. You might want to try running arServer 
+without doing this first.
+
+Pipewire has a replacement jack library file which provides application 
+all of the functions of jack up front, but use pipewire as the audio 
+backend when the usually optional pipewire-jack package is installed 
+along with pipewire itself. The pw-jack program then allows the launch 
+of programs with the library change made via run environmental 
+variables. Unfortuantly, arServer itself runs additonal programs (like 
+arPlayer and arRecorder) which do not inherit the environmental variable 
+set by pw-jack. So here is how you can get Debian based linux OSs to 
+change the library from jack to the pipewire implementation by default, 
+without actually removing the native jack libraries:
+ 
+sudo cp /usr/share/doc/pipewire/examples/ld.so.conf.d/pipewire-jack-*.conf /etc/ld.so.conf.d/; sudo ldconfig
+

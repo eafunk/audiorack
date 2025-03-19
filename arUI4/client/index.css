@@ -39,7 +39,7 @@ html, body {
 	height: 100%; /* 100% Full-height */
 	width: 0px; /* 0 width - change this with JavaScript */
 	position: fixed; /* Stay in place */
-	z-index: 5; /* Stay on top */
+	z-index: 20; /* Stay on top */
 	top: 0px; /* Stay at the top */
 	right: 0px;
 	background-color: #888; 
@@ -54,7 +54,7 @@ html, body {
 	width: 800px;
 	height: 0px; /* 0px height - change this with JavaScript */
 	position: fixed; /* Stay in place */
-	z-index: 20; /* Stay on top */
+	z-index: 10; /* Stay on top, but under Rpanel */
 	bottom: 0px; /* Stay at the bottom */
 	right: 0px; /* Stay at the left side */
 	background-color: #eee; 
