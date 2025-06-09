@@ -107,6 +107,11 @@ html, body {
 	background-color: #FFC;
 }
 
+thead th {
+    position: sticky;
+    top: 0px;
+}
+
 input[type=search] {
 	width: 300px;
 	font-size: 13px;

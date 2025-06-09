@@ -5161,8 +5161,15 @@ unsigned char handle_initrec(ctl_session *session){
 					recPtr.argv[i] = ustr(val);
 					i++;
 				}
+				if(val=GetMetaInt(uid, "TagBus", NULL)){
+					recPtr.argv[i] = strdup("-b");
+					i++;
+					recPtr.argv[i] = ustr(val);
+					i++;
+				}
+				
 				tmp=GetMetaData(uid, "MakePL", 0);
-				if(strlen(tmp)){
+				if(strlen(tmp) && val){
 					// handle special rec_dir macro, which doesn't corrispond to a meta value
 					str_ReplaceAll(&tmp, "[rec_dir]", rdir);
 					// next we convert all string macros into their values
@@ -5174,142 +5181,135 @@ unsigned char handle_initrec(ctl_session *session){
 					i++;
 				}else
 					free(tmp);
-					
-				/* required settings */
-				if(val=GetMetaInt(uid, "TagBus", NULL)){
-					recPtr.argv[i] = strdup("-b");
+				
+				/* required settings */					
+				name=GetMetaData(uid, "Name", 0);
+				if(strlen(name)){
+					recPtr.argv[i] = name;
 					i++;
-					recPtr.argv[i] = ustr(val);
+					recPtr.argv[i] = strdup(mixEngine->ourJackName);
 					i++;
-					
-					name=GetMetaData(uid, "Name", 0);
-					if(strlen(name)){
-						recPtr.argv[i] = name;
+					recPtr.argv[i] = ustr(uid);
+					i++;
+					tmp=GetMetaData(uid, "Ports", 0);
+					str_ReplaceAll(&tmp, "[ourJackName]", mixEngine->ourJackName);
+					if(strlen(tmp)){
+						recPtr.argv[i] = tmp;
 						i++;
-						recPtr.argv[i] = strdup(mixEngine->ourJackName);
-						i++;
-						recPtr.argv[i] = ustr(uid);
-						i++;
-						tmp=GetMetaData(uid, "Ports", 0);
-						str_ReplaceAll(&tmp, "[ourJackName]", mixEngine->ourJackName);
-						if(strlen(tmp)){
-							recPtr.argv[i] = tmp;
+						pipe=GetMetaData(uid, "Pipeline", 0);
+						if(strlen(pipe)){
+							// handle special rec_dir macro, which doesn't corrispond to a meta value
+							str_ReplaceAll(&pipe, "[rec_dir]", rdir);
+							chanCnt=1;
+							while(*tmp){
+								if(*tmp == '&')
+									chanCnt++;
+								tmp++;
+							}
+							char *val = istr(chanCnt);
+							str_ReplaceAll(&pipe, "[channels]", val);
+							free(val);
+							// next we conver all pipeline string macros into their values
+							resolveStringMacros(&pipe, uid);
+							
+							recPtr.argv[i] = pipe;
 							i++;
-							pipe=GetMetaData(uid, "Pipeline", 0);
-							if(strlen(pipe)){
-								// handle special rec_dir macro, which doesn't corrispond to a meta value
-								str_ReplaceAll(&pipe, "[rec_dir]", rdir);
-								chanCnt=1;
-								while(*tmp){
-									if(*tmp == '&')
-										chanCnt++;
-									tmp++;
+							recPtr.argv[i] = NULL;
+							// note desired volume (gain) before running
+							// this meta value will be cleared to 1.0, and we will need 
+							// to restore it.
+							gain = GetMetaFloat(uid, "Volume", NULL);
+							
+							// execute it;
+							recPtr.child = fork();
+							if(recPtr.child == 0){
+								// if we are the forked child
+								// set working dir if specified or user home directory
+								struct passwd pwrec;
+								struct passwd* pwPtr;
+								char pwbuf[1024];
+								if(strlen(wdir_path) == 0){
+									// Get our effective user's home directory
+									if(getpwuid_r(geteuid(), &pwrec, pwbuf, sizeof(pwbuf), &pwPtr) != 0)
+										wdir = pwPtr->pw_dir;
+									else
+										wdir = "";
+								}else
+									wdir = wdir_path;
+								if(strlen(wdir) > 0)
+									chdir(wdir);
+							
+								// redirect the standard descriptors to /dev/null
+								fd = open("/dev/null", O_RDONLY);
+								if(fd != STDIN_FILENO){
+									dup2(fd, STDIN_FILENO);
+									close(fd);
 								}
-								char *val = istr(chanCnt);
-								str_ReplaceAll(&pipe, "[channels]", val);
-								free(val);
-								// next we conver all pipeline string macros into their values
-								resolveStringMacros(&pipe, uid);
-								
-								recPtr.argv[i] = pipe;
-								i++;
-								recPtr.argv[i] = NULL;
-								// note desired volume (gain) before running
-								// this meta value will be cleared to 1.0, and we will need 
-								// to restore it.
-								gain = GetMetaFloat(uid, "Volume", NULL);
-								
-								// execute it;
-								recPtr.child = fork();
-								if(recPtr.child == 0){
-									// if we are the forked child
-									// set working dir if specified or user home directory
-									struct passwd pwrec;
-									struct passwd* pwPtr;
-									char pwbuf[1024];
-									if(strlen(wdir_path) == 0){
-										// Get our effective user's home directory
-										if(getpwuid_r(geteuid(), &pwrec, pwbuf, sizeof(pwbuf), &pwPtr) != 0)
-											wdir = pwPtr->pw_dir;
-										else
-											wdir = "";
-									}else
-										wdir = wdir_path;
-									if(strlen(wdir) > 0)
-										chdir(wdir);
-								
-									// redirect the standard descriptors to /dev/null
-									fd = open("/dev/null", O_RDONLY);
-									if(fd != STDIN_FILENO){
-										dup2(fd, STDIN_FILENO);
-										close(fd);
-									}
-									fd = open("/dev/null", O_WRONLY);
-									if(fd != STDOUT_FILENO) {
-										dup2(fd, STDOUT_FILENO);
-										close(fd);
-									}
-									fd = open("/dev/null", O_WRONLY);
-									if(fd != STDERR_FILENO) {
-										dup2(fd, STDERR_FILENO);
-										close(fd);
-									}
-									// close all other file descriptors
-									for(fd=(getdtablesize()-1); fd >= 0; --fd){
-										if((fd != STDERR_FILENO) && (fd != STDIN_FILENO) && (fd != STDOUT_FILENO))
-											close(fd); // close all descriptors we are not interested in
-									}
-									// unblock all signals and set to default handlers
-									sigset_t sset;
-									sigemptyset(&sset);
-									pthread_sigmask(SIG_SETMASK, &sset, NULL);
-									// obtain a new process group 
-									setsid();
-						 
-									// and run...
-									execvp(recPtr.argv[0], recPtr.argv);
-									// we should never get here
-									exit(0);
+								fd = open("/dev/null", O_WRONLY);
+								if(fd != STDOUT_FILENO) {
+									dup2(fd, STDOUT_FILENO);
+									close(fd);
+								}
+								fd = open("/dev/null", O_WRONLY);
+								if(fd != STDERR_FILENO) {
+									dup2(fd, STDERR_FILENO);
+									close(fd);
+								}
+								// close all other file descriptors
+								for(fd=(getdtablesize()-1); fd >= 0; --fd){
+									if((fd != STDERR_FILENO) && (fd != STDIN_FILENO) && (fd != STDOUT_FILENO))
+										close(fd); // close all descriptors we are not interested in
+								}
+								// unblock all signals and set to default handlers
+								sigset_t sset;
+								sigemptyset(&sset);
+								pthread_sigmask(SIG_SETMASK, &sset, NULL);
+								// obtain a new process group 
+								setsid();
+					 
+								// and run...
+								execvp(recPtr.argv[0], recPtr.argv);
+								// we should never get here
+								exit(0);
 
+							}
+							if(recPtr.child > 0){
+								/* parent continues here */
+								i = 0;
+								while(recPtr.argv[i]){
+									free(recPtr.argv[i]);
+									i++;
 								}
-								if(recPtr.child > 0){
-									/* parent continues here */
-									i = 0;
-									while(recPtr.argv[i]){
-										free(recPtr.argv[i]);
-										i++;
+								free(rdir);
+								SetMetaData(uid, "Status", "1");	// set status to loading
+								sleep(2);
+								if(waitpid(recPtr.child, NULL, WNOHANG)){
+									/* failed to run or ran and quit due to an error */
+									SetMetaData(uid, "Status", "0");	// set status back to empty
+									session->errMSG = "Failed to run arRecorder or ran and quit due to a setting error\n";
+									if(GetMetaInt(uid, "Persistent", NULL))
+										releaseMetaRecord(uid);
+									return rError;
+								}else{
+									/* still running after 2 seconds */
+									valuetype val;
+									/* restore recorder gain, if Volume setting was non-zero prior to running */
+									if(val.fVal = gain){
+										val.iVal = htonl(val.iVal);
+										queueControlOutPacket(mixEngine, cPeer_recorder | cType_vol, uid, 4, (char *)&(val.iVal));
 									}
-									free(rdir);
-									SetMetaData(uid, "Status", "1");	// set status to loading
-									sleep(2);
-									if(waitpid(recPtr.child, NULL, WNOHANG)){
-										/* failed to run or ran and quit due to an error */
-										SetMetaData(uid, "Status", "0");	// set status back to empty
-										session->errMSG = "Failed to run arRecorder or ran and quit due to a setting error\n";
-										if(GetMetaInt(uid, "Persistent", NULL))
-											releaseMetaRecord(uid);
-										return rError;
-									}else{
-										/* still running after 2 seconds */
-										valuetype val;
-										/* restore recorder gain, if Volume setting was non-zero prior to running */
-										if(val.fVal = gain){
-											val.iVal = htonl(val.iVal);
-											queueControlOutPacket(mixEngine, cPeer_recorder | cType_vol, uid, 4, (char *)&(val.iVal));
-										}
-										/* all done */
-										return rOK;
-									}
+									/* all done */
+									return rOK;
 								}
-								
-							}else
-								free(pipe);
+							}
+							
 						}else
-							free(tmp);
-						
+							free(pipe);
 					}else
-						free(name);	
-				}
+						free(tmp);
+					
+				}else
+					free(name);	
 				/* failed */
 				free(rdir);
 				while(i--)

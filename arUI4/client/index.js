@@ -888,7 +888,10 @@ function browseTypeRowSelUpdate(value){
 			}
 		}
 	}
-	browseSort = "Label";	// Eric request: always default to Label asending when new type is clicked/changed
+	if(value == "added")
+		browseSort = "-Label";
+	else
+		browseSort = "Label";	// Eric request: always default to Label asending when new type is clicked/changed
 	browseQuery();
 }
 
@@ -1587,6 +1590,7 @@ function setDragableInnerHTML(item, li, format){
 						key = sub[0];
 						parts[n] = window[fnName](obj[key]);
 					}else
+//						parts[n] = encodeURIComponent(obj[key]);
 						parts[n] = quoteattr(obj[key]);
 					if(!parts[n])
 						parts[n] = "";
@@ -4057,8 +4061,9 @@ async function reloadItemSection(el, type){
 				inner += ">";
 			else
 				inner += " readonly>";
+//!! don't encode scripts again... they should be encoder for HTML display already
 			if(itemProps.Script)
-				inner += quoteattr(itemProps.Script);
+				inner += itemProps.Script;
 			inner += "</textarea>";
 		}else{
 			inner += "Type: <input type='text' size='10' name='Type'";
@@ -4953,9 +4958,12 @@ async function showEncoderItem(panel, container){
 		inner += " disabled>";
 	else
 		inner += ">";
-	for(let b=1; b<=studioStateCache.buscnt; b++){
+	for(let b=0; b<=studioStateCache.buscnt; b++){
 		let name;
 		switch(b){
+			case 0:
+				name = "None"
+				break;
 			case 1:
 				name = "Monitor"
 				break;
@@ -6674,12 +6682,15 @@ function exportTableToCSV(evt, filename) {
 
 /***** Browse specific functions *****/
 
+var browseScrollTo = false;
+
 function removeRefineElement(event){
 	let us = event.target;
 	while(us.className !== "closeb")
 		us = us.parentElement;
 	let par = us.parentElement;
 	let key = us.getAttribute("data-key");
+	browseScrollTo = us.getAttribute("data-value");
 	let lm = us.getAttribute("data-match");
 	let ma = document.getElementById("bmatch");
 	ma.value = lm;
@@ -6845,6 +6856,20 @@ function browseQuery(evt){
 					}
 					let colWidth = {action:"25px", Duration:"70px"};
 					genPopulateTableFromArray(data, el, {id: false, qtype: false, tocID: false}, browseRowClick, browseCellClick, browseSort, actions, hactions, false, colWidth, true);
+					if(browseScrollTo){
+						let rows = el.children[0].rows;
+						let selrow = false;
+						for(let i = 0; i < rows.length; i++){
+							let row = rows.item(i);
+							if(row.cells.item(0).textContent == browseScrollTo){
+								selrow = row;
+								break;
+							}
+						}
+						if(selrow)
+							selrow.scrollIntoView();
+						browseScrollTo = false;
+					}
 				});
 				return;
 			}
@@ -12276,6 +12301,7 @@ var studioScrList = [];
 async function readScriptAction(evt){
 	evt.preventDefault();
 	evt.stopPropagation();
+	document.getElementById("scriptReadBtn").disabled = true;
 	let el = document.getElementById("scriptContent");
 	let idx = el.getAttribute("data-idx");
 	if(idx < 0)
@@ -12294,7 +12320,6 @@ async function readScriptAction(evt){
 		});
 		if(resp){
 			if(resp.ok){
-				document.getElementById("scriptReadBtn").disabled = true;;
 				el.setAttribute("data-idx", -1);
 				el.innerText = "";
 				el = document.getElementById("scriptName");
@@ -13233,7 +13258,7 @@ async function campLoadRecord(){
 											else
 												document.getElementById("camp-itemStat").innerText = "N/A";
 											document.getElementById("camp-itemID").innerText = lastCampRec.aritem;
-											document.getElementById("camp-itemScript").value = lastCampRec.item.Script; 
+											document.getElementById("camp-itemScript").value = decodeURIComponent(lastCampRec.item.Script); 
 											document.getElementById("camp-itemType").value = ((lastCampRec.item.Type == "file") ? "Audio" : "Script");
 											campItemTypeChange(); // update options visibility
 											document.getElementById("camp-itemDur").innerText = timeFormat(lastCampRec.item.Duration);
@@ -14829,7 +14854,8 @@ function schDateSetSunday(){
 	let el = document.getElementById("trafSchedDate");
 	if(el){
 		let date = new Date();
-		let offset = 0 - date.getDay();;
+		// snap date to start of it's week
+		let offset = 0 - date.getDay();
 		date.setDate(date.getDate() + offset);
 		el.valueAsDate = date;
 	}

@@ -203,7 +203,6 @@ function processWSsip(msg, socket, svr){
 function processUDPsip(msg, rinfo){
 	msg = msg.toString();
 	let dest = false;
-	let dest = false;
 	let viaLine = false;
 	let lines = msg.split("\n");
 	let viacnt = 0
