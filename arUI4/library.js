@@ -2745,9 +2745,9 @@ function searchFor(request, response, params, dirs){
 							where += yr+"-01-00' AND '"+(yr+1)+"-01-00') ";
 						
 						if(mon)
-							where += "OR ('"+yr+"-"+mon+"-01' BETWEEN "+locConf['prefix']+"orders.dp_start AND DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range DAY))"; 
+							where += "OR ('"+yr+"-"+mon+"-01' BETWEEN "+locConf['prefix']+"orders.dp_start AND DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range - 1 DAY))"; 
 						else
-							 where += "OR ('"+yr+"-01-01' BETWEEN "+locConf['prefix']+"orders.dp_start AND DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range DAY))"; 
+							 where += "OR ('"+yr+"-01-01' BETWEEN "+locConf['prefix']+"orders.dp_start AND DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range - 1 DAY))"; 
 						where += ")) ";
 						if(params.match && params.match.length)
 							where = buildWhereString(where, "client", "name", params.match);
@@ -2824,9 +2824,9 @@ function searchFor(request, response, params, dirs){
 							where += yr+"-01-00' AND '"+(yr+1)+"-01-00') ";
 						
 						if(mon)
-							where += "OR ('"+yr+"-"+mon+"-01' BETWEEN "+locConf['prefix']+"orders.dp_start AND DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range DAY))"; 
+							where += "OR ('"+yr+"-"+mon+"-01' BETWEEN "+locConf['prefix']+"orders.dp_start AND DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range - 1 DAY))"; 
 						else
-							 where += "OR ('"+yr+"-01-01' BETWEEN "+locConf['prefix']+"orders.dp_start AND DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range DAY))"; 
+							 where += "OR ('"+yr+"-01-01' BETWEEN "+locConf['prefix']+"orders.dp_start AND DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range - 1 DAY))"; 
 						where += ")) ";
 						if(params.match && params.match.length)
 							where = buildWhereString(where, "toc", "name", params.match);
@@ -2919,9 +2919,9 @@ function searchFor(request, response, params, dirs){
 							where += yr+"-01-00' AND '"+(yr+1)+"-01-00') ";
 						
 						if(mon)
-							where += "OR ('"+yr+"-"+mon+"-01' BETWEEN "+locConf['prefix']+"orders.dp_start AND DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range DAY))"; 
+							where += "OR ('"+yr+"-"+mon+"-01' BETWEEN "+locConf['prefix']+"orders.dp_start AND DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range - 1 DAY))"; 
 						else
-							 where += "OR ('"+yr+"-01-01' BETWEEN "+locConf['prefix']+"orders.dp_start AND DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range DAY))"; 
+							 where += "OR ('"+yr+"-01-01' BETWEEN "+locConf['prefix']+"orders.dp_start AND DATE_ADD("+locConf['prefix']+"orders.dp_start, INTERVAL "+locConf['prefix']+"orders.dp_range - 1 DAY))"; 
 						where += ")) ";
 						if(params.match && params.match.length)
 							where = buildWhereString(where, "invoices", "id", params.match);
@@ -3229,13 +3229,15 @@ async function exportTrafficRec(connection, request, response, params, dirs){	//
 				let orderLocation = result[i].location;
 				let orderType = result[i].type;
 				let adjusted;
+				let qty = 1;
 				let note = "";
 				if(orderType == 'order'){
 					if(!orderDaypart)
 						orderDaypart = "Fixed Slot";
-					if(!orderFulfilled)
+					if(!orderFulfilled){
 						orderFulfilled = "skipped";
-					else
+						qty = 0;
+					}else
 						adjusted = orderAmount * (1 - (iRec.discount/100.0));
 					note = orderItem+"/"+orderLocation+"/"+orderSlot+"/"+orderDaypart+" ("+orderDate+" "+orderFulfilled+")";
 				}else if(orderType == 'credit'){
@@ -3258,7 +3260,7 @@ async function exportTrafficRec(connection, request, response, params, dirs){	//
 					note = "item: "+orderComment;
 				}
 				adjusted = financialFormat(adjusted);
-				data += id+";"+iRec.posted+";"+iRec.customer+";;"+iRec.comment+";"+orderDate+";"+note+";;Income:Advertising;1;"+adjusted+";;;"+iRec.discount+";;;;"+iRec.posted+";"+iRec.due+";Assets:Accounts Receivable;Posted by import;X\n";
+				data += id+";"+iRec.posted+";"+iRec.customer+";;"+iRec.comment+";"+orderDate+";"+note+";;Income:Advertising;"+qty+";"+adjusted+";;;"+iRec.discount+";;;;"+iRec.posted+";"+iRec.due+";Assets:Accounts Receivable;Posted by import;X\n";
 			}
 			response.set({
 				'Cache-Control': 'no-cache',
@@ -3504,7 +3506,7 @@ LEFT JOIN `+locConf['prefix']+`logs ON (`+locConf['prefix']+`logs.Added = 0 AND 
 	AND `+locConf['prefix']+`logs.Item = `+locConf['prefix']+`orders.itemID AND 
 	(
 		(`+locConf['prefix']+`orders.type = 'bulk' AND DATE(FROM_UNIXTIME(`+locConf['prefix']+`logs.Time)) BETWEEN `+locConf['prefix']+`orders.dp_start 
-			AND DATE_ADD(`+locConf['prefix']+`orders.dp_start, INTERVAL `+locConf['prefix']+`orders.dp_range DAY)) OR 
+			AND DATE_ADD(`+locConf['prefix']+`orders.dp_start, INTERVAL `+locConf['prefix']+`orders.dp_range - 1 DAY)) OR 
 		(`+locConf['prefix']+`orders.type = 'order' AND `+locConf['prefix']+`logs.OwnerID = `+locConf['prefix']+`orders.slotID AND DATE(FROM_UNIXTIME(`+locConf['prefix']+`logs.Time)) = `+locConf['prefix']+`orders.date) 
 	)
 )
@@ -3595,7 +3597,7 @@ LEFT JOIN `+locConf['prefix']+`logs ON (`+locConf['prefix']+`logs.Added = 0 AND 
 	AND `+locConf['prefix']+`logs.Item = `+locConf['prefix']+`orders.itemID AND 
 	(
 		(`+locConf['prefix']+`orders.type = 'bulk' AND DATE(FROM_UNIXTIME(`+locConf['prefix']+`logs.Time)) BETWEEN `+locConf['prefix']+`orders.dp_start 
-			AND DATE_ADD(`+locConf['prefix']+`orders.dp_start, INTERVAL `+locConf['prefix']+`orders.dp_range DAY)) OR 
+			AND DATE_ADD(`+locConf['prefix']+`orders.dp_start, INTERVAL `+locConf['prefix']+`orders.dp_range - 1 DAY)) OR 
 		(`+locConf['prefix']+`orders.type = 'order' AND `+locConf['prefix']+`logs.OwnerID = `+locConf['prefix']+`orders.slotID AND DATE(FROM_UNIXTIME(`+locConf['prefix']+`logs.Time)) = `+locConf['prefix']+`orders.date) 
 	)
 )

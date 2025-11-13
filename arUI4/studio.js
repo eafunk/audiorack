@@ -43,6 +43,7 @@ class conFactory {
 		return new Promise(function(resolve, reject){
 				let client = net.createConnection(this.port, this.host, function(){
 					client.setKeepAlive(true);
+					client.setEncoding('utf8'); // arServer uses UTF-8 encoding for everything
 					// wait for server prompt
 					prepForResponse(client, 1000);
 					getResponse(client).then(function(result){
@@ -65,7 +66,7 @@ class conFactory {
 				client.response = "";
 				client.on('data', function(data){
 					if(client.respromise){
-						client.response += data.toString();
+						client.response += data.toString();	
 						let idx = client.response.indexOf("\nars>");
 						if(idx > -1){
 							if(client.resTimer){

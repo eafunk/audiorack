@@ -52,6 +52,14 @@ var httpConf = false;
 
 const DefLimit = 0;
 
+/********** general trap for uncought exceptions, adding a backtrace to console output for debugging help **********/
+process.on('uncaughtException', async (error: Error) => {
+	console.error(`Caught exception: ${error}\n` + `Exception origin: ${error.stack}`);
+	await sleep(2000);
+	process.exit(1);
+});
+
+
 /********** Search For Object Functions **********/
 // NOT USED
 function fineObjectWithValue(key, value, anArray){

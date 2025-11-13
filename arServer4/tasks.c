@@ -251,8 +251,10 @@ void ExecuteProcess(char *command, uint32_t UID, uint32_t timeOut){
 
 		}
 		if(recPtr->child > 0){
- 			snprintf(pidStr, sizeof(pidStr), "%s:%i", recPtr->argv[0], recPtr->child);
-			createTaskItem(pidStr, WaitPID, (void *)recPtr, UID, -1, timeOut, 1);
+			if(UID){
+				snprintf(pidStr, sizeof(pidStr), "%s:%i", recPtr->argv[0], recPtr->child);
+				createTaskItem(pidStr, WaitPID, (void *)recPtr, UID, -1, timeOut, 1);
+			}
 			return;
 		}
 		free(recPtr->argv);

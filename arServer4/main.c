@@ -38,7 +38,7 @@
 
 /* program wide globals */
 unsigned int maxSessions = 25;
-const char *versionStr="4.1.1g"; 
+const char *versionStr="4.1.2"; 
 const char *versionCR="2004-2025  Ethan Funk";
 mixEngineRecPtr mixEngine;
 unsigned char run;
@@ -149,24 +149,19 @@ void loadPreConfig(void)
 			if(strcmp(arg, "-x") == 0) {
 				// no starting of deafult jackd server
 				options |= JackNoStartServer;
-			}else
-			if (strcmp(arg, "-p") == 0) {
+			}else if (strcmp(arg, "-p") == 0) {
 				 // tcp listening port being specified
 				 tcpPort = atoi(param);
-			}else
-			if (strcmp(arg, "-i") == 0) {
+			}else if (strcmp(arg, "-i") == 0) {
 				// input count specified
 				inCnt = atoi(param);
-			}else
-			if (strcmp(arg, "-o") == 0) {
+			}else if (strcmp(arg, "-o") == 0) {
 				// output count specified
 				outCnt = atoi(param);
-			}else
-			if (strcmp(arg, "-b") == 0) {
+			}else if (strcmp(arg, "-b") == 0) {
 				// mix bus count specified
 				busCnt = atoi(param);
-			}else
-			if (strcmp(arg, "-w") == 0) {
+			}else if (strcmp(arg, "-w") == 0) {
 				// channel width specified
 				chCnt = atoi(param);
 			}else if (strcmp(arg, "-j") == 0) {
@@ -178,7 +173,11 @@ void loadPreConfig(void)
 			}else if(strcmp(arg, "-l") == 0) {
 				// set maxilum number of concurrent tcp listening command connections 
 				maxSessions = atoi(param);
+			}else if (strcmp(arg, "-e") == 0) {
+				// pre-execute command, wait for it to complete
+				system(param);
 			}
+			
 		}
 		result = fgets(line, sizeof line, fp);
 	}

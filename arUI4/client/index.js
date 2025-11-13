@@ -41,7 +41,6 @@ includeScript("vumeter.js");
 var infoWidth = "450px";
 var scriptHeight = "375px";
 var cred = false;
-var locName = new watchableValue(false);
 var locationID;
 var studioName;
 var sseData = {};
@@ -49,7 +48,6 @@ var browseData;
 var mngLocList;
 var confData = {};
 var browseSort = "Label";
-var browseType = new watchableValue("");
 var browseTypeList = false;
 var filesPath = false;
 var filesList;
@@ -60,6 +58,8 @@ var flatPlist = false;
 var curDrag = null;
 var stSaveSetTimer = null;
 var stSaveConTimer = null;
+var locName = new watchableValue(false);
+var browseType = new watchableValue("");
 var catListCache = new watchableValue(false);
 var locListCache = new watchableValue(false);
 var artListCache = new watchableValue(false);
@@ -13721,7 +13721,7 @@ function invCampValChange(){
 		invListRefresh();
 	if(lastInvRec && (lastCampRec.client == lastInvRec.customer)){
 		el = document.getElementById("newOrderCampBtn");
-		el.setAttribute("data-id", selCampID);
+		el.setAttribute("data-id", lastCampRec.aritem);
 		el.innerText = val;
 	}
 }
@@ -14231,8 +14231,8 @@ async function invAddDupOrder(evt){
 			let invid = lastInvNum.getValue();
 			if(parentRec.locID && parentRec.ItemID && parentRec.DaypartID && parentRec.Days && parentRec.Start && parentRec.Start.length){
 				let amount = parentRec.Amount;
-				if(parentRec.children.length())
-					amount.parentRec.children[0].Amount;	// use the price of the first child, not the total of all the children
+				if(parentRec.children.length)
+					amount = parentRec.children[0].Amount;	// use the price of the first child, not the total of all the children
 				let api = "library/dporder/"+invid;
 				let reply;
 				let resp = await fetchContent(api, {
@@ -14299,9 +14299,11 @@ async function invRemoveOrder(evt){
 				return;
 			}else{
 				alert("Got an error removing order data from server.\n"+resp.statusText);
+				returm;
 			}
 		}else{
 			alert("Failed to delete order data from the server.");
+			return;
 		}
 	}
 	alert("Failed due to missing order record ID.");
@@ -14327,9 +14329,11 @@ async function invBumpOrder(evt){
 				return;
 			}else{
 				alert("Got an error bumping order.\n"+resp.statusText);
+				return;
 			}
 		}else{
 			alert("Failed to bump order.");
+			return;
 		}
 	}
 	alert("Failed due to missing order record ID.");
