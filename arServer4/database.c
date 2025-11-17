@@ -239,6 +239,8 @@ unsigned char db_connection_setup(dbInstance *db, char useNamedDB){
 				db->num_fields = 0;
 				db_set_errtag(db, NULL);
 				free(tmp);
+				// make sure to use UTF8 text encoding
+				mysql_query((MYSQL*)db->instance, "SET NAMES 'utf8'"); 
 				return 1;
 			}else{
 				HandleDBerror(db);

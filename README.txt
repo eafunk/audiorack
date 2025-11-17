@@ -1,4 +1,4 @@
-Updated Feb. 13, 2025
+Updated Nov. 9, 2025
 
 *** WHAT IS AUDIORACK4? ***
 
@@ -795,7 +795,7 @@ latency for jack-audio api applications, of which arServer is one.
 If you are not using ubuntustudio, you should be able to force a 
 particular audio latency, for example 256 sample at 48,000 samples a 
 second, by puting the following text into a file at
-~/.conf/pipewire/jack.conf.d/custom.conf 
+~/.config/pipewire/jack.conf.d/custom.conf
 
 jack.properties = {
 	node.force-quantum = 256
@@ -803,6 +803,20 @@ jack.properties = {
     node.lock-quantum  = true
 }
 
+Or issue the following commands before running arServer to force all
+pipewrie client, including Jack- client, to force a specific latency:
+
+pw-metadata -n settings 0 clock.force-quantum 256
+pw-metadata -n settings 0 clock.force-rate 48000
+
+These two commands can be added to the arServer startup config file,
+.audiorack/ars_startup.conf, as pre-configuration command to execue by
+adding these lines just after the other pre-config settings near the 
+start of the config file:
+
+; prep-config set pipewire up for the desired latency 
+-e pw-metadata -n settings 0 clock.force-quantum 256
+-e pw-metadata -n settings 0 clock.force-rate 48000
 
 If you did installed ubunustudio, the ubuntustudio-pipewire-config tool 
 will run a script after the system boots overriding the pipewire
