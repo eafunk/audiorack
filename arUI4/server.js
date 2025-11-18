@@ -53,7 +53,7 @@ var httpConf = false;
 const DefLimit = 0;
 
 /********** general trap for uncought exceptions, adding a backtrace to console output for debugging help **********/
-process.on('uncaughtException', async (error: Error) => {
+process.on('uncaughtException', async (error) => {
 	console.error(`Caught exception: ${error}\n` + `Exception origin: ${error.stack}`);
 	await sleep(2000);
 	process.exit(1);
@@ -1087,7 +1087,7 @@ app.get('/stadmin', function(request, response){
 										</tr>
 									</table>
 								</div>
-								<div id="stConfRoute" class="accpanel" style="text-align: left;">
+								<div id="stConfRoute" class="accpanel" style="text-align: left; height: 305px;">
 									<div id="stConfJackConns">
 									</div>
 								</div>

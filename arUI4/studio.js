@@ -66,7 +66,7 @@ class conFactory {
 				client.response = "";
 				client.on('data', function(data){
 					if(client.respromise){
-						client.response += data.toString();	
+						client.response += data;	
 						let idx = client.response.indexOf("\nars>");
 						if(idx > -1){
 							if(client.resTimer){

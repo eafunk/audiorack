@@ -20,49 +20,6 @@
 
 const DefLimit = 0;	// zero for no default limit: return all results
 
-const CRC32_TABLE = (function(){
-	let c;
-	let crcTable = [];
-	for (let n = 0; n < 256; n++){
-		c = n;
-		for(let k = 0; k < 8; k++)
-			c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-		crcTable[n] = c;
-	}
-	return crcTable;
-})();
-
-function crc32(string, crc){
-	// first call, crc should be set to zero
-	let bytes = bytesFor(string);
-	let n = 0;
-	crc = crc ^ -1;
-	
-	let i = 0;
-	const iTop = bytes.length;
-
-	while(i < iTop){
-		n = (crc ^ bytes[i]) & 0xff;
-		crc = (crc >>> 8) ^ CRC32_TABLE[n];
-		i++;
-	}
-	
-	crc = crc ^ -1;
-	if(crc < 0)
-		crc += 4294967296;
-	return crc;
-}
-
-function bytesFor(string){
-	const bytes = [];
-	let i = 0;
-	while(i < string.length){
-		bytes.push(string.charCodeAt(i));
-		++i;
-	}
-	return bytes;
-};
-
 function financialFormat(val){
 	if(typeof val === 'undefined')
 		return ""; // empty string
@@ -79,7 +36,7 @@ var fs = require('fs');
 var path = require('path');
 var linereader = require('line-reader');
 var crypto = require('crypto');
-const crc = require('node-crc');
+const crc32 = require('crc-32');
 const url = require('url');
 var glob = require('glob');
 const { once } = require('events');
@@ -776,19 +733,19 @@ async function getFileHash(fpath){
 		closeFileDescriptor(fd);
 		return "";
 	}
-	hash += crc.crc32(buf).toString('hex').padStart(8, '0');
+	hash += crc32.buf(buf).toString('hex').padStart(8, '0');
 	result = await readFileIntoBuffer(fd, b2, 4096,buf, 0);
 	if(!result){
 		closeFileDescriptor(fd);
 		return "";
 	}
-	hash += crc.crc32(buf).toString('hex').padStart(8, '0');
+	hash += crc32.buf(buf).toString('hex').padStart(8, '0');
 	result = await readFileIntoBuffer(fd, b3, 4096, buf, 0);
 	if(!result){
 		closeFileDescriptor(fd);
 		return "";
 	}
-	hash += crc.crc32(buf).toString('hex').padStart(8, '0');
+	hash += crc32.buf(buf).toString('hex').padStart(8, '0');
 	closeFileDescriptor(fd);
 	return hash;
 }
@@ -3528,17 +3485,17 @@ ORDER BY Location, Type, ItemID, Start, Days, DaypartID, OrderDate, Slot, Fulfil
 			if(!parent || (result[i].locID != parent.locID) || (result[i].Type != parent.Type) || 
 							(result[i].ItemID != parent.ItemID) || (result[i].DaypartID != parent.DaypartID) ||
 							(result[i].Start != parent.Start) || (result[i].Days != parent.Days)){
-				let ghash = crc32(result[i].Type, 0);
+				let ghash = crc32.str(result[i].Type, 0);
 				if(result[i].locID)
-					ghash = crc32(result[i].locID.toString(), ghash);
+					ghash = crc32.str(result[i].locID.toString(), ghash);
 				if(result[i].ItemID)
-					ghash = crc32(result[i].ItemID.toString(), ghash);
+					ghash = crc32.str(result[i].ItemID.toString(), ghash);
 				if(result[i].DaypartID)
-					ghash = crc32(result[i].DaypartID.toString(), ghash);
+					ghash = crc32.str(result[i].DaypartID.toString(), ghash);
 				if(result[i].Days)
-					ghash = crc32(result[i].Days.toString(), ghash);
+					ghash = crc32.str(result[i].Days.toString(), ghash);
 				if(result[i].Start)
-					ghash = crc32(result[i].Start, ghash);
+					ghash = crc32.str(result[i].Start, ghash);
 				parent = {ID: result[i].ID, locID: result[i].locID, Location: result[i].Location, Type: result[i].Type, Item:result[i].Item, Daypart:result[i].Daypart, 
 									DaypartID:result[i].DaypartID, ItemID:result[i].ItemID, DaypartID: result[i].DaypartID, Start:result[i].Start, Days: result[i].Days, 
 									Amount: 0.0, groupHash: ghash};
@@ -3619,17 +3576,17 @@ ORDER BY Location, Type, ItemID, Start, Days, DaypartID, OrderDate, Slot, Fulfil
 			if(!parent || (result[i].locID != parent.locID) || (result[i].Type != parent.Type) || 
 							(result[i].ItemID != parent.ItemID) || (result[i].DaypartID != parent.DaypartID) ||
 							(result[i].Start != parent.Start) || (result[i].Days != parent.Days)){
-				let ghash = crc32(result[i].Type, 0);
+				let ghash = crc32.str(result[i].Type, 0);
 				if(result[i].locID)
-					ghash = crc32(result[i].locID.toString(), ghash);
+					ghash = crc32.str(result[i].locID.toString(), ghash);
 				if(result[i].ItemID)
-					ghash = crc32(result[i].ItemID.toString(), ghash);
+					ghash = crc32.str(result[i].ItemID.toString(), ghash);
 				if(result[i].DaypartID)
-					ghash = crc32(result[i].DaypartID.toString(), ghash);
+					ghash = crc32.str(result[i].DaypartID.toString(), ghash);
 				if(result[i].Days)
-					ghash = crc32(result[i].Days.toString(), ghash);
+					ghash = crc32.str(result[i].Days.toString(), ghash);
 				if(result[i].Start)
-					ghash = crc32(result[i].Start, ghash);
+					ghash = crc32.str(result[i].Start, ghash);
 				parent = {ID: result[i].ID, locID: result[i].locID, Location: result[i].Location, Type: result[i].Type, Item:result[i].Item, Daypart:result[i].Daypart, 
 									DaypartID:result[i].DaypartID, ItemID:result[i].ItemID, DaypartID: result[i].DaypartID, Start:result[i].Start, Days: result[i].Days, 
 									Amount: 0.0, groupHash: ghash};

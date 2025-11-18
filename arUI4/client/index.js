@@ -4936,6 +4936,8 @@ function itemPrioRender(val){
 }
 
 async function showEncoderItem(panel, container){
+	let audio = document.getElementById("itemcueplayer");
+	audio.controls = false;
 	let inner = "<form id='enitemform' style='padding:5px;'> Type: "+itemProps.Type+"<br>";
 	inner += "Name: <input type='text' id='enName' size='45' name='Name'";
 	inner += " value='"+quoteattr(itemProps.Name)+"'";
@@ -5425,6 +5427,8 @@ async function showItem(props, canEdit, noShow){
 			return;
 		showEncoderItem(el, da);
 	}else if(props.qtype || props.Type){
+		let audio = document.getElementById("itemcueplayer");
+		audio.controls = false;
 		let type = props.qtype;
 		if(!type || !type.length)
 			type = props.Type
