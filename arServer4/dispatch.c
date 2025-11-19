@@ -1701,6 +1701,7 @@ void *controlQueueInWatcher(void *refCon){
 										SetMetaData(packet->peer, "TimeStamp", tmp);
 										// a change was made... send out notice.
 										if(notify){
+											//!! debug here - json string: packet->data
 											notifyData data;
 											data.senderID = 0;
 											data.reference = htonl(0);

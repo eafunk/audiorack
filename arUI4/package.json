@@ -2,10 +2,10 @@
   "name": "arui-server",
   "version": "4.1.2",
   "description": "Web-based user interface server for audiorack4",
-  "main": "uiserver.js",
+  "main": "server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "install": "echo \"Error: no install specified\""
+    "install": "echo \"Standard npm install. No custom script specified.\""
   },
   "author": "Ethan Funk",
   "license": "MIT",

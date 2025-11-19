@@ -59,6 +59,7 @@ extern "C"
 
 #include "mix_engine.h"
 #include "dispatch.h"
+#include "stdbool.h"
 
 #define UserSettingsDirectory ".audiorack/"
 #define AppSupportDirectory	"/opt/audiorack/support/"
