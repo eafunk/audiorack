@@ -733,19 +733,19 @@ async function getFileHash(fpath){
 		closeFileDescriptor(fd);
 		return "";
 	}
-	hash += crc32.buf(buf).toString('hex').padStart(8, '0');
+	hash += ((crc32.buf(buf)) >>> 0).toString(16).padStart(8, '0');
 	result = await readFileIntoBuffer(fd, b2, 4096,buf, 0);
 	if(!result){
 		closeFileDescriptor(fd);
 		return "";
 	}
-	hash += crc32.buf(buf).toString('hex').padStart(8, '0');
+	hash += ((crc32.buf(buf)) >>> 0).toString(16).padStart(8, '0');
 	result = await readFileIntoBuffer(fd, b3, 4096, buf, 0);
 	if(!result){
 		closeFileDescriptor(fd);
 		return "";
 	}
-	hash += crc32.buf(buf).toString('hex').padStart(8, '0');
+	hash += ((crc32.buf(buf)) >>> 0).toString(16).padStart(8, '0');
 	closeFileDescriptor(fd);
 	return hash;
 }

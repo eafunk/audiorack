@@ -1251,7 +1251,7 @@ function genPopulateSchedTable(insert, fill, el, cellClick){
 	el.appendChild(table);
 } 
 
-function genPopulateTableFromArray(list, el, colMap, rowClick, headClick, sortVar, actions, haction, fieldTypes, colWidth, showCount, noHeader, tblClass){
+function genPopulateTableFromArray(list, el, colMap, rowClick, headClick, sortVar, actions, haction, fieldTypes, colWidth, showCount, noHeader, tblClass, cellClass){
 	if(!el)
 		return;
 	if(!list && !haction){
@@ -1353,6 +1353,8 @@ function genPopulateTableFromArray(list, el, colMap, rowClick, headClick, sortVa
 		}else{
 			for(let j = 0; j < cols.length; j++){
 				let cell = trow.insertCell(-1);
+				if(cellClass)
+					cell.className = cellClass;
 				// Inserting the cell at particular place
 				let inner;
 				if(fieldTypes && fieldTypes[cols[j]]){
@@ -12398,8 +12400,8 @@ async function showScriptTab(evt){
 		}
 	}
 	el = document.getElementById("scriptList");
-	//function genPopulateTableFromArray(list, el, colMap, rowClick, headClick, sortVar, actions, haction, fieldTypes, colWidth, showCount, noHeader)
-	genPopulateTableFromArray(studioScrList, el, {Script:false, ItemID:false, UID:false, LID:false}, selScriptRow, false, false, false, false, false, false, false, true);
+	//function genPopulateTableFromArray(list, el, colMap, rowClick, headClick, sortVar, actions, haction, fieldTypes, colWidth, showCount, noHeader, tblClass, cellClass)
+	genPopulateTableFromArray(studioScrList, el, {Script:false, ItemID:false, UID:false, LID:false}, selScriptRow, false, false, false, false, false, false, false, true, false, "scrListCell");
 	if(studioScrList.length == 0)
 		el.innerText = "No Scripts to read at this time.";
 }
