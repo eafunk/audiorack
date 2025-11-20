@@ -144,7 +144,9 @@ binary files are installed in /opt/audiorack/bin, and support files
 are installed in /opt/audiorack/support, from the support directory 
 in this project.
 
-	sudo make
+	make clean
+	
+	make
 
 	sudo make install
 
@@ -186,7 +188,7 @@ that is part of this package.
 
 You can manually run the GUI server from a command line shell 
 with this command:
-/opt/audiorack/bin/keepalive node /option/audiorack/bin/arui/server.js
+/opt/audiorack/bin/keepalive node /opt/audiorack/bin/arui/server.js
 
 The same command can be used to create a startup on login application 
 on your particular OS.  For example, on Ubuntu 24.04, the program to 
@@ -194,7 +196,7 @@ configure startup items is called Startup Application Preferences, from
 which you would create a new startup item and with a name and comment 
 to your liking, with the command set to the above comand.
 
-Then, open http://localhost:3000 in a web browser to access the GUI.
+Then, open http://localhost:4000 in a web browser to access the GUI.
 Or http://ThePrivateAddressOfTheMachineRunningTheGUIServer:3000 if
 you want to access the GUI from a different computer.
 
@@ -215,7 +217,10 @@ Note that setting up sanctioned or self-signing web certificates is
 beyond the scope of this document, but it is recomended you place .pem 
 (key file) and .crt (cert file) files in the .audiorack directory in 
 the user account the GUI server is running in, and set the paths in 
-this configuration accordingly. NOTE: that webmidi for client control 
+this configuration accordingly. 
+Note that the path to these certifigate files is the full path,
+from the root directory.
+NOTE: that webmidi for client control 
 surface use and WebRTC for live remotes require secure https to be 
 configured with valid or selfsigned certificates.
 

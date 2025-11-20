@@ -1150,7 +1150,7 @@ char *initSessions(unsigned int maxSessions, short *tcpPort){
 	if(bind(s, (struct sockaddr *) &server, sizeof( server )) < 0 ) { /* bind server address to socket */
 		free(sessionList);
 		close(s);
-		return  "bind() Error binding server to port";
+		return  "bind() Error binding server to port. arServer maybe already running.";
 	}
 	
 	/* find out what port was assigned */
