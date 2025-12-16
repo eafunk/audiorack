@@ -1213,7 +1213,7 @@ void handle_message(CustomData *data, GstMessage *msg) {
 						g_print("trying to re-initialized pipeline...\n");
 						data->flushAudio = TRUE;
 						gst_element_set_state(data->pl, GST_STATE_NULL);
-						data->status = rec_conn | rec_start;
+						data->status = rec_conn | rec_start | (data->status & rec_locked);
 						sleep(1);
 						data->settingsChanged = TRUE;
 						pthread_cond_broadcast(&data->ctlSemaphore);

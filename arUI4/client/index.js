@@ -4065,7 +4065,7 @@ async function reloadItemSection(el, type){
 				inner += " readonly>";
 //!! don't encode scripts again... they should be encoder for HTML display already
 			if(itemProps.Script)
-				inner += itemProps.Script;
+				inner += decodeURIComponent(itemProps.Script);
 			inner += "</textarea>";
 		}else{
 			inner += "Type: <input type='text' size='10' name='Type'";
@@ -7499,7 +7499,7 @@ function stEncStatus(ref, statusBits){
 	let rColor = "DarkGrey";
 	let sColor = "DarkGrey";
 	if(st){
-		if(statusBits & 1){
+		if(statusBits & 3){ // start or ready state
 			if(statusBits & 256)
 				st.innerText = "Err: Write fail";
 			else if(statusBits & 512)
@@ -10692,11 +10692,11 @@ function queueSetItemcolor(el, meta){
 	let color = "DarkGrey";
 	if(meta && (typeof meta.stat !== "undefined")){
 		if(meta.stat == "Playing")
-			color = "green";
+			color = "SeaGreen";
 		else if(meta.stat == "Ready")
 			color = "yellow";
 		else
-			color = "red";
+			color = "IndianRed";
 	}
 	el.style.backgroundColor = color;
 }
@@ -13431,7 +13431,7 @@ async function campSaveRecord(evt){
 		if(type == "file"){
 			let params = {};
 			campSetFileItemDefaults(params);
-			if(params.length){
+			if(Object.keys(params).length){
 				api = "library/set/file/"+tocID;
 				let resp = await fetchContent(api, {
 					method: 'POST',

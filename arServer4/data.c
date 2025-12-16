@@ -947,7 +947,7 @@ void UpdateQueueEndTimes(unsigned char sort){
 	
 	queueRecord *rec, *nextr;
 	int i;
-	double startTime, fillTime, locFillTime, lastStartTime, targetTime;
+	double startTime, fillTime, locFillTime, lastStartTime, targetTime, qEndTime;
 	int size;
 	uint32_t flags, stat;
 	itemGroupRec first, next;
@@ -970,11 +970,14 @@ void UpdateQueueEndTimes(unsigned char sort){
 	if(sort){
 		// check for fill times overlap deletion and for old items now 10 minutes past target time
 		fillTime = 0.0;
+		qEndTime = 0.0;
 		for(i = size; i > 0; i--){
 			if(rec = (queueRecord *)getNthNode((LinkedListEntry *)&queueList, i)){
 				stat = getQueueRecStatus(rec, NULL);
 				if(!(stat  & flags)){
 					// instance hasn't played or isn't flagged to delete/remove
+					if(qEndTime)
+						qEndTime = rec->endTime;	// Going backwards, so this is the end time of the entire queue.
 					if(i > 1){
 						if(nextr = (queueRecord *)getNthNode((LinkedListEntry *)&queueList, i-1))
 							startTime = nextr->endTime;
@@ -996,7 +999,7 @@ void UpdateQueueEndTimes(unsigned char sort){
 						serverLogMakeEntry(buf);
 						releaseQueueRecord((queueRecord *)&queueList, rec, 0);
 					}else if((locFillTime > 0) && (fillTime > locFillTime)){
-						if((fillTime + 600) < startTime){
+						if(((fillTime + 600) < startTime) && ((targetTime == 0) || (targetTime > qEndTime))){
 							// Again, Deleting is OK because we are itterating backwards through the list.
 							char *tmp;
 							tmp = GetMetaData(rec->UID, "Name", false);

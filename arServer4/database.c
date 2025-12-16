@@ -2294,10 +2294,6 @@ uint32_t dbGetNextScheduledItem(void **result, time_t *targetTime, short *priori
 		str_appendstr(&sql, "GROUP BY [prefix]schedule.Item ORDER BY Priority DESC, Minutes ASC");
 		dbMacroReplace(&sql);
 		
-		//!!! debug vvv for more than 30 minutes from/to range
-		if(difftime(to_t, from_t) > 1800)
-			serverLogMakeEntry(sql); 
-
 		// perform the sql query function
 		if(db_query(instance, sql)){
 			goto cleanup;

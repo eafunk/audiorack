@@ -693,7 +693,7 @@ function processFileLines(filename, options, params, linecb){
 
 async function getFileHash(fpath){
 	// MD5 portion first
-	let buf = new Buffer(4096);
+	let buf = Buffer.alloc(4096);
 	let md5sum = crypto.createHash('md5');
 	
 	let fd = await openFile(fpath);
@@ -3193,6 +3193,7 @@ async function exportTrafficRec(connection, request, response, params, dirs){	//
 						orderDaypart = "Fixed Slot";
 					if(!orderFulfilled){
 						orderFulfilled = "skipped";
+						adjusted = 0.00;
 						qty = 0;
 					}else
 						adjusted = orderAmount * (1 - (iRec.discount/100.0));
@@ -4439,7 +4440,7 @@ async function getFileMeta(tmpDirFileName, fullpath){
 		// check for playlist types
 		let fd = await openFile(fpath);
 		if(fd > -1){
-			let buf = new Buffer(11);
+			let buf = Buffer.alloc(11);
 			let result = await readFileIntoBuffer(fd, 0, 11, buf, 0);
 			closeFileDescriptor(fd);
 			if(result){
