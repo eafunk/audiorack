@@ -4156,7 +4156,7 @@ async function reloadItemSection(el, type){
 		if(itemProps.history){
 			let inner = "<form id='histitemform'>";
 			inner += "Before date: <input type='date' id='histdatesel' name='histdate' value='"+histdateVal+"' onchange='refreshItemHistory(event)'></input>";
-			inner += "<input type='number' id='histlimsel' name='histlimit' onchange='refreshItemHistory()' value='"+histlimitVal+"' max='310' min='10' step='50'></input>"
+			inner += "<input type='number' id='histlimsel' name='histlimit' onchange='refreshItemHistory(event)' value='"+histlimitVal+"' max='310' min='10' step='50'></input>"
 			inner += "<div id='itemhistlist'></div>"
 			el.innerHTML = inner + "</form>";
 			let div = document.getElementById("itemhistlist");
@@ -5208,10 +5208,16 @@ function cuePlayerReady(evt){
 async function showTocItem(panel, container){
 	let audio = document.getElementById("itemcueplayer");
 	audio.controls = false;
-	if(itemProps.ID && (itemProps.Type === "file")){
-		let source = document.getElementById("itemcuesource");
-		source.src = "library/download/"+itemProps.ID;
-		audio.load();
+	if(itemProps.Type === "file"){
+		if(itemProps.ID){
+			let source = document.getElementById("itemcuesource");
+			source.src = "library/download/"+itemProps.ID;
+			audio.load();
+		}else if(itemProps.tmpfile && itemProps.tmpfile.length){
+			let source = document.getElementById("itemcuesource");
+			source.src = "library/tmpmediacue/"+itemProps.tmpfile;
+			audio.load();
+		}
 	}
 
 	let inner = "<center id='itemName'>"+quoteattr(itemProps.Name)+"</center><br>";
@@ -8384,7 +8390,7 @@ async function stConfLiveChange(evt){
 }
 
 async function stConfAutoChange(evt){
-	if(evt.originalTarget.value)
+	if(parseInt(evt.originalTarget.value))
 		await stConfset("auto_startup", "1");
 	else
 		await stConfset("auto_startup", "0");

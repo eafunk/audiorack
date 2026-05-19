@@ -770,7 +770,6 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 			}
 		}
 	} 
-//!! consider this v
 	*firstp = instance->player-1;
 	status = getQueueRecStatus(instance, &thisIn);
 	if(status & status_standby){
@@ -820,7 +819,6 @@ void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float 
 //		// If this is a task, skip it... use the the next returned current player as the returned current player 
 //		*firstp = nextp;
 //	}
-//!! consider this v
 	if(*firstp == -1){
 		if(strcmp(type, "stop"))
 			*firstp = nextp;
@@ -1330,22 +1328,6 @@ void QueManagerTask(unsigned char *stop){
 					instance = &mixEngine->ins[firstp];
 					instance->requested = instance->requested | change_play;
 					serverLogMakeEntry("[automation] -Nothing playing: Starting first loaded player.");
-//!! debug
-					char buf[128], i;
-					snprintf(buf, sizeof buf, "[debug] NextListItem-Nothing playing:firstp=%d,sbtime=%.2f,isPlaying=%d", firstp, sbtime, isPlaying);
-					serverLogMakeEntry(buf);
-					serverLogMakeEntry("[debug] -trap player status:\npNum\tstatus\tmeta-UID\tbus\tpos\tnext\tseg\tfade");
-					for(i=0;i<mixEngine->inCount;i++){
-						instance = &mixEngine->ins[i];
-						if(instance->status & (status_standby | status_loading)){
-							snprintf(buf, sizeof buf, "%u\t%u\t%08x\t%06x\t%.2f\t%d\t%.2f\t%.2f", 
-								i, (unsigned int)instance->status, (unsigned int)instance->UID,
-								(instance->busses & 0x00ffffff), instance->pos, instance->segNext - 1, instance->posSeg, instance->fadePos);
-						}else{
-							snprintf(buf, sizeof buf, "%u\t%d", (unsigned int)i, 0);
-						}
-						serverLogMakeEntry(buf);
-					}
 					
 				}
 			}

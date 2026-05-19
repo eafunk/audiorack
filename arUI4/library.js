@@ -5320,6 +5320,25 @@ function getPrefix(request, response, params){
 	}
 }
 
+function getTmpMediaCue(request, response, dirs){
+	let fpath = "";
+	let tailIdx = request.path.search(dirs[2]+"/");
+	let tailLen = request.path.length-tailIdx-(dirs[2].length)-1;
+	if((tailIdx < 0) || (tailLen > 0)){
+		fpath = request.path.substring(tailIdx + dirs[2].length+1);
+		fpath = tmpDir+decodeURIComponent(fpath);
+		response.header('Cache-Control', 'no-cache');
+		response.sendFile(fpath, (err) => {
+				if(err){
+					response.status(500).send('File not found');
+				} 
+			});		
+	}else{
+		response.status(400);
+		response.end();
+	}
+}
+
 function getTmpMediaURL(request, response, params){
 	if(params.path && params.path.length){
 		let fpath = tmpDir+params.path;
@@ -5333,6 +5352,7 @@ function getTmpMediaURL(request, response, params){
 			response.status(400);
 			response.end();
 		}
+
 	}else{
 		response.status(400);
 		response.end();
@@ -5944,7 +5964,9 @@ module.exports = {
 		}else if(dirs[2] == 'getprefix'){
 			getPrefix(request, response, params);			// /getprefix?path=the/path/to/find/prefix/of/if/any
 		}else if(dirs[2] == 'tmpmediaurl'){
-			getTmpMediaURL(request, response, params);	// /tmpmediaurl?path=/file/path/in/tmpMediaDir
+			getTmpMediaURL(request, response, params);		// /tmpmediaurl?path=/file/path/in/tmpMediaDir  returns URL for arServer
+		}else if(dirs[2] == 'tmpmediacue'){	
+			getTmpMediaCue(request, response, dirs);		// /tmpmediacue/file/path/in/tmpMediaDir	sends the specidifed tmp file for cueing						
 		}else if(dirs[2] == 'dbinit'){
 			handleDbInit(request, response, params);		// initdb?type=mysql&host=thehostadr&user=dbuser&password=thepassword&database=dbname&prefix=tableprefix (ar_ is typical)
 																		// port=port-number is optional

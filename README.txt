@@ -1,4 +1,4 @@
-Updated Nov. 9, 2025
+Updated Nov. 19, 2025
 
 *** WHAT IS AUDIORACK4? ***
 
@@ -109,8 +109,9 @@ implies the developer version of these packages must be intsalled:
 
 gstreamer1		including all good, bad and ugly plugins, bad may 
 				require manual install.
+				(libgstreamer1.0-dev & libgstreamer-plugins-base1.0-dev)
 					
-gstreamer-pbutils
+gstreamer-plugins	good, bad, ugly, etc.
 
 jackd 			version 2, and any support libraries/programs for 
 				you to set up and manage audio on your system. I
@@ -197,7 +198,7 @@ which you would create a new startup item and with a name and comment
 to your liking, with the command set to the above comand.
 
 Then, open http://localhost:4000 in a web browser to access the GUI.
-Or http://ThePrivateAddressOfTheMachineRunningTheGUIServer:3000 if
+Or http://ThePrivateAddressOfTheMachineRunningTheGUIServer:4000 if
 you want to access the GUI from a different computer.
 
 Use the following default credentials to log in for the first time:
@@ -790,6 +791,13 @@ Carla manually, you will want to quit it before you restart arServer,
 and let it run Carla.
 
 *** Using Pipewire to emulate Jack-Audio ***
+
+Make sure the user you are running audiorack in is a member of the
+"rtkit" group on linux systems.  This will allow pipewire to give 
+realtime and priority scheduling to the audio handling threads to 
+prevent glitches.
+
+sudo usermod -a -G rtkit <username>
 
 I recomend installing the ubuntustudio-installer and 
 ubuntustudio-audio packages to your system. This will help enable
