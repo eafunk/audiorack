@@ -182,7 +182,7 @@
 			</div>
 			<div id="browse" class="tabcontent">
 				<label for="bmatch" style="float: left" >Contains:
-					<input type="search" id="bmatch" name="match" onchange="browseQuery(event)" placeholder="Enter Text..."> 
+					<input type="search" id="bmatch" name="match" onkeydown="browseQuery(event)" placeholder="Enter Text..."> 
 				</label>
 				<div id="brefine">
 				
@@ -729,7 +729,10 @@
 				</div>
 			</div>
 			<div id="trafsched" class="tabcontent">
-				<div></p><input type="date" id="trafSchedDate" name="shcedDate" step="7" min="2015-01-04" onchange="schDateChange()"></div>
+				<div><input type="date" id="trafSchedDate" name="shcedDate" step="7" min="2015-01-04" onchange="schDateChange()"></div>
+				<div id="traSchBumpLimit" style="display:inline-block;">Limit bumps to NONE</div>
+				<div id="trafschedtable" class="scroll"></div>
+				<div id="trafslots"></div>
 			</div>
 			<div id="trafdp" class="tabcontent">
 				<p>Radio is fun...</p>

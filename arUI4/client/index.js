@@ -111,10 +111,10 @@ function quoteattr(s){
 
 function dateToISOLocal(date){
 	let offsetMs = date.getTimezoneOffset() * 60 * 1000;
-	let msLocal =  date.getTime() - offsetMs;
+	let msLocal =  date.getTime() + offsetMs;
 	let dateLocal = new Date(msLocal);
 	let iso = dateLocal.toISOString();
-	let isoLocal = iso.slice(0, 19);
+	let isoLocal = iso.split('T')[0];
 	return isoLocal;
 }
 
@@ -945,6 +945,8 @@ function showTabElement(el, id, pass){
 		loadFilesTbl();
 	if(id === "query")
 		libQueryRefreshList();
+	if(id === "trafsched")
+		schDateChange();
 } 
 
 function externalSelectStudio(studio){
@@ -1361,7 +1363,7 @@ function genPopulateTableFromArray(list, el, colMap, rowClick, headClick, sortVa
 					let val = list[i][cols[j]];
 					if(fieldTypes[cols[j]] instanceof Function){
 						// fieldType is a function... have the function process the value
-						let result = fieldTypes[cols[j]](val, list[i], i, cols[j]);
+						let result = fieldTypes[cols[j]](val, list[i], i, cols[j], cell);
 						if(typeof result === 'object'){
 							extraDiv = result.div;
 							inner = result.thisCell;
@@ -6826,8 +6828,12 @@ function browseGetTypeList(){
 }
 
 function browseQuery(evt){
-	if(evt)
+	if(evt){
+		if(evt.key !== "Enter")
+			return;
 		evt.preventDefault();
+
+	}
 	genPopulateTableFromArray(false, document.getElementById("bres"));
 	if(!browseTypeList)
 		browseGetTypeList();
@@ -14865,6 +14871,90 @@ async function invSaveRecord(evt){
 }
 
 /***** Ad manager - Schedule functions *****/
+var schBumpToDate  = "";
+var schBumpToName  = "";
+var schBumpToSlot  = 0;
+
+function schRenderCell(rec, row, index, key, cell){
+	if(rec){
+		let inner = "<span style='float: left;'>" + quoteattr(rec.Name) + "</span>";
+		inner += "<span style='float: right;'><button class='editbutton' data-id='" + rec.slotID + "' onclick='slotItemInfo(event)'>i</button></span>";
+		if(rec.Item){
+			inner += "<br>"+quoteattr(rec.Item);
+			if(rec.Daypart){
+				inner += "<br><span style='float: left;'>" + quoteattr(rec.Daypart) + "</span>";
+				inner += "<span style='float: right;'><button class='editbutton' data-id='" + rec.orderID + "'onclick='schBumpOrder(event)'>&#x279F;</button></span>";
+			}else
+				inner += "<br>Hard Scheduled"
+			if(rec.Fulfilled){
+				cell.style.backgroundColor = "DeepSkyBlue";
+				inner += "<br>"+rec.Fulfilled;
+			}else{
+				if(rec.Aired == "Pending")
+					cell.style.backgroundColor = "yellow";
+				else if(rec.Aired == "Skipped")
+					cell.style.backgroundColor = "IndianRed";
+				else
+					cell.style.backgroundColor = "SeaGreen";
+				inner += "<br>"+rec.Aired;
+				// bump button here
+			}
+			inner += "<br>Inv# "+rec.invoiceID;	
+		}else{
+			cell.setAttribute("data-date", rec.schDate);
+			cell.setAttribute("data-slotID", rec.slotID);
+			cell.setAttribute("data-slotName", quoteattr(rec.Name));
+			inner += "&nbsp;<br>&nbsp;<br>&nbsp;<br>&nbsp;<br>&nbsp;";
+		}
+		return inner;
+	}
+	return "";
+}
+
+function slotItemInfo(event){
+	let slotID = parseInt(event.target.getAttribute("data-id"));
+	if(slotID){
+		// get item info
+		if(cred && ['admin', 'manager', 'library'].includes(cred.permission))
+			showItem({tocID:slotID}, true);
+		else
+			showItem({tocID:slotID}, false);
+	}
+}
+
+async function schBumpOrder(event){
+	let orderID = parseInt(event.target.getAttribute("data-id"));
+	if(orderID){
+		let params = {};
+		if(schBumpToDate.length)
+			params.day = schBumpToDate;
+		if(schBumpToSlot)
+			params.slot = schBumpToSlot;
+		let api = "library/bump/"+orderID;
+		let resp = await fetchContent(api, {
+				method: 'POST',
+				body: JSON.stringify(params),
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp){
+			if(resp.ok){
+				alert("Order bumped.");
+				schDateChange();
+				return;
+			}else{
+				alert("Got an error bumping order.\n"+resp.statusText);
+				return;
+			}
+		}else{
+			alert("Failed to bump order.");
+			return;
+		}
+	}
+	alert("Failed due to missing order record ID.");
+}
 
 function schDateSetSunday(){
 	let el = document.getElementById("trafSchedDate");
@@ -14877,8 +14967,93 @@ function schDateSetSunday(){
 	}
 }
 
-function schDateChange(){
-	//!!
+async function schDateChange(){
+	let div = document.getElementById("trafschedtable");
+	let lname = locName.getValue();
+	if(!lname || !lname.length){
+		div.innerHTML = "Please select a Library Location for which to get the schedule.";
+		return;
+	}
+	lname = encodeURI(lname);
+	let el = document.getElementById("trafSchedDate");
+	let iso = dateToISOLocal(el.valueAsDate);
+	genPopulateTableFromArray(false, div);
+	let data = false;
+	let api = "library/showorders/"+lname;
+	let resp = await fetchContent(api, {
+			method: 'POST',
+			body: JSON.stringify({date: iso}),
+			headers: {
+				"Content-Type": "application/json",
+				"Accept": "application/json"
+			}
+		});
+	if(resp instanceof Response){
+		if(resp && resp.ok)
+			data = await resp.json();
+		if(!data || !data.length){
+			// handle failure
+			if(resp)
+				alert("Got an error fetching data from server.\n"+resp);
+			else
+				alert("Failed to fetch data from the server.");  
+			return
+		}
+		let headings = {slotID:false,slotTime:"Time"};
+		// fill in dates for headings
+		let hd = new Date(iso);
+		let offsetMs = new Date().getTimezoneOffset() * 60 * 1000;
+		hd = new Date(hd.getTime() + offsetMs);
+		for(let i=0; i<7; i++){
+			headings["Col"+i] = hd.toDateString() + "<input type='hidden' name='Name' data-date='"+dateToISOLocal(hd)+"' data-slotID='0'></input>";
+			hd.setDate(hd.getDate() + 1);
+		}
+		let colWidth = {slotTime:"36px"};
+		let fields = {Col0:schRenderCell,Col1:schRenderCell,Col2:schRenderCell,Col3:schRenderCell,Col4:schRenderCell,Col5:schRenderCell,Col6:schRenderCell};
+		genPopulateTableFromArray(data, div, headings, schRowClick, schColClick, false, false, false, fields, colWidth);
+	}
+}
+
+function schColClick(event){
+	let el = event.target.childNodes[1];
+	let date = el.getAttribute("data-date");
+	let slot = el.getAttribute("data-slotID");
+	schSetBumpTo(date, slot);
+}
+
+function schRowClick(event){
+	let el = event.target;
+	let date = el.getAttribute("data-date");
+	let slot = el.getAttribute("data-slotID");
+	let name = el.getAttribute("data-slotName");
+	if(date && date.length && slot && name && name.length)
+		schSetBumpTo(date, slot, name);
+}
+
+function schSetBumpTo(date, slot, name){
+	let inner = "Limit bumps to ";
+	if(date && date.length){
+		schBumpToDate = date;
+		inner += date;
+		if(slot)
+			schBumpToSlot = slot;
+		else
+			schBumpToSlot = 0;
+		if(name && name.length){
+			schBumpToName = name;
+			inner += ", Slot " + name;
+		}else
+			schBumpToName = "";
+		inner += "<button style='height: 13px; width: 13px; font-size: 8px;' onclick='schSetBumpTo();'>x</button>";
+	}else{
+		schBumpToDate = "";
+		schBumpToSlot = 0;
+		schBumpToName = "";
+		inner += "NONE";
+	}
+	// update GUI fields
+	let el = document.getElementById("traSchBumpLimit");
+	el.innerHTML = inner;
 }
 
 /**** startup and load functions *****/
