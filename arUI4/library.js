@@ -1252,7 +1252,8 @@ function setIn(request, response, params, dirs){
 			return;
 		}
 		// check for allowed tables
-		if(['artist', 'album', 'category', 'locations', 'toc', 'meta', 'queries', 'rest', 'category_item', 'schedule', 'playlist', 'task', 'file', 'orders', 'client', 'campaign', 'invoices'].includes(table) == false){
+		if(['artist', 'album', 'category', 'locations', 'toc', 'meta', 'queries', 'rest', 'category_item', 'schedule', 'playlist', 'task', 'file', 'orders', 'client', 
+			'campaign', 'invoices', 'daypart', 'daypart_times'].includes(table) == false){
 			response.status(400);
 			response.end();
 			return;
@@ -1279,7 +1280,7 @@ function setIn(request, response, params, dirs){
 					if(['meta', 'rest', 'category_item', 'playlist', 'task'].includes(table))
 						// tables where row ID is named RID, rather than just ID
 						where = " WHERE RID ="+libpool.escape(dirs[4])+";";
-					else if(['client', 'campaign', 'invoices'].includes(table))
+					else if(['client', 'campaign', 'invoices', 'daypart_times'].includes(table))
 						where = " WHERE id ="+libpool.escape(dirs[4])+";";
 					else
 						where = " WHERE ID ="+libpool.escape(dirs[4])+";";
@@ -2928,13 +2929,12 @@ function responseWrapper(request, response, params, dirs, func){
 					response.status(result);
 					response.end();
 				}
-				if(connection)
-					connection.release();
 			}).catch(err => {
 				response.status(400);
 				response.send(err.code);
 				response.end();
 			});
+			connection.release();
 		});
 	}catch(err){
 		response.status(400);
@@ -3608,6 +3608,134 @@ ORDER BY Location, Type, ItemID, Start, Days, DaypartID, OrderDate, Slot, Fulfil
 	return 400;
 }
 
+async function newAdSlot(connection, request, response, params, dirs){	// /newslot/Name?locName=value	creates a new ad slot task with the given name, default ad slot SQL query, and scheduled for 8 am every day for the given location.
+	if((request.session.permission == "studio") || (request.session.permission == "library"))	// studio or library only permission is not allowed here
+		return 401;
+	let name = dirs[3]
+	if(!name || !name.length)
+		return 400;
+	let locName = params.locName;
+	if(!locName || !locName.length)
+		return 400;
+	let catID = 0;
+	let locID = 0;
+	
+	// get catID for "Advertisement"
+	let result;
+	let query = `SELECT ID FROM `+locConf['prefix']+`category WHERE Name = 'Advertisement';`;
+	try{
+		result = await asyncQuery(connection, query);
+	}catch(err){
+		return 400;
+	}
+	if(result.length){
+		let rec = result[0];
+		catID = parseInt(rec.ID, 10);
+	}
+	if(!catID)
+		return 400;
+	
+	query = `SELECT ID FROM `+locConf['prefix']+`locations WHERE Name = `+libpool.escape(locName)+`;`;
+	try{
+		result = await asyncQuery(connection, query);
+	}catch(err){
+		return 400;
+	}
+	if(result.length){
+		let rec = result[0];
+		locID = parseInt(rec.ID, 10);
+	}
+	if(!locID)
+		return 400;
+			
+	// get most recent ad slot to use as a template, otherwise use defaults
+	query = `SELECT `+locConf['prefix']+`toc.Duration AS Duration, hasQuery.Value AS Query 
+FROM `+locConf['prefix']+`category_item, `+locConf['prefix']+`task AS isTask, `+locConf['prefix']+`task AS hasQuery, `+locConf['prefix']+`toc 
+WHERE `+locConf['prefix']+`category_item.Category = `+catID+` 
+  AND isTask.ID = `+locConf['prefix']+`category_item.Item 
+  AND isTask.ID = hasQuery.ID 
+  AND `+locConf['prefix']+`toc.ID = hasQuery.ID 
+  AND isTask.Property = 'Subtype' AND isTask.Value = 'Pick' 
+  AND hasQuery.Property = 'Query' 
+ORDER BY `+locConf['prefix']+`toc.Added DESC 
+LIMIT 1;`;	
+	try{
+		result = await asyncQuery(connection, query);
+	}catch(err){
+		return 400;
+	}
+	let custQuery = "SELECT itemID AS ID FROM [prefix]orders WHERE [prefix]orders.location = [loc-id] AND [prefix]orders.slotID = [thisID] AND [prefix]orders.date = DATE(NOW() LIMIT 1;" // default query for ad slots
+	let dur = 30.0; // default as slot duration
+	if(result.length){
+		let rec = result[0];
+		custQuery = rec.Query;
+		dur = rec.Duration;
+		dur = parseFloat(dur, 10);
+	}
+	
+	result = await asyncStartTransaction(connection);
+	if(result)
+		return 500;
+		
+	// Create toc entry for new ad slot
+	query = `INSERT INTO `+locConf['prefix']+`toc (Name, Type, Duration, Added) VALUES (`+libpool.escape(name)+`, 'task', `+dur+`, UNIX_TIMESTAMP());`;
+	try{
+		result = await asyncQuery(connection, query);
+	}catch(err){
+		await asyncRollback(connection);
+		return 500;
+	}
+	let tocID = result.insertId;
+	tocID = parseInt(tocID);
+	if(!tocID){
+		await asyncRollback(connection);
+		return 500;
+	}
+	
+	// create task entries for new ad slot
+	query = `INSERT INTO `+locConf['prefix']+`task (ID, Property, Value) VALUES (`+tocID+`, 'Subtype', 'Pick');`;
+	try{
+		result = await asyncQuery(connection, query);
+	}catch(err){
+		await asyncRollback(connection);
+		return 500;
+	}
+	query = `INSERT INTO `+locConf['prefix']+`task (ID, Property, Value) VALUES (`+tocID+`, 'Query', `+libpool.escape(custQuery)+`);`;
+	try{
+		result = await asyncQuery(connection, query);
+	}catch(err){
+		await asyncRollback(connection);
+		return 500;
+	}
+	query = `INSERT INTO `+locConf['prefix']+`task (ID, Property, Value) VALUES (`+tocID+`, 'Mode', 'all');`;
+	try{
+		result = await asyncQuery(connection, query);
+	}catch(err){
+		await asyncRollback(connection);
+		return 500;
+	}
+
+	// create schedule entry for new ad slot in specified locID schedule - set for insert mode, daily at 8:00, priority 5
+	query = `INSERT INTO `+locConf['prefix']+`schedule (Item, Day, Date, Month, Hour, Minute, Fill, Priority, Location) VALUES (`+tocID+`, 0, 0, 0, 8, 0, 0, 5, `+locID+`);`;
+	try{
+		result = await asyncQuery(connection, query);
+	}catch(err){
+		await asyncRollback(connection);
+		return 500;
+	}
+	
+	// add new slot to Advertisment category
+	result = await addToCatID(connection, tocID, catID);
+	if(!result){
+		await asyncRollback(connection);
+		return 500;
+	}
+
+	// all done.
+	await asyncCommitTransaction(connection);
+	return {tocID: tocID};
+}
+	
 async function getItemObject(ID, params){  // params.resolve, params.locname, params.histlimit, params.histdate
 	if(!ID)
 		return 400;
@@ -5992,6 +6120,8 @@ module.exports = {
 			responseWrapper(request, response, params, dirs, postInvoice); // /postinv/invoiceID{?unpost=1}
 		}else if(dirs[2] == 'exptraffic'){
 			responseWrapper(request, response, params, dirs, exportTrafficRec); // /exptraffic/ID&?type={format: gnucash-inv,gnucash-cust,some-ther-type-todo}
+		}else if(dirs[2] == 'newslot'){
+			responseWrapper(request, response, params, dirs, newAdSlot); // /newslot/Name?locName=value	// creates a new ad slot task with the given name, default ad slot SQL query, and scheduled for 8 am every day for the given location.
 		}else{
 			response.status(400);
 			response.end();

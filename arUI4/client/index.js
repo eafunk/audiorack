@@ -14883,7 +14883,8 @@ function schRenderCell(rec, row, index, key, cell){
 			inner += "<br>"+quoteattr(rec.Item);
 			if(rec.Daypart){
 				inner += "<br><span style='float: left;'>" + quoteattr(rec.Daypart) + "</span>";
-				inner += "<span style='float: right;'><button class='editbutton' data-id='" + rec.orderID + "'onclick='schBumpOrder(event)'>&#x279F;</button></span>";
+				if(!rec.Fulfilled)
+					inner += "<span style='float: right;'><button class='editbutton' data-id='" + rec.orderID + "'onclick='schBumpOrder(event)'>&#x279F;</button></span>";
 			}else
 				inner += "<br>Hard Scheduled"
 			if(rec.Fulfilled){
@@ -14897,7 +14898,6 @@ function schRenderCell(rec, row, index, key, cell){
 				else
 					cell.style.backgroundColor = "SeaGreen";
 				inner += "<br>"+rec.Aired;
-				// bump button here
 			}
 			inner += "<br>Inv# "+rec.invoiceID;	
 		}else{
@@ -14968,7 +14968,7 @@ function schDateSetSunday(){
 }
 
 async function schDateChange(){
-	let div = document.getElementById("trafschedtable");
+	let div = document.getElementById("trafSchedTable");
 	let lname = locName.getValue();
 	if(!lname || !lname.length){
 		div.innerHTML = "Please select a Library Location for which to get the schedule.";
@@ -15054,6 +15054,53 @@ function schSetBumpTo(date, slot, name){
 	// update GUI fields
 	let el = document.getElementById("traSchBumpLimit");
 	el.innerHTML = inner;
+}
+
+async function trafNewSlot(){
+	let el = document.getElementById("trafSlotNewName");
+	let name = el.value;
+	if(!name || (name.length < 5)){
+		alert("You must specify a name for the new advertisment slot.  You can change the name later.");
+		return;
+	}
+	let lname = locName.getValue();
+	if(!lname || !lname.length){
+		div.innerHTML = "Please select a Library Location for which to initially schedule this slot into.";
+		return;
+	}
+	lname = encodeURI(lname);
+	
+	let api = "library/newslot/"+name;
+	let resp = await fetchContent(api, {
+			method: 'POST',
+			body: JSON.stringify({locName: lname}),
+			headers: {
+				"Content-Type": "application/json",
+				"Accept": "application/json"
+			}
+		});
+	if(resp){
+		let newID;
+		if(resp.ok){
+			let data = await resp.json();
+			newID = parseInt(data.tocID);
+		}
+		if(newID){
+			alert("New slot has been created and ascheduled for 8:00 daily. Please edit the slot's schedule, duration, etc. to meet your needs. When your done editing, refresh the schedule view above to include the new slot in the view.");
+			// open editor
+			if(cred && ['admin', 'manager', 'library'].includes(cred.permission))
+				showItem({tocID: newID}, true);
+			else
+				showItem({tocID: newID}, false);
+			return;
+		}else{	
+			alert("Got an error creating a new slot.\n"+resp.statusText);
+			return;
+		}
+	}else{
+		alert("Failed to creating a new slot.");
+		return;
+	}
 }
 
 /**** startup and load functions *****/

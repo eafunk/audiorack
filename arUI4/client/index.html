@@ -729,10 +729,10 @@
 				</div>
 			</div>
 			<div id="trafsched" class="tabcontent">
-				<div><input type="date" id="trafSchedDate" name="shcedDate" step="7" min="2015-01-04" onchange="schDateChange()"></div>
+				<div><input type="date" id="trafSchedDate" name="shcedDate" step="7" min="2015-01-04" onchange="schDateChange()"> <button class="editbutton" onclick="schDateChange()">Refresh</button></div>
 				<div id="traSchBumpLimit" style="display:inline-block;">Limit bumps to NONE</div>
-				<div id="trafschedtable" class="scroll"></div>
-				<div id="trafslots"></div>
+				<div id="trafSchedTable" class="scroll"></div>
+				<div><button class="editbutton" onclick="trafNewSlot()">New Ad Slot</button> Name:<input type="text" id="trafSlotNewName" name="trafSlotNewName"> Note: Most recently created ad slot will be used as a template.</div>
 			</div>
 			<div id="trafdp" class="tabcontent">
 				<p>Radio is fun...</p>
