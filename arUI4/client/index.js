@@ -14990,7 +14990,7 @@ async function schDateChange(){
 	lname = encodeURI(lname);
 	let el = document.getElementById("trafSchedDate");
 	schDateSetSunday();
-	date = new Date(el.valueAsDate);
+	let date = new Date(el.valueAsDate);
 	let offsetMs = new Date().getTimezoneOffset() * 60 * 1000;
 	date = new Date(date.getTime() + offsetMs);
 	let iso = dateToISOLocal(date);
@@ -15021,7 +15021,7 @@ async function schDateChange(){
 		// fill in dates for headings
 		for(let i=0; i<7; i++){
 			headings["Col"+i] = date.toDateString() + "<input type='hidden' name='Name' data-date='"+dateToISOLocal(date)+"' data-slotID='0'></input>";
-			date.setDate(hd.getDate() + 1);
+			date.setDate(date.getDate() + 1);
 		}
 		let colWidth = {slotTime:"36px"};
 		let fields = {Col0:schRenderCell,Col1:schRenderCell,Col2:schRenderCell,Col3:schRenderCell,Col4:schRenderCell,Col5:schRenderCell,Col6:schRenderCell};
