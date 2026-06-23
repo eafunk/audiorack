@@ -76,6 +76,20 @@ html, body {
 	width: 100%;
 }
 
+.tabletrafsched {
+	display: table;
+	overflow-wrap: break-word;
+	table-layout: fixed;
+	text-align: left;
+	width: 1160px;
+	background-color: #FFC;
+    border-collapse: collapse;
+}
+
+.tabletrafsched td {
+	border: 1px solid gray;
+}
+
 .tableleftj tr{
 	background: #EEE;
 	vertical-align: top;
@@ -182,6 +196,7 @@ footer {
 	border: 1px solid #CCC;
 	padding: 4px;
 	background-color: #EEE;
+	min-width: 140px;
 	width: 140px;
 	align-items: stretch;
 }
@@ -238,6 +253,7 @@ iframe{
 	text-align: center;
 	padding: 5px;
 	margin: 5px;
+	width: 100%;
 }
 
 .schedGrid {
@@ -388,6 +404,7 @@ iframe{
 .tabcontent {
 	flex: 1;
 	flex-flow: column;
+	min-width: 320px;
 	display: none;
 	background-color: #ccc;
 	float: left;

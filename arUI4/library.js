@@ -2092,8 +2092,30 @@ function deleteID(request, response, params, dirs){
 					response.send(err.code);
 					response.end();
 				}else{
-					// remove file entry
+					// remove entry
 					connection.query("DELETE FROM "+locConf['prefix']+"orders WHERE ID = "+ID+";", function(err, results){
+						if(err){
+							connection.release();
+							response.status(304);
+							response.send(err.code);
+							response.end();
+						}else{
+							connection.release();
+							response.status(201);
+							response.end();
+						}
+					});
+				}
+			});
+		}else if(table == 'daypart_times'){
+			libpool.getConnection((err, connection) => {
+				if(err){
+					response.status(400);
+					response.send(err.code);
+					response.end();
+				}else{
+					// remove entry
+					connection.query("DELETE FROM "+locConf['prefix']+"daypart_times WHERE id = "+ID+";", function(err, results){
 						if(err){
 							connection.release();
 							response.status(304);
@@ -3405,6 +3427,7 @@ async function addInvDPOrder(connection, request, response, params, dirs){
 }
 
 async function getAdBumpCandidates(connection, locID, dpID, start, range){
+	
 	let result;
 	let query = `SELECT DISTINCT `+locConf['prefix']+`orders.ID AS orderID, `+locConf['prefix']+`orders.date As Date, `+locConf['prefix']+`orders.orders.slotID AS Slot 
 	FROM (`+locConf['prefix']+`vector, `+locConf['prefix']+`schedule, `+locConf['prefix']+`orders, `+locConf['prefix']+`toc, 
@@ -3435,6 +3458,41 @@ async function getAdBumpCandidates(connection, locID, dpID, start, range){
 		return [];
 	}
 	return result;
+}
+
+async function getDayparts(connection, request, response, params, dirs){ // /showdayparts/locName
+	let locName = dirs[3];
+	if(locName.length){
+		let query = 
+`SELECT `+locConf['prefix']+`daypart.ID AS dpID, `+locConf['prefix']+`daypart.Name AS Name, `+locConf['prefix']+`daypart_times.start AS start, 
+  `+locConf['prefix']+`daypart_times.stop AS stop, `+locConf['prefix']+`daypart_times.day AS day, `+locConf['prefix']+`daypart_times.id AS tID
+FROM (`+locConf['prefix']+`daypart, `+locConf['prefix']+`locations) 
+  LEFT JOIN `+locConf['prefix']+`daypart_times 
+    ON `+locConf['prefix']+`daypart.ID = `+locConf['prefix']+`daypart_times.daypart 
+  WHERE `+locConf['prefix']+`daypart.location = `+locConf['prefix']+`locations.ID 
+    AND `+locConf['prefix']+`locations.Name = `+ libpool.escape(locName) +` 
+ORDER BY `+locConf['prefix']+`daypart.ID, `+locConf['prefix']+`daypart_times.day, `+locConf['prefix']+`daypart_times.start;`;
+
+		let result;
+		try{
+			result = await asyncQuery(connection, query);
+		}catch(err){
+			console.log(err);
+			return 304;
+		}
+		// Create branches
+		let parent = false;
+		let base = [];
+		for(let i=0; i<result.length; i++){
+			if(!parent || (result[i].dpID != parent.dpID)){
+				parent = {dpID: result[i].dpID, Name: result[i].Name, times:[]};
+				base.push(parent);
+			}
+			parent['times'].push(result[i]);
+		}
+		return base;
+	}
+	return 400;
 }
 
 async function getLocationOrders(connection, request, response, params, dirs){ // /showorders/locName?{date=YYYY-MM-DD}
@@ -6122,6 +6180,8 @@ module.exports = {
 			responseWrapper(request, response, params, dirs, exportTrafficRec); // /exptraffic/ID&?type={format: gnucash-inv,gnucash-cust,some-ther-type-todo}
 		}else if(dirs[2] == 'newslot'){
 			responseWrapper(request, response, params, dirs, newAdSlot); // /newslot/Name?locName=value	// creates a new ad slot task with the given name, default ad slot SQL query, and scheduled for 8 am every day for the given location.
+		}else if(dirs[2] == 'showdayparts'){
+			responseWrapper(request, response, params, dirs, getDayparts); // /showdayparts/locName
 		}else{
 			response.status(400);
 			response.end();

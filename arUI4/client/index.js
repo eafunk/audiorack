@@ -947,6 +947,8 @@ function showTabElement(el, id, pass){
 		libQueryRefreshList();
 	if(id === "trafsched")
 		schDateChange();
+	if(id === "trafdp")
+		dpRefreshList();
 } 
 
 function externalSelectStudio(studio){
@@ -1424,7 +1426,8 @@ function genPopulateTableFromArray(list, el, colMap, rowClick, headClick, sortVa
 					inner = timeFormat(list[i][cols[j]]);
 				else
 					inner = list[i][cols[j]];
-				cell.innerHTML = inner;
+				if(inner !== false)
+					cell.innerHTML = inner;
 			}
 		}
 		if(actions || haction){
@@ -1493,8 +1496,8 @@ function insertTableRow(kvcols, el, idx, colMap, rowClick, actions, fieldTypes){
 		if(fieldTypes && fieldTypes[cols[i]]){
 			let val = kvcols[cols[i]];
 			if(fieldTypes[cols[i]] instanceof Function){
-				// fieldType is a function... have the function process the value
-				inner = fieldTypes[cols[i]](val, kvcols, idx);
+				// fieldType is a function... have the function process the value		
+				inner = fieldTypes[cols[i]](val, kvcols, idx, cols[i], cell);
 			}else{
 				inner = fieldTypes[cols[i]];
 				if(kvcols[cols[i]] == true)
@@ -1550,7 +1553,8 @@ function insertTableRow(kvcols, el, idx, colMap, rowClick, actions, fieldTypes){
 			inner = timeFormat(kvcols[cols[i]]);
 		else
 			inner = kvcols[cols[i]];
-		cell.innerHTML = inner;
+		if(inner !== false)
+			cell.innerHTML = inner;
 	}
 	if(actions){
 		let cell = trow.insertCell(-1);
@@ -5758,7 +5762,7 @@ async function loadLocationMgtTbl(data){
 				let actions = `<button class="editbutton" onclick="updateLoc(event)">Update</button>`;
 				let haction = `<button class="editbutton" onclick="newLoc(event)">+</button>`;
 				let fields = {Name: "<input type='text' name='Name' data-id='$id' value='$val' ></input>"};
-				let colWidth = {action:"38px"};
+				let colWidth = {action:"45px"};
 				genPopulateTableFromArray(list, el, hidden, false, false, false, actions, haction, fields, colWidth);
 				return;
 			}
@@ -5788,7 +5792,7 @@ function loadConfigTypeTable(el, type){
 	let haction = false;
 	let fields;
 	let hidden = false;
-	let colWidth = {action:"40px"};
+	let colWidth = {action:"45px"};
 	if(type === "confusers"){
 		hidden = {salt: false};
 		actions = `<button class="editbutton" onclick="updateConf(event, '`+type+`')">Update</button>
@@ -5834,6 +5838,7 @@ function loadConfigTypeTable(el, type){
 		fields = {id: "<input type='hidden' name='id' value='$val'/>$val", value: "<input type='text' name='value' value='$val'></input>"};
 	}
 	genPopulateTableFromArray(data, el, hidden, false, false, false, actions, haction, fields, colWidth);
+	
 }
 
 function reloadConfSection(el, type){
@@ -14976,9 +14981,10 @@ async function schDateChange(){
 	}
 	lname = encodeURI(lname);
 	let el = document.getElementById("trafSchedDate");
+	schDateSetSunday();
 	let iso = dateToISOLocal(el.valueAsDate);
-	genPopulateTableFromArray(false, div);
 	let data = false;
+	div.innerHTML = "<div class='center'><i class='fa fa-circle-o-notch fa-spin' style='font-size:48px'></i></div>";
 	let api = "library/showorders/"+lname;
 	let resp = await fetchContent(api, {
 			method: 'POST',
@@ -14991,12 +14997,13 @@ async function schDateChange(){
 	if(resp instanceof Response){
 		if(resp && resp.ok)
 			data = await resp.json();
-		if(!data || !data.length){
+		if(!data){
 			// handle failure
 			if(resp)
-				alert("Got an error fetching data from server.\n"+resp);
+				alert("Got an error fetching data from server.\n"+resp.statusText);
 			else
 				alert("Failed to fetch data from the server.");  
+			genPopulateTableFromArray(false, div);
 			return
 		}
 		let headings = {slotID:false,slotTime:"Time"};
@@ -15010,8 +15017,10 @@ async function schDateChange(){
 		}
 		let colWidth = {slotTime:"36px"};
 		let fields = {Col0:schRenderCell,Col1:schRenderCell,Col2:schRenderCell,Col3:schRenderCell,Col4:schRenderCell,Col5:schRenderCell,Col6:schRenderCell};
-		genPopulateTableFromArray(data, div, headings, schRowClick, schColClick, false, false, false, fields, colWidth);
+		genPopulateTableFromArray(data, div, headings, schRowClick, schColClick, false, false, false, fields, colWidth, false, false, "tabletrafsched");
+		return;
 	}
+	genPopulateTableFromArray(false, div);
 }
 
 function schColClick(event){
@@ -15103,8 +15112,276 @@ async function trafNewSlot(){
 	}
 }
 
-/**** startup and load functions *****/
+/***** Ad manager - Day-part functions *****/
+function dpDayRender(val, row){
+	let day = parseInt(val);
+	let inner = "<select name='day' data-tID='"+row.tID+"'>";
+	inner += "<option value='0' "+(day===0?"selected":"")+">Sun</option>";
+	inner += "<option value='1' "+(day===1?"selected":"")+">Mon</option>";
+	inner += "<option value='2' "+(day===2?"selected":"")+">Tue</option>";
+	inner += "<option value='3' "+(day===3?"selected":"")+">Wed</option>";
+	inner += "<option value='4' "+(day===4?"selected":"")+">Thu</option>";
+	inner += "<option value='5' "+(day===5?"selected":"")+">Fri</option>";
+	inner += "<option value='6' "+(day===6?"selected":"")+">Sat</option>";
+	inner += "</select>";
+	return inner;
+}
 
+function dpHrRender(val){
+	val = parseInt(val);
+	let inner = "<select name='hour'>";
+	inner += "<option value='0' "+(val===0?"selected":"")+">0</option>";
+	inner += "<option value='1' "+(val===1?"selected":"")+">1</option>";
+	inner += "<option value='2' "+(val===2?"selected":"")+">2</option>";
+	inner += "<option value='3' "+(val===3?"selected":"")+">3</option>";
+	inner += "<option value='4' "+(val===4?"selected":"")+">4</option>";
+	inner += "<option value='5' "+(val===5?"selected":"")+">5</option>";
+	inner += "<option value='6' "+(val===6?"selected":"")+">6</option>";
+	inner += "<option value='7' "+(val===7?"selected":"")+">7</option>";
+	inner += "<option value='8' "+(val===8?"selected":"")+">8</option>";
+	inner += "<option value='9' "+(val===9?"selected":"")+">9</option>";
+	inner += "<option value='10' "+(val===10?"selected":"")+">10</option>";
+	inner += "<option value='11' "+(val===11?"selected":"")+">11</option>";
+	inner += "<option value='12' "+(val===12?"selected":"")+">12</option>";
+	inner += "<option value='13' "+(val===13?"selected":"")+">13</option>";
+	inner += "<option value='14' "+(val===14?"selected":"")+">14</option>";
+	inner += "<option value='15' "+(val===15?"selected":"")+">15</option>";
+	inner += "<option value='16' "+(val===16?"selected":"")+">16</option>";
+	inner += "<option value='17' "+(val===17?"selected":"")+">17</option>";
+	inner += "<option value='18' "+(val===18?"selected":"")+">18</option>";
+	inner += "<option value='19' "+(val===19?"selected":"")+">19</option>";
+	inner += "<option value='20' "+(val===20?"selected":"")+">20</option>";
+	inner += "<option value='21' "+(val===21?"selected":"")+">21</option>";
+	inner += "<option value='22' "+(val===22?"selected":"")+">22</option>";
+	inner += "<option value='23' "+(val===23?"selected":"")+">23</option>";
+	inner += "</select>";
+	return inner;
+}
+
+function dpRenderCell(val, row, index, key, cell){
+	// (val, list[i], i, cols[j], cell);
+	if(key == "Name"){
+		let name = document.createElement('input');
+		name.setAttribute("type", "text");
+		name.setAttribute("data-dpID", row.dpID);
+		name.setAttribute("value", val);
+		name.setAttribute("data-was", val);
+		cell.appendChild(name);
+		let div = document.createElement('div');
+		let colWidth = {action:"36px"};
+		let fields = {day:dpRenderCell, start:dpRenderCell, stop:dpRenderCell};
+		let actions = `<button class='editbutton' onclick='dpUpdateTime(event)'>&check;</button><button class="editbutton" onclick="dpRemoveTime(event)">-</button>`;
+		let haction = `<button class="editbutton" onclick="dpNewTime(event)">+</button>`;
+		let headings = {day:"Day", start:"Start Hour", stop:"Through Hour", tID:false, Name:false, dpID:false};
+		genPopulateTableFromArray(row.times, div, headings, false, false, false, actions, haction, fields, colWidth, false, false);
+		cell.appendChild(div);
+		return false;	// cell was directly manipulated
+	}else if(key == "start")
+		return dpHrRender(val);
+	else if(key == "stop")
+		return dpHrRender(val);
+	else if(key == "day")
+		return dpDayRender(val, row);
+}
+
+function dpAddNew(event){
+	let el = event.target.parentNode.parentNode.parentNode.parentNode.parentNode;
+	// Insert new row with dpID = 0 and was set to default name "NewDayPart"
+	let action = `<button class='editbutton' onclick='dpNameChange(event)'>&check;</button><button class='editbutton' onclick='dpNameRevert(event)'>&cularr;</button>`;
+	let fields = {dpID:false, times:false, Name:"<input type='text' data-dpID='0' data-was='NewDaypart' value='NewDaypart'></input>"};
+	let colMap = {dpID:false, Name:"Name", times:false};
+	insertTableRow({Name: "NewDaypart", dpID:0, times:false}, el, 1, colMap, false, action, fields)
+}
+
+async function dpNameChange(event){
+	let el = event.target.parentNode.parentNode.firstChild.firstChild;
+	let name = el.value;
+	let was = el.getAttribute("data-was");
+	let dpID = el.getAttribute("data-dpid");
+	dpID = parseInt(dpID);
+console.log("dpNameChange", name, dpID);
+	if(was != name){
+		
+		// If tid = 0, create new record otherwise update dpID record.
+		// Then reload daypartslist
+		let api = "library/set/daypart";
+		let data = {Name: name};
+		if(dpID)
+			api += "/" + dpID;
+		else
+			data.location = locationID;
+		let resp = await fetchContent(api, {
+				method: 'POST',
+				body: JSON.stringify(data),
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp){
+			if(resp.ok){
+				let reload = await resp.json();
+				if(reload.insertId){
+					alert("Daypart has been created.");
+					dpRefreshList();
+				}else if(reload.affectedRows){
+					alert("Daypart has been updated.");
+					dpRefreshList();
+				}else
+					alert("Failed to update or get new ID of Daypart.\n");
+			}else{
+				alert("Got an error saving data to server.\n"+resp.statusText);
+			}
+		}else{
+			alert("Failed to save data to the server.");
+		}
+	}
+}
+
+function dpNameRevert(event){
+	let el = event.target.parentNode.parentNode.firstChild.firstChild;
+	let was = el.getAttribute("data-was");
+	el.value = was;
+}
+
+function dpNewTime(event){
+	let div = event.target.parentNode.parentNode.parentNode.parentNode.parentNode;
+	let el = div.parentNode.firstChild;
+	let dpID = el.getAttribute("data-dpid");
+	// Insert row with tid = 0, Sun, 0-0 hr
+	let fields = {day:dpRenderCell, start:dpRenderCell, stop:dpRenderCell};
+	let action = `<button class='editbutton' onclick='dpUpdateTime(event)'>&check;</button><button class="editbutton" onclick="dpRemoveTime(event)">-</button>`;
+	let colMap = {day:"Day", start:"Start Hour", stop:"Through Hour", tID:false, Name:false, dpID:false};
+	insertTableRow({day:0, start:0, stop:0, tID:0}, div, 1, colMap, false, action, fields);
+}
+
+async function dpRemoveTime(event){
+	let el = event.target.parentNode.parentNode.childNodes[0].firstChild;
+	let tID = el.getAttribute("data-tid");
+	tID = parseInt(tID);
+	if(tID){
+		
+		// remove Daypart time entry from library
+		let api = "library/delete/daypart_times";
+		if(tID)
+			api += "/" + tID;
+		let resp = await fetchContent(api, {
+				method: 'GET',
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				}
+			});
+		if(resp){
+			if(resp.ok)
+				alert("Daypart time entry has been removed.");
+			else{
+				alert("Got an error deleting record from server.\n"+resp.statusText);
+				return;
+			}
+		}else{
+			alert("Failed to delete record from the server.");
+			return;
+		}
+	}
+	dpRefreshList();
+}
+
+async function dpUpdateTime(event){
+	let row = event.target.parentNode.parentNode;
+	let el = row.childNodes[0].firstChild;
+	let tID = el.getAttribute("data-tid");
+	if(tID)
+		tID = parseInt(tID);
+	else
+		tID = 0;
+	let day = el.selectedIndex;
+	el = row.childNodes[1].firstChild;
+	let start = el.selectedIndex;
+	el = row.childNodes[2].firstChild;
+	let stop = el.selectedIndex;
+	
+	// If tid = 0, create new record otherwise update tID record.
+	// Then reload daypartslist
+	let api = "library/set/daypart_times";
+	let data = {day: day, start: start, stop: stop};
+	if(tID)
+		api += "/" + tID;
+	else{
+		let dpName = row.parentNode.parentNode.parentNode.parentNode.childNodes[0];
+		let dpID = dpName.getAttribute("data-dpid");
+		dpID = parseInt(dpID);
+		data.daypart = dpID;
+	}
+	let resp = await fetchContent(api, {
+			method: 'POST',
+			body: JSON.stringify(data),
+			headers: {
+				"Content-Type": "application/json",
+				"Accept": "application/json"
+			}
+		});
+	if(resp){
+		if(resp.ok){
+			let reload = await resp.json();
+			if(reload.insertId){
+				alert("Daypart time entry has been created.");
+				dpRefreshList();
+			}else if(reload.affectedRows){
+				alert("Daypart time entry has been updated.");
+				dpRefreshList();
+			}else
+				alert("Failed to update or get new ID of Daypart time entry.\n");
+		}else{
+			alert("Got an error saving data to server.\n"+resp.statusText);
+		}
+	}else{
+		alert("Failed to save data to the server.");
+	}
+}
+
+async function dpRefreshList(){
+	let div = document.getElementById("trafSDPTable");
+	let lname = locName.getValue();
+	if(!lname || !lname.length){
+		div.innerHTML = "Please select a Library Location for which to get the advertising daypart list.";
+		return;
+	}
+	lname = encodeURI(lname);
+	let data = false;
+	div.innerHTML = "<div class='center'><i class='fa fa-circle-o-notch fa-spin' style='font-size:48px'></i></div>";
+	let api = "library/showdayparts/"+lname;
+	let resp = await fetchContent(api, {
+			method: 'GET',
+			headers: {
+				"Content-Type": "application/json",
+				"Accept": "application/json"
+			}
+		});
+	if(resp instanceof Response){
+		if(resp && resp.ok)
+			data = await resp.json();
+		if(!data){
+			// handle failure
+			if(resp)
+				alert("Got an error fetching data from server.\n"+resp.statusText);
+			else
+				alert("Failed to fetch data from the server.");  
+			genPopulateTableFromArray(false, div);
+			return
+		}
+		let haction = `<button class="editbutton" onclick="dpAddNew(event)">+</button>`;
+		let action = `<button class='editbutton' onclick='dpNameChange(event)'>&check;</button><button class='editbutton' onclick='dpNameRevert(event)'>&cularr;</button>`;
+		let headings = {dpID:false, Name:"Name", times:false};
+		let fields = {dpID:false, times:false, Name:dpRenderCell};
+		let colWidth = {action:"36px"};
+		genPopulateTableFromArray(data, div, headings, false, false, false, action, haction, fields, colWidth, false, false);
+		return;
+	}
+	genPopulateTableFromArray(false, div);
+}
+
+/**** startup and load functions *****/
 function credCompare(auth){
 	if(auth && cred)
 		if(auth.username == cred.username)
@@ -15229,6 +15506,8 @@ window.onload = function(){
 	locName.registerCallback(custLocValChange);
 	locName.registerCallback(campLocValChange);
 	locName.registerCallback(invLocValChange);
+	locName.registerCallback(schDateChange);
+	locName.registerCallback(dpRefreshList);
 	lastInvNum.registerCallback(custInvValChange);
 	lastInvNum.registerCallback(campInvValChange);
 	lastCustName.registerCallback(campCustValChange);
