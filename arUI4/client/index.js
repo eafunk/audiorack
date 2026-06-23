@@ -14961,10 +14961,18 @@ async function schBumpOrder(event){
 	alert("Failed due to missing order record ID.");
 }
 
-function schDateSetSunday(){
+function schDateSetSunday(useNow){
+
 	let el = document.getElementById("trafSchedDate");
 	if(el){
-		let date = new Date();
+		let date;
+		if(useNow)
+			date = new Date();
+		else{
+			date = new Date(el.valueAsDate);
+			let offsetMs = new Date().getTimezoneOffset() * 60 * 1000;
+			date = new Date(date.getTime() + offsetMs);
+		}
 		// snap date to start of it's week
 		let offset = 0 - date.getDay();
 		date.setDate(date.getDate() + offset);
@@ -14982,7 +14990,10 @@ async function schDateChange(){
 	lname = encodeURI(lname);
 	let el = document.getElementById("trafSchedDate");
 	schDateSetSunday();
-	let iso = dateToISOLocal(el.valueAsDate);
+	date = new Date(el.valueAsDate);
+	let offsetMs = new Date().getTimezoneOffset() * 60 * 1000;
+	date = new Date(date.getTime() + offsetMs);
+	let iso = dateToISOLocal(date);
 	let data = false;
 	div.innerHTML = "<div class='center'><i class='fa fa-circle-o-notch fa-spin' style='font-size:48px'></i></div>";
 	let api = "library/showorders/"+lname;
@@ -15008,12 +15019,9 @@ async function schDateChange(){
 		}
 		let headings = {slotID:false,slotTime:"Time"};
 		// fill in dates for headings
-		let hd = new Date(iso);
-		let offsetMs = new Date().getTimezoneOffset() * 60 * 1000;
-		hd = new Date(hd.getTime() + offsetMs);
 		for(let i=0; i<7; i++){
-			headings["Col"+i] = hd.toDateString() + "<input type='hidden' name='Name' data-date='"+dateToISOLocal(hd)+"' data-slotID='0'></input>";
-			hd.setDate(hd.getDate() + 1);
+			headings["Col"+i] = date.toDateString() + "<input type='hidden' name='Name' data-date='"+dateToISOLocal(date)+"' data-slotID='0'></input>";
+			date.setDate(hd.getDate() + 1);
 		}
 		let colWidth = {slotTime:"36px"};
 		let fields = {Col0:schRenderCell,Col1:schRenderCell,Col2:schRenderCell,Col3:schRenderCell,Col4:schRenderCell,Col5:schRenderCell,Col6:schRenderCell};
@@ -15199,7 +15207,6 @@ async function dpNameChange(event){
 	let was = el.getAttribute("data-was");
 	let dpID = el.getAttribute("data-dpid");
 	dpID = parseInt(dpID);
-console.log("dpNameChange", name, dpID);
 	if(was != name){
 		
 		// If tid = 0, create new record otherwise update dpID record.
@@ -15533,5 +15540,5 @@ window.onload = function(){
 	startupContent();
 	loadStashRecallOnLoad();
 	pTemplate = document.querySelector("#playerTemplate");
-	schDateSetSunday();
+	schDateSetSunday(true);
 }
