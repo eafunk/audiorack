@@ -2468,6 +2468,12 @@ void AddFPLEntryFromProgramLogStruct(FILE *fpl, float Offset, ProgramLogRecord *
 		str_appendstr(&line, "\n");
 		fputs(line, fpl);
 	}
+	if(Rec->comment && strlen(Rec->comment)){
+		str_setstr(&line, "Comment\t");
+		str_appendstr(&line, Rec->comment);
+		str_appendstr(&line, "\n");
+		fputs(line, fpl);
+	}
 	str_setstr(&line, "URL\t");
 	str_appendstr(&line, Rec->source);
 	str_appendstr(&line, "\n");
@@ -2549,12 +2555,13 @@ unsigned char associatedPLLog(FILE *fp, uint32_t parent, unsigned int busses, un
 					if(strstr(tmp, "item") == tmp)
 						SetMetaData(localUID, "URL", "");	
 					free(tmp);	
+				}else{
+					entryRec->comment = GetMetaData(localUID, "Comment", 0);
 				}
 				// log the UID meta data!
 				entryRec->name = GetMetaData(localUID, "Name", 0);
 				entryRec->artist = GetMetaData(localUID, "Artist", 0);
 				entryRec->album = GetMetaData(localUID, "Album", 0);
-				entryRec->ID = GetMetaInt(localUID, "ID", NULL);
 				entryRec->location = GetMetaInt(0, "db_loc", NULL);
 				entryRec->albumID = GetMetaInt(localUID, "AlbumID", NULL);
 				entryRec->artistID = GetMetaInt(localUID, "ArtistID", NULL);

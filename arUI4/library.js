@@ -1327,6 +1327,15 @@ function setIn(request, response, params, dirs){
 						response.end();
 					});
 				}else{
+					if(["daypart", "daypart_times", "orders","invoices"].includes(table)){
+						// additional permission checks
+						if(["library","programming"].includes(request.session.permission)){	// programming, or library only permission is not allowed here
+							response.status(401);
+							response.end();
+							onnection.release(); // return the connection to pool
+							return;
+						}
+					}
 					if(table == 'toc'){
 						// special new toc handling... must have type property set
 						if((['file', 'task', 'playlist', 'item'].includes(params.Type) == false) && 
@@ -2086,6 +2095,11 @@ function deleteID(request, response, params, dirs){
 				}
 			});
 		}else if(table == 'orders'){
+			if(["library","programming"].includes(request.session.permission)){	// programming, or library only permission is not allowed here
+				response.status(401);
+				response.end();
+				return;
+			}
 			libpool.getConnection((err, connection) => {
 				if(err){
 					response.status(400);
@@ -2108,6 +2122,11 @@ function deleteID(request, response, params, dirs){
 				}
 			});
 		}else if(table == 'daypart_times'){
+			if(["library","programming"].includes(request.session.permission)){	// programming, or library only permission is not allowed here
+				response.status(401);
+				response.end();
+				return;
+			}
 			libpool.getConnection((err, connection) => {
 				if(err){
 					response.status(400);
@@ -3073,6 +3092,8 @@ async function getOpenAdSlots(connection, orderID, start, locID, days, daypartID
 }
 
 async function getOpenSlotsForDate(connection, request, response, params, dirs){
+	if(["studio","library","programming"].includes(request.session.permission))	// studio, programming, or library only permission is not allowed here
+		return 401;
 	if(dirs[3]){
 		// get date locID and make sure it is a number.
 		let locID = parseInt(params.locID, 10);
@@ -3092,6 +3113,8 @@ async function bumpInvoiceOrder(connection, request, response, params, dirs){	//
 	// date and slot are optional.  If slot is specified, date must be specified as well. 
 	// If slot is specified, date must also be specified, and the slot date combination must be open.
 	// In the slot and date case, no checking is performed to verify the bump to slot and date is available.
+	if(["studio","library","programming"].includes(request.session.permission))	// studio, programming, or library only permission is not allowed here
+			return 401;
 	if(dirs[3]){
 		let orderID = parseInt(dirs[3], 10);
 		if(isNaN(orderID) || !orderID)
@@ -3165,7 +3188,7 @@ async function exportTrafficRec(connection, request, response, params, dirs){	//
 		if(isNaN(id))
 			return 400;
 		// check for permission
-		if(request.session.permission == "studio")	// studio permission is not allowed to a access this, all others are
+		if(["studio","library","programming"].includes(request.session.permission))	// studio, programming, or library only permission is not allowed here
 			return 401;
 		let type = params.type;
 		if(type == "gnucash-inv" && id){
@@ -3305,7 +3328,7 @@ async function postInvoice(connection, request, response, params, dirs){
 			return 400;
 		let unpost = params.unpost;
 		// check for permission
-		if(request.session.permission == "studio")	// studio permission is not allowed to a access this, all others are
+		if(["studio","library","programming"].includes(request.session.permission))	// studio, programming, or library only permission is not allowed here
 			return 401;
 		if(unpost){
 			let sql = "UPDATE "+locConf['prefix']+"orders SET orders.fulfilled = NULL ";
@@ -3373,7 +3396,7 @@ async function addInvDPOrder(connection, request, response, params, dirs){
 		if(isNaN(price))
 			return 400;
 		// check for permission
-		if(request.session.permission == "studio")	// studio permission is not allowed to make changes, all others are
+		if(["studio","library","programming"].includes(request.session.permission))	// studio, programming, or library only permission is not allowed here
 			return 401;
 		let result = await getOpenAdSlots(connection, false, start, locID, range, dpID, qty, false);
 		if(typeof result === 'number')
@@ -3427,7 +3450,8 @@ async function addInvDPOrder(connection, request, response, params, dirs){
 }
 
 async function getAdBumpCandidates(connection, locID, dpID, start, range){
-	
+	if(["studio","library","programming"].includes(request.session.permission))	// studio, programming, or library only permission is not allowed here
+		return 401;	
 	let result;
 	let query = `SELECT DISTINCT `+locConf['prefix']+`orders.ID AS orderID, `+locConf['prefix']+`orders.date As Date, `+locConf['prefix']+`orders.orders.slotID AS Slot 
 	FROM (`+locConf['prefix']+`vector, `+locConf['prefix']+`schedule, `+locConf['prefix']+`orders, `+locConf['prefix']+`toc, 
@@ -3461,6 +3485,8 @@ async function getAdBumpCandidates(connection, locID, dpID, start, range){
 }
 
 async function getDayparts(connection, request, response, params, dirs){ // /showdayparts/locName
+	if(["studio","library","programming"].includes(request.session.permission))	// studio, programming, or library only permission is not allowed here
+			return 401;
 	let locName = dirs[3];
 	if(locName.length){
 		let query = 
@@ -3507,7 +3533,7 @@ async function getLocationOrders(connection, request, response, params, dirs){ /
 			date = libpool.escape(dateToISOLocal(new Date()).split('T')[0]);
 		}
 		// check for permission
-		if(request.session.permission == "studio")	// studio permission is not allowed here, all others are
+		if(["studio","library","programming"].includes(request.session.permission))	// studio, programming, or library only permission is not allowed here
 			return 401;
 
 		let query = 
@@ -3582,7 +3608,7 @@ async function getInvoiceOrders(connection, request, response, params, dirs){
 		if(isNaN(ID) || !ID)
 			return 400;
 		// check for permission
-		if(request.session.permission == "studio")	// studio permission is not allowed to make changes, all others are
+		if(["studio","library","programming"].includes(request.session.permission))	// studio, programming, or library only permission is not allowed here
 			return 401;
 		let result;
 		let query = `SELECT `+locConf['prefix']+`orders.ID AS ID, `+locConf['prefix']+`orders.type AS Type, `+locConf['prefix']+`orders.location AS locID, 
@@ -3667,7 +3693,7 @@ ORDER BY Location, Type, ItemID, Start, Days, DaypartID, OrderDate, Slot, Fulfil
 }
 
 async function newAdSlot(connection, request, response, params, dirs){	// /newslot/Name?locName=value	creates a new ad slot task with the given name, default ad slot SQL query, and scheduled for 8 am every day for the given location.
-	if((request.session.permission == "studio") || (request.session.permission == "library"))	// studio or library only permission is not allowed here
+	if(["studio","library","programming"].includes(request.session.permission))	// studio, programming, or library only permission is not allowed here
 		return 401;
 	let name = dirs[3]
 	if(!name || !name.length)

@@ -117,6 +117,7 @@ unsigned char handle_dblist(ctl_session *session);
 unsigned char handle_cue(ctl_session *session);
 unsigned char handle_playnow(ctl_session *session);
 unsigned char handle_logmeta(ctl_session *session);
+unsigned char handle_logread(ctl_session *session);
 unsigned char handle_stat(ctl_session *session);
 
 unsigned char handle_list(ctl_session *session);
@@ -604,6 +605,10 @@ unsigned char processCommand(ctl_session *session, char *command, unsigned char 
 	}
 	if (!strcmp(arg, "logmeta")) {
 		result = handle_logmeta(session);
+		goto finish;
+	}
+	if (!strcmp(arg, "logread")) {
+		result = handle_logread(session);
 		goto finish;
 	}
 	if (!strcmp(arg, "logsync")) {
@@ -3894,6 +3899,65 @@ unsigned char handle_logmeta(ctl_session *session){
 		return rError;
 	}
 	session->errMSG = "Missing or bad UID specified\n";
+	return rError;
+}
+
+unsigned char handle_logread(ctl_session *session){
+	int sInt;
+	uint32_t aLong;
+	uint32_t newUID;
+	char *param, *end;
+	
+	aLong = 0;
+	newUID = 0;
+	// first parameter, url (file, input name, etc), or playlist item UID is in save_pointer
+	param = strtok_r(NULL, " ", &session->save_pointer);
+	if((param != NULL) && session->save_pointer && strlen(session->save_pointer)){
+		if(strlen(param) <= 4){
+			// decimal number, possible -1 (for last UID)
+			sInt = atoi(param);
+			if((sInt != -1) || ((aLong = session->lastUID) == 0)){
+				session->errMSG = "invalid last UID\n";
+				return rError;	
+			}
+		}
+		if(!aLong){
+			// try as a hex number (UID)
+			aLong = strtoul(param, &end, 16);
+			if(*end)
+				// the fist digit may have been hex, but there are other char's in there too... must be a URL
+				aLong = 0;
+		}
+		if(aLong){
+			// Hex value. Treat as UID
+			session->lastUID = aLong;
+			if(!getQueuePos(&aLong)){
+				session->errMSG = "Specified UID is not in play list.\n";
+				return rError;
+			}
+			aLong = session->lastUID;	// restore aLong to UID value
+		}else{
+			newUID = createMetaRecord(param, NULL, 0);	// retained once
+			GetURLMetaData(newUID, param);
+			if(GetMetaInt(newUID, "Missing", NULL)){
+				// failed to get info. on the specified URL
+				releaseMetaRecord(newUID);
+				session->errMSG = "Failed to get information on the Specified URL.\n";
+				return rError;
+			}else
+				aLong = newUID;	
+		}
+		// second parameter, comment value for log entry.
+		SetMetaData(aLong, "Comment", session->save_pointer);
+		programLogUIDEntry(aLong, 0, 0xFF);
+		// if the UID is a playlist item, remove it.  Otherwise this next call does nothing.
+		releaseQueueEntry(aLong);
+		if(newUID)
+			// we created a meta record just for this logging, release it.
+			releaseMetaRecord(newUID);		
+		return rOK;
+	}
+	session->errMSG = "Missing parameter.\n";
 	return rError;
 }
 

@@ -935,8 +935,12 @@ function showTabElement(el, id, pass){
 				tablinks[i].className += " active";
 		}
 	}
-	if(pass !== undefined)
-		bc.postMessage({type:"studioRequest", value:pass, who:sseID});
+	if(pass !== undefined){
+		if(studioName == pass)
+			setLibUsingStudio();	// no change: just restore library location
+		else
+			bc.postMessage({type:"studioRequest", value:pass, who:sseID});
+	}
 	if((id === "browse") && !browseData)
 		browseQuery();
 	if(id === "libmanage")
@@ -5227,6 +5231,9 @@ async function showTocItem(panel, container){
 	}
 
 	let inner = "<center id='itemName'>"+quoteattr(itemProps.Name)+"</center><br>";
+	if(itemProps.history && itemProps.history.length && itemProps.history[0])
+		inner += "<center>Last Played:"+quoteattr(itemProps.history[0])+"</center><br>";	 
+	
 	inner += `<button class="accordion" id="genbut" name='general' onclick="selectAccordType(event, reloadItemSection, 'general')">General</button>
 	<div class="accpanel">
 	</div>`;
@@ -12330,10 +12337,32 @@ async function readScriptAction(evt){
 	if(idx < 0)
 		return;
 	let obj = studioScrList[idx];
-	let dj = document.getElementById("scriptReadDJ").value;
+	let dj = encodeURIComponent(document.getElementById("scriptReadDJ").value);
 	if(obj && obj.ItemID && dj.length){
 		// log it
-		let resp = await fetchContent("library/logread/"+obj.ItemID, {
+		if(studioName && studioName.length){
+			let resp = await fetchContent("studio/"+studioName+"?raw=1&cmd=logread%20item:///"+obj.ItemID+"%20Read By%3A%20"+dj);
+			if(resp instanceof Response){
+				if(resp.ok){
+					let text = await resp.text();
+					if(text.search("OK") != 0){
+						alert("Got an error logging data from server.\n"+text);
+					}else{
+						el.setAttribute("data-idx", -1);
+						el.innerText = "";
+						el = document.getElementById("scriptName");
+						el.innerText = "";
+					}
+				}else{
+					alert("Got an error logging data from server.\n"+resp.statusText);
+				}
+				return;
+			}
+		}
+		alert("Failed to make a log entry from the server.");
+	}
+	//!!
+/*		let resp = await fetchContent("library/logread/"+obj.ItemID, {
 			method: 'POST',
 			body: JSON.stringify({locID: locationID, readBy: dj}),
 			headers: {
@@ -12343,10 +12372,8 @@ async function readScriptAction(evt){
 		});
 		if(resp){
 			if(resp.ok){
-				el.setAttribute("data-idx", -1);
-				el.innerText = "";
-				el = document.getElementById("scriptName");
-				el.innerText = "";
+				
+				
 				if(obj.UID){
 					// delete from queue
 					if(studioName && studioName.length){
@@ -12354,6 +12381,7 @@ async function readScriptAction(evt){
 						let resp = await fetchContent("studio/"+studioName+"?cmd=delete%20"+hexStr);
 					}
 				}
+				
 			}else{
 				alert("Got an error logging data from server.\n"+resp.statusText);
 			}
@@ -12361,6 +12389,7 @@ async function readScriptAction(evt){
 			alert("Failed to make a log entry from the server.");
 		}
 	}
+*/
 }
 
 async function showScriptTab(evt){

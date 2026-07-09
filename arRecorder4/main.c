@@ -438,6 +438,12 @@ void AddFPLEntryFromProgramLogStruct(FILE *fpl, double Offset, ProgramLogRecord 
 		str_appendstr(&line, "\n");
 		fputs(line, fpl);
 	}
+	if(Rec->comment && strlen(Rec->comment)){
+		str_setstr(&line, "Comment\t");
+		str_appendstr(&line, Rec->comment);
+		str_appendstr(&line, "\n");
+		fputs(line, fpl);
+	}
 	str_setstr(&line, "URL\t");
 	str_appendstr(&line, Rec->source);
 	str_appendstr(&line, "\n");

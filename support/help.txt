@@ -241,7 +241,7 @@ Note: pNum may be substituted with a $ to make use of the last pNum used/generat
 
 playnow [UID or URL]
 If UID of a playlist item, or -1 for last UID in the session UID is specified, the playlist item will be loaded into a player (if not already loaded) and playing of the item will be started.
-If a URL is specified, the next available player will be loaded with the specified URL, and the playing of the player will be started.  When a URL is specified, the play will have a spacial status flag set such that the player will automatically unload when it is stopped or finishes playing.
+If a URL is specified, the next available player will be loaded with the specified URL, and the playing of the player will be started.  When a URL is specified, the play will have a special status flag set such that the player will automatically unload when it is stopped or finishes playing.
 
 pos [pNum integer] [position float]
 sets the play position (seconds) of the specified player
@@ -363,6 +363,9 @@ returns a list of all the meta data key/value pairs for the specified UID
 logmeta [metaUID integer]
 Updates Name, Artist, Album, Comment, Owner, Source properties in the program log to match the specified UID current properties where the program log record ID = UID's property logID.
 
+logread [UID or URL] [Comment Text]
+Logs/posts to recorders the specified playlist item (UID) of url of an item as if it was just played, setting the comment text of the program log entry to the specified value.
+This is useful to execute the logging of a DJ read item (with an associated script), where the comment text is "Read By: [the DJ's name]".
 logsync
 Program logs have been added/changed by the client directly through the database...
 This command will send a notice to all clients to sync to the new log entry.

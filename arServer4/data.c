@@ -252,8 +252,8 @@ unsigned char SetMetaData(uint32_t uid, const char *key, const char *value){
 			if(strcmp(key, "log_buses") == 0){
 				log_busses = atoi(value);
 				if(!log_busses)
-					// no log busses specified... use default: Main bus only
-					log_busses = 0x04;	
+					// no log busses specified... use default: Main and Alt bus only
+					log_busses = 0x0c;	
 			}
 			if(strcmp(key, "sys_silence_bus") == 0){
 				silent_bus = atoi(value);
