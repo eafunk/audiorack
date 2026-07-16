@@ -14997,14 +14997,12 @@ function schDateSetSunday(useNow){
 		let date;
 		if(useNow)
 			date = new Date();
-		else{
-			let iso = el.value+"T12:00:00";
-			date = new Date(iso);
-		}
+		else
+			date = new Date(el.value+"T12:00:00");
 		// snap date to start of it's week
 		let offsetDay = 0 - date.getDay();
 		date.setDate(date.getDate() + offsetDay);
-		el.valueDate = date;
+		el.value = dateToISOLocal(date);
 	}
 }
 
@@ -15018,9 +15016,8 @@ async function schDateChange(){
 	lname = encodeURI(lname);
 	let el = document.getElementById("trafSchedDate");
 	schDateSetSunday();
-	let iso = el.value+"T12:00:00";
-	let locDate = new Date(iso);
-	iso = dateToISOLocal(locDate);
+	let iso = el.value;
+	let locDate = new Date(iso+"T12:00:00");
 	let data = false;
 	div.innerHTML = "<div class='center'><i class='fa fa-circle-o-notch fa-spin' style='font-size:48px'></i></div>";
 	let api = "library/showorders/"+lname;
