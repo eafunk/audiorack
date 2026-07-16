@@ -887,7 +887,8 @@ app.post('/studio/\*', function(request, response){
 app.get('/who', function(request, response){
 	//request.query.property
 	if(request.session.loggedin){
-		let li = {username: request.session.username, permission: request.session.permission};
+		let now = new Date();
+		let li = {username: request.session.username, permission: request.session.permission, utcOffsetMin: now.getTimezoneOffset()};
 		response.status(200);
 		response.send(li);
 	}else{

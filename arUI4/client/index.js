@@ -110,31 +110,42 @@ function quoteattr(s){
 }
 
 function dateToISOLocal(date){
-	let offsetMs = date.getTimezoneOffset() * 60 * 1000;
-	let msLocal =  date.getTime() + offsetMs;
-	let dateLocal = new Date(msLocal);
-	let iso = dateLocal.toISOString();
-	let isoLocal = iso.split('T')[0];
-	return isoLocal;
+	let dd = String(date.getDate()).padStart(2, '0');
+	let mm = String(date.getMonth() + 1).padStart(2, '0');
+	let yyyy = date.getFullYear();
+	return  yyyy + '-' + mm + '-' + dd;
 }
 
 function unixTimeToDateStr(ts){
+	// displays in local (UI Server) time zone
 	if(ts){
-		let millis = ts * 1000;
-		let dateObj = new Date(millis);
-		const options = { year: 'numeric', month: 'long', day: 'numeric' };
-		return dateObj.toLocaleDateString(undefined, options);
+		if(cred && cred.utcOffsetMin)
+			ts = ts - (cred.utcOffsetMin * 60);
+		let dateObj = new Date(ts * 1000);
+		return dateObj.toISOString().split('T', 1)[0];
 	}else
 		return "";
 }
 
 function unixTimeToTimeStr(ts){
+	// displays in local (UI Server) time zone
 	if(ts){
-		let millis = ts * 1000;
-		let dateObj = new Date(millis);
-		return dateObj.toLocaleTimeString();
+		if(cred && cred.utcOffsetMin)
+			ts = ts - (cred.utcOffsetMin * 60);
+		let dateObj = new Date(ts * 1000);
+		return dateObj.toISOString().split('.', 1)[0];
 	}else
 		return "";
+}
+
+function ISOLocalToUnixTime(iso){
+	// converts from local (UI Server) time zone
+	let date = new Date(iso);
+	let ts = (date.getTime() / 1000).toFixed(0);
+	if(cred && cred.utcOffsetMin)
+		// handle possible offset between client and UI server... time is in UI server time zone.
+		ts = ts + ((cred.utcOffsetMin - date.getTimezoneOffset()) * 60);
+	return  ts;
 }
 
 function timeParse(str){
@@ -3131,7 +3142,7 @@ async function saveEncProperties(evt){
 			}else if(itemName === "Start"){
 				if(enstart){
 					// convert to unixtime from local ISO format 
-					is = Date.parse(is) / 1000;
+					is = ISOLocalToUnixTime(is)
 				}else
 					is = "0";
 			}else if(itemName === "submit"){
@@ -3257,10 +3268,10 @@ async function saveItemInstance(evt){
 				else
 					is = 0;
 			}else if(item.name == "TargetTime"){
-				// was -> unitTime, is ->  JS date-time
+				// was -> unitTime, is ->  JS ISO date-time
 				if((is !== null && is.trim() !== "")){
 					// convert to unixtime from local ISO format 
-					is = Date.parse(is) / 1000;
+					is = ISOLocalToUnixTime(is)
 				}else
 					is = "";
 			}
@@ -4499,10 +4510,9 @@ async function reloadItemSection(el, type){
 			inner += "</td>";
 			inner += "<tr><td>Target Time</td><td><input id='instTargetTime' type='datetime-local' name='TargetTime' value='";
 			let val = Number(meta.TargetTime)
-			if(val){
-				let theDate = new Date(val * 1000);
-				inner += dateToISOLocal(theDate)+"'";
-			}else
+			if(val)
+				inner += unixTimeToTimeStr(val)+"'";
+			else
 				inner += "'";
 			inner += "></input>";
 			inner += "<tr><td>Don't Log</td><td>";
@@ -5029,13 +5039,10 @@ async function showEncoderItem(panel, container){
 	inner += "></input>";
 	inner += " <input id='enStart' type='datetime-local' name='Start' value='";
 	let val = Number(itemProps.Start)
-	if(val){
-		let theDate = new Date(val * 1000);
-		inner += dateToISOLocal(theDate)+"'";
-	}else{
-		let theDate = new Date();	// now
-		inner += dateToISOLocal(theDate)+"'";
-	}
+	if(val)
+		inner += unixTimeToTimeStr(val)+"'";
+	else
+		inner += "'";
 	if(itemProps.canEdit){
 		inner += "></input>";
 	}else
@@ -6131,11 +6138,7 @@ async function loadLogs(evt){
 		if(!datesel.value.length){
 			// set default date to today
 			let today = new Date(Date.now());
-			let dd = String(today.getDate()).padStart(2, '0');
-			let mm = String(today.getMonth() + 1).padStart(2, '0');
-			let yyyy = today.getFullYear();
-			today = yyyy + '-' + mm + '-' + dd;
-			datesel.value = today;
+			datesel.value = dateToISOLocal(today);
 		}
 		let logs;
 		let api = "library/logs";
@@ -6236,11 +6239,7 @@ async function loadSchedule(evt){
 		if(!datesel.value.length){
 			// set default date to today
 			let today = new Date(Date.now());
-			let dd = String(today.getDate()).padStart(2, '0');
-			let mm = String(today.getMonth() + 1).padStart(2, '0');
-			let yyyy = today.getFullYear();
-			today = yyyy + '-' + mm + '-' + dd;
-			datesel.value = today;
+			datesel.value = dateToISOLocal(today);
 		}
 		let api = "library/sched";
 		let resp = await fetchContent(api, {
@@ -12624,10 +12623,10 @@ function custListRefresh(evt){
 	genPopulateTableFromArray(false, el);
 	
 	let post = {type:"cust", datetype:dtype, dyear:year, dmon:month};
-	if(locationID && (document.getElementById("custIgnoreLoc").checked == false))
+	if(locationID && (lck.checked == false) && (lck.disabled == false))
 		post.locID = locationID;
 	
-	if(locationID && (document.getElementById("custIgnoreInv").checked == false))
+	if(locationID && (ick.checked == false) && (ick.disabled == false))
 		post.invID = lastInvNum.getValue();
 		
 	if(match && match.length)
@@ -12875,12 +12874,13 @@ function campListRefresh(evt){
 	genPopulateTableFromArray(false, el);
 	
 	let post = {type:"camp", datetype:dtype, dyear:year, dmon:month};
-	if(locationID && (document.getElementById("campIgnoreLoc").checked == false))
+	if(locationID && (lck.checked == false) && (lck.disabled == false))
 		post.locID = locationID;
+	if(locationID && (ick.checked == false) && (ick.disabled == false))
+		post.invID = lastInvNum.getValue();
 	if(selCustID && (document.getElementById("campIgnoreCust").checked == false))
 		post.custID = selCustID;
-	if(locationID && (document.getElementById("campIgnoreInv").checked == false))
-		post.invID = lastInvNum.getValue();
+
 		
 	if(match && match.length)
 		post.match = "%"+match+"%";
@@ -13669,6 +13669,7 @@ function invListRefresh(evt){
 	let elm = document.getElementById("invDateMon");
 	let lck = document.getElementById("invIgnoreLoc");
 	let cck = document.getElementById("invIgnoreCamp");
+	let cuck = document.getElementById("invIgnoreCust");
 	let year = parseInt(el.value);
 	let month = 0;
 	if(dtype == "Unposted"){
@@ -13696,12 +13697,12 @@ function invListRefresh(evt){
 	el = document.getElementById("invListDiv");
 	genPopulateTableFromArray(false, el);
 	let post = {type:"invoice", datetype:dtype, dyear:year, dmon:month};
-	if(locationID && (document.getElementById("invIgnoreLoc").checked == false))
+	if(locationID && (lck.checked == false) && (lck.disabled == false))
 		post.locID = locationID;
-	if(selCustID && (document.getElementById("invIgnoreCust").checked == false))
-		post.custID = selCustID;
-	if(selCampID && (document.getElementById("invIgnoreCamp").checked == false))
+	if(selCampID && (cck.checked == false) && (cck.disabled == false))
 		post.campID = selCampID;
+	if(selCustID && (cuck.checked == false))
+		post.custID = selCustID;
 	if(match && match.length)
 		post.match = "%"+match+"%";
 	post.sortBy = invSort;
@@ -14991,21 +14992,19 @@ async function schBumpOrder(event){
 }
 
 function schDateSetSunday(useNow){
-
 	let el = document.getElementById("trafSchedDate");
 	if(el){
 		let date;
 		if(useNow)
 			date = new Date();
 		else{
-			date = new Date(el.valueAsDate);
-			let offsetMs = new Date().getTimezoneOffset() * 60 * 1000;
-			date = new Date(date.getTime() + offsetMs);
+			let iso = el.value+"T12:00:00";
+			date = new Date(iso);
 		}
 		// snap date to start of it's week
-		let offset = 0 - date.getDay();
-		date.setDate(date.getDate() + offset);
-		el.valueAsDate = date;
+		let offsetDay = 0 - date.getDay();
+		date.setDate(date.getDate() + offsetDay);
+		el.valueDate = date;
 	}
 }
 
@@ -15019,10 +15018,9 @@ async function schDateChange(){
 	lname = encodeURI(lname);
 	let el = document.getElementById("trafSchedDate");
 	schDateSetSunday();
-	let date = new Date(el.valueAsDate);
-	let offsetMs = new Date().getTimezoneOffset() * 60 * 1000;
-	date = new Date(date.getTime() + offsetMs);
-	let iso = dateToISOLocal(date);
+	let iso = el.value+"T12:00:00";
+	let locDate = new Date(iso);
+	iso = dateToISOLocal(locDate);
 	let data = false;
 	div.innerHTML = "<div class='center'><i class='fa fa-circle-o-notch fa-spin' style='font-size:48px'></i></div>";
 	let api = "library/showorders/"+lname;
@@ -15049,8 +15047,8 @@ async function schDateChange(){
 		let headings = {slotID:false,slotTime:"Time"};
 		// fill in dates for headings
 		for(let i=0; i<7; i++){
-			headings["Col"+i] = date.toDateString() + "<input type='hidden' name='Name' data-date='"+dateToISOLocal(date)+"' data-slotID='0'></input>";
-			date.setDate(date.getDate() + 1);
+			headings["Col"+i] = locDate.toDateString() + "<input type='hidden' name='Name' data-date='"+dateToISOLocal(locDate)+"' data-slotID='0'></input>";
+			locDate.setDate(locDate.getDate() + 1);
 		}
 		let colWidth = {slotTime:"36px"};
 		let fields = {Col0:schRenderCell,Col1:schRenderCell,Col2:schRenderCell,Col3:schRenderCell,Col4:schRenderCell,Col5:schRenderCell,Col6:schRenderCell};

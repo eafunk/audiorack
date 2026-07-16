@@ -570,7 +570,7 @@ void MoveItem(int sourcePos, int destPos, unsigned char clearTimes){
 		plRev++;  // new rev number since the list changed 
 		
 		if(clearTimes){
-			if(UID = rec->UID){
+			if(UID = ((queueRecord *)fromRec)->UID){
 				// clear all scheduled time properties
 				SetMetaData(UID, "TargetTime", "0");
 				SetMetaData(UID, "Priority", "0");
