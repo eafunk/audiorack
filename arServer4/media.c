@@ -1282,7 +1282,7 @@ uint32_t LoadInputPlayer(int pNum, const char *url_str, uint32_t UID){
 	int i, c, cmax;
 	unsigned char isConnected;
 	char *name, *tmp;
-	char *portList, *mmList, *chanList, *portName, *decodedName;
+	char *portList, *chanList, *portName, *decodedName;
 
 	busses = 0;
 	result = 0;
@@ -1296,7 +1296,6 @@ uint32_t LoadInputPlayer(int pNum, const char *url_str, uint32_t UID){
 	instance->UID = locUID;
 	isConnected = 0;
 	portList = NULL;
-	mmList = NULL;
 	
 	// set up mixer channel
 	double val;
@@ -1327,8 +1326,9 @@ uint32_t LoadInputPlayer(int pNum, const char *url_str, uint32_t UID){
 				free(tmp);
 			}
 			if(rec->mmList){
-				mmList = strdup(rec->mmList);
-				SetMetaData(locUID, "MixMinusList", mmList);
+				tmp = strdup(rec->mmList);
+				SetMetaData(locUID, "MixMinusList", tmp);
+				free(tmp);
 			}
 			SetMetaData(locUID, "portList", portList);
 		}
@@ -1910,6 +1910,7 @@ uint32_t LoadPlayer(int *pNum, const char *url_str, uint32_t UID, unsigned char 
 					}
 					port++;
 				}
+				free(mmList);
 			}
 		}else
  			instance->status = status_empty;

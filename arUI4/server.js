@@ -52,24 +52,6 @@ var httpConf = false;
 
 const DefLimit = 0;
 
-/********** general trap for uncought exceptions, adding a backtrace to console output for debugging help **********/
-process.on('uncaughtException', async (error) => {
-	console.error(`Caught exception: ${error}\n` + `Exception origin: ${error.stack}`);
-	await sleep(2000);
-	process.exit(1);
-});
-
-
-/********** Search For Object Functions **********/
-// NOT USED
-function fineObjectWithValue(key, value, anArray){
-	for(let i=0; i < anArray.length; i++){
-		let obj = anArray[i];
-		if(obj[key] === value)
-			return obj;
-	}
-}
-
 /********** REST request for settings object or subobject array **********/
 
 function restObjectRequest(request, response, object, keysonly, parentkey){

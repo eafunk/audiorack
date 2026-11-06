@@ -364,8 +364,9 @@ logmeta [metaUID integer]
 Updates Name, Artist, Album, Comment, Owner, Source properties in the program log to match the specified UID current properties where the program log record ID = UID's property logID.
 
 logread [UID or URL] [Comment Text]
-Logs/posts to recorders the specified playlist item (UID) of url of an item as if it was just played, setting the comment text of the program log entry to the specified value.
+Logs/posts to recorders the specified playlist item (UID) or url item as if it was just played, setting the comment text of the program log entry to the specified value.
 This is useful to execute the logging of a DJ read item (with an associated script), where the comment text is "Read By: [the DJ's name]".
+
 logsync
 Program logs have been added/changed by the client directly through the database...
 This command will send a notice to all clients to sync to the new log entry.

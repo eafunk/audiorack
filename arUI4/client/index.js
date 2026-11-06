@@ -9254,7 +9254,7 @@ async function stConfInSave(evt){
 		oldname = "";
 	if(studioName && studioName.length){
 		let obj = {cmd: "setin "+newname+" "+bus+" 00000011 "+ports, raw: 1};
-		let resp = await fetchContent("studio/"+studio, {
+		let resp = await fetchContent("studio/"+studioName, {
 				method: 'POST',
 				body: JSON.stringify(obj),
 				headers: {
@@ -9265,7 +9265,7 @@ async function stConfInSave(evt){
 		if(resp && resp.ok){
 			if(oldname && (newname !== oldname))
 				// rename: delete old
-				resp = await fetchContent("studio/"+studio+"?cmd=delin "+oldname);
+				resp = await fetchContent("studio/"+studioName+"?cmd=delin "+oldname);
 		}
 		if(resp && resp.ok){
 			// feed settings
@@ -12587,7 +12587,7 @@ function buffToUvObj(buffer){
 
 /***** Ad manager - Customer functions *****/
 var selCustID;
-var lastCustName = new watchableValue(false);
+var lastCustName = new watchableValue("");
 var lastCustRec;
 var custSort;
 
@@ -12627,7 +12627,7 @@ function custListRefresh(evt){
 		post.locID = locationID;
 	
 	if(locationID && (ick.checked == false) && (ick.disabled == false))
-		post.invID = lastInvNum.getValue();
+		post.invID = lastInvNum.getValue();	//!!
 		
 	if(match && match.length)
 		post.match = "%"+match+"%";
@@ -12674,7 +12674,7 @@ function custHeaderClick(event){	// this is only the headers cells, for sorting
 function custCreateNew(){
 	selCustID = 0;
 	custLoadRecord();
-	lastCustName.setValue(false);
+	lastCustName.setValue("");
 }
 
 function custRowClick(evt){
@@ -12685,6 +12685,7 @@ function custRowClick(evt){
 
 function custRecClose(evt){
 	selCustID = 0;
+	lastCustName.setValue("");
 	let el = document.getElementById("custSearchBox");
 	el.style.display = "block";
 		el = document.getElementById("custInfoBox");
@@ -12694,8 +12695,7 @@ function custRecClose(evt){
 function custLocValChange(){
 	let el = document.getElementById("custLocName");
 	let val = locName.getValue();
-	if(val && val.length)
-		el.innerText = val;
+	el.innerText = val;
 	if(document.getElementById("trafdiv"))
 		custListRefresh();
 }
@@ -12703,8 +12703,9 @@ function custLocValChange(){
 function custInvValChange(){
 	let el = document.getElementById("custInvNum");
 	let val = lastInvNum.getValue();
-	if(val)
-		el.innerText = val;
+	if(val == 0)
+		val = "None";
+	el.innerText = val;
 	if(document.getElementById("trafdiv"))
 		custListRefresh();
 }
@@ -12839,7 +12840,7 @@ async function custSaveRecord(evt){
 
 var selCampID;
 var lastCampRec;
-var lastCampName = new watchableValue(false);
+var lastCampName = new watchableValue("");
 var campSort;
 
 function campListRefresh(evt){
@@ -12927,7 +12928,7 @@ function campHeaderClick(event){	// this is only the headers cells, for sorting
 function campCreateNew(){
 	if(selCustID){
 		selCampID = 0;
-		lastCampName.setValue(false);
+		lastCampName.setValue("");
 		campLoadRecord();
 	}
 }
@@ -12940,6 +12941,7 @@ function campRowClick(evt){
 
 function campRecClose(evt){
 	selCampID = 0;
+	lastCampName.setValue("");
 	let el = document.getElementById("campSearchBox");
 	el.style.display = "block";
 		el = document.getElementById("campInfoBox");
@@ -12958,8 +12960,10 @@ function campLocValChange(){
 function campCustValChange(){
 	let el = document.getElementById("campCustName");
 	let val = lastCustName.getValue();
-	if(val && val.length)
+	if(val.length)
 		el.innerText = val;
+	else
+		el.innerText = "None";
 	if(document.getElementById("trafdiv"))
 		campListRefresh();
 	el = document.getElementById("campNewbtn");
@@ -12972,8 +12976,9 @@ function campCustValChange(){
 function campInvValChange(){
 	let el = document.getElementById("campInvNum");
 	let val = lastInvNum.getValue();
-	if(val)
-		el.innerText = val;
+	if(val == 0)
+		val = "None";
+	el.innerText = val;
 	if(document.getElementById("trafdiv"))
 		campListRefresh();
 }
@@ -13453,7 +13458,7 @@ async function campSaveRecord(evt){
 		}
 		let el = document.getElementById("campItemCatBtn");
 		let catID = el.getAttribute("data-id");
-		if(catID){
+		if(parseInt(catID)){
 			// add to category
 			api = "library/set/category_item";
 			let resp = await fetchContent(api, {
@@ -13770,6 +13775,8 @@ function invCampValChange(){
 	let val = lastCampName.getValue();
 	if(val && val.length)
 		el.innerText = val;
+	else
+		el.innerText = "None";
 	if(document.getElementById("trafdiv"))
 		invListRefresh();
 	if(lastInvRec && (lastCampRec.client == lastInvRec.customer)){
@@ -13782,8 +13789,10 @@ function invCampValChange(){
 function invCustValChange(){
 	let el = document.getElementById("invCustName");
 	let val = lastCustName.getValue();
-	if(val && val.length)
+	if(val.length)
 		el.innerText = val;
+	else
+		el.innerText = "None";
 	if(document.getElementById("trafdiv"))
 		invListRefresh();
 	el = document.getElementById("invNewbtn");
@@ -14912,10 +14921,11 @@ var schBumpToSlot  = 0;
 
 function schRenderCell(rec, row, index, key, cell){
 	if(rec){
-		let inner = "<span style='float: left;'>" + quoteattr(rec.Name) + "</span>";
+		let inner = "<span style='float: left;'>"+quoteattr(rec.Name)+"</span>";
 		inner += "<span style='float: right;'><button class='editbutton' data-id='" + rec.slotID + "' onclick='slotItemInfo(event)'>i</button></span>";
 		if(rec.Item){
-			inner += "<br>"+quoteattr(rec.Item);
+			inner += "<br><span style='float: left;'>"+quoteattr(rec.Item)+"</span>";
+			inner += "<span style='float: right;'><button class='editbutton' data-id='" + rec.itemID + "' onclick='slotItemInfo(event)'>i</button></span>";
 			if(rec.Daypart){
 				inner += "<br><span style='float: left;'>" + quoteattr(rec.Daypart) + "</span>";
 				if(!rec.Fulfilled)
@@ -14947,13 +14957,13 @@ function schRenderCell(rec, row, index, key, cell){
 }
 
 function slotItemInfo(event){
-	let slotID = parseInt(event.target.getAttribute("data-id"));
-	if(slotID){
+	let arID = parseInt(event.target.getAttribute("data-id"));
+	if(arID){
 		// get item info
 		if(cred && ['admin', 'manager', 'library'].includes(cred.permission))
-			showItem({tocID:slotID}, true);
+			showItem({tocID:arID}, true);
 		else
-			showItem({tocID:slotID}, false);
+			showItem({tocID:arID}, false);
 	}
 }
 
@@ -15539,11 +15549,13 @@ window.onload = function(){
 	locName.registerCallback(invLocValChange);
 	locName.registerCallback(schDateChange);
 	locName.registerCallback(dpRefreshList);
-	lastInvNum.registerCallback(custInvValChange);
-	lastInvNum.registerCallback(campInvValChange);
+	
 	lastCustName.registerCallback(campCustValChange);
 	lastCustName.registerCallback(invCustValChange);
+	lastInvNum.registerCallback(custInvValChange);
+	lastInvNum.registerCallback(campInvValChange);
 	lastCampName.registerCallback(invCampValChange);
+	
 	mediaListCache.registerCallback(mediaMenuRefresh);
 	mediaListCache.registerCallback(fileReplaceDestRefresh);
 	locListCache.registerCallback(locMenuRefresh);

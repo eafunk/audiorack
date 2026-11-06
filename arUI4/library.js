@@ -3254,7 +3254,7 @@ async function exportTrafficRec(connection, request, response, params, dirs){	//
 						adjusted = orderAmount * (1 - (iRec.discount/100.0));
 					note = orderItem+"/"+orderLocation+"/"+orderSlot+"/"+orderDaypart+" ("+orderDate+" "+orderFulfilled+")";
 				}else if(orderType == 'credit'){
-					adjusted = orderAmount * (1 - (iRec.discount/100.0));
+					adjusted = -orderAmount * (1 - (iRec.discount/100.0));
 					if(orderItem && orderLocation && orderSlot)
 						note = "credit: "+orderItem+"/"+orderLocation+"/"+orderSlot+": "+orderComment;
 					else
@@ -3616,7 +3616,7 @@ async function getInvoiceOrders(connection, request, response, params, dirs){
 	`+locConf['prefix']+`daypart.Name AS Daypart, `+locConf['prefix']+`orders.dp_start AS Start, `+locConf['prefix']+`orders.dp_range AS Days, 
 	IF(`+locConf['prefix']+`orders.type = 'bulk', DATE(FROM_UNIXTIME(`+locConf['prefix']+`logs.Time)), `+locConf['prefix']+`orders.date) AS OrderDate, 
 	slot.Name AS Slot, 
-	IF(`+locConf['prefix']+`orders.fulfilled IS NULL, 
+	IF((`+locConf['prefix']+`orders.date IS NOT NULL AND `+locConf['prefix']+`orders.fulfilled IS NULL) , 
 		IF(`+locConf['prefix']+`logs.Time IS NULL,
 			IF(`+locConf['prefix']+`orders.date >= DATE(NOW()), 
 				'pending', 
@@ -3676,9 +3676,10 @@ ORDER BY Location, Type, ItemID, Start, Days, DaypartID, OrderDate, Slot, Fulfil
 			if(result[i].Type == "bulk"){
 				delete result[i].Amount;
 			}else{
-				if(result[i].Type == "credit")
+				if(result[i].Type == "credit"){
 					parent.Amount -= result[i].Amount;
-				else if(result[i].Status == 'skipped')
+					result[i].Status = '';
+				}else if((result[i].Type != "item") && (result[i].Status == 'skipped'))
 					result[i].Amount = null;
 				else{
 					parent.Amount += result[i].Amount; // order or item
