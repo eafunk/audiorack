@@ -972,10 +972,12 @@ void* pushRingbufferSamples(void *refCon){
 							gst_element_send_event(data->pl, gst_event_new_eos());
 							data->closeReq = TRUE;
 						}
-					}else{
+					}
+/*					else{
 						// failed to hand off buffer to gstreamer pipeline
 						gst_buffer_unref(buffer);
 					}
+*/
 				}else
 					free(mem);
 			}
@@ -1183,13 +1185,14 @@ void handle_message(CustomData *data, GstMessage *msg) {
 	switch (GST_MESSAGE_TYPE (msg)) {
 		case GST_MESSAGE_ERROR:
 			gst_message_parse_error(msg, &err, &debug_info);
-			g_printerr("Error received from element %s: %s\n", GST_OBJECT_NAME (msg->src), err->message);
-			g_printerr("Debugging information: %s\n", debug_info ? debug_info : "none");
+			g_printerr("GST_MESSAGE_ERROR - Error received from element %s: %s\n", GST_OBJECT_NAME (msg->src), err->message);
+			g_printerr("Debugging information: %s\n\n\n", debug_info ? debug_info : "none");
 			g_clear_error(&err);
 			g_free(debug_info);
 			data->status = data->status | rec_err_con_fail;
 			break;
 		case GST_MESSAGE_EOS: 
+			g_printerr("GST_MESSAGE_EOS\n\n");
 			if(!data->closeWaiting)
 				data->status = data->status | rec_err_con_fail;
 			gst_element_set_state(data->pl, GST_STATE_READY);
@@ -1201,11 +1204,13 @@ void handle_message(CustomData *data, GstMessage *msg) {
 				data->state = new_state;
 								
 				if(new_state == GST_STATE_READY){
+					g_printerr("GST_MESSAGE_STATE_CHANGED - new state is GST_STATE_READY\n\n");
 					data->status = data->status | rec_ready;
 					data->settingsChanged = TRUE;
 					pthread_cond_broadcast(&data->ctlSemaphore);
 				}
 				if((new_state == GST_STATE_PLAYING) && !data->closeWaiting){
+					g_printerr("GST_MESSAGE_STATE_CHANGED - new state is GST_STATE_PLAYING\n\n");
 					data->status = data->status | (rec_ready | rec_running);
 					if(data->status & rec_conn)
 						data->status = data->status & ~(rec_err_con_fail | rec_conn);
@@ -1216,7 +1221,7 @@ void handle_message(CustomData *data, GstMessage *msg) {
 				if((new_state == GST_STATE_READY) && (old_state != GST_STATE_NULL)){
 					if(!data->closeWaiting && (data->status & (rec_start | rec_running))){
 						// try to start up again
-						g_print("trying to re-initialized pipeline...\n");
+						g_print("trying to re-initialized pipeline...\n\n\n");
 						data->flushAudio = TRUE;
 						gst_element_set_state(data->pl, GST_STATE_NULL);
 						data->status = rec_conn | rec_start | (data->status & rec_locked);
@@ -1230,7 +1235,7 @@ void handle_message(CustomData *data, GstMessage *msg) {
 					
 		default:
 			/* We should not reach here */
-			g_printerr ("Unexpected message received.\n");
+			g_printerr ("Unexpected message received.\n\n");
 			break;
 	}
 	gst_message_unref(msg);
@@ -1465,7 +1470,8 @@ void mainloop(int next_arg, char *argv[], int apl_arg, unsigned char persist, lo
 	}
 
 	signal(SIGINT, INThandler);		// CTL-c
-	signal(SIGQUIT, QUIThandler);		// ctl-\
+	signal(SIGQUIT, QUIThandler);	// ctl-'\'
+	signal(SIGPIPE, SIG_IGN);		// ignor SIGPIPE
 	
 	data.settingsChanged = TRUE;	// trigger initial setting announcement
 	pthread_cond_broadcast(&data.ctlSemaphore);
@@ -1487,9 +1493,9 @@ void mainloop(int next_arg, char *argv[], int apl_arg, unsigned char persist, lo
 				
 			/* ...and update/print status & record time. */
 			if(data.status & rec_running)
-				g_print("Recording %.1f\r", (double)gst_util_uint64_scale_int(data.curPos, 10, GST_SECOND) * 0.1);
+				g_print("\x1b[A Recording %.1f\n", (double)gst_util_uint64_scale_int(data.curPos, 10, GST_SECOND) * 0.1);
 			else
-				g_print("Stopped %.1f\r", (double)gst_util_uint64_scale_int(data.curPos, 10, GST_SECOND) * 0.1);
+				g_print("\x1b[A Stopped %.1f\n", (double)gst_util_uint64_scale_int(data.curPos, 10, GST_SECOND) * 0.1);
 				
 			if((data.closeWaiting) && (data.state != GST_STATE_PLAYING)){
 				g_print("Shutting down.\n");

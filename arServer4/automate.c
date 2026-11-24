@@ -554,14 +554,12 @@ void MoveItem(int sourcePos, int destPos, unsigned char clearTimes){
 		rec = (queueRecord *)fromRec;
 		if(checkPnumber(rec->player-1)){
 			instance = &mixEngine->ins[rec->player-1];
-			instance->segNext = 0;	// setting these are atomic/thread safe
-			instance->posSeg = 0.0;	// setting these are atomic/thread safe
+			instance->segNext = 0;	// setting this is atomic/thread safe
 		}
 		rec = (queueRecord *)toRec;
 		if(checkPnumber(rec->player-1)){
 			instance = &mixEngine->ins[rec->player-1];
-			instance->segNext = 0;
-			instance->posSeg = 0.0;
+			instance->segNext = 0;	// setting this is atomic/thread safe
 		}
 		if(destPos >= mixEngine->inCount){
 			// unload from player if loaded
@@ -650,9 +648,10 @@ void setSegTimes(inChannel *thisp, inChannel *nextp, int nextNum){
 			thisp->fadeTime = 0.1;
 	}else
 		thisp->fadeTime = GetMetaFloat(thisp->UID, "FadeTime", NULL);
-	thisp->segNext = nextNum+1;
 	thisp->posSeg = (float)segoutT;
 	thisp->fadePos = GetMetaFloat(thisp->UID, "FadeOut", NULL);
+	// segNext is checked first for segue event testing by the audio engine mixing thread, so it must be set AFTER posSeg and fadePos in this thread for thread safe operation.
+	thisp->segNext = nextNum+1;
 }
 
 void NextListItem(uint32_t lastStat, queueRecord *curQueRec, int *firstp, float *sbtime, float remtime, unsigned char *isPlaying){

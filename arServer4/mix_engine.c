@@ -594,15 +594,16 @@ int process(jack_nframes_t nframes, void *arg){
 			inchrec->pos = inchrec->pos + frameTime;
 			
 			/* check for time segue when playing and not in Cue, and if segTime & segNext are valid */
-			if(inchrec->posSeg){
-				if((inchrec->segNext) && (inchrec->segNext <= icount)){
+			unsigned int segp = inchrec->segNext;
+			if(segp && (segp <= icount)){
+				if(inchrec->posSeg){
 					if((busbits & 2) == 0){
 						if(inchrec->pos > inchrec->posSeg){
 							if((inchrec->levelSeg == 0.0) || (curSegLevel < inchrec->levelSeg)){
-								inChannel *next = &mixEngineRef->ins[inchrec->segNext-1];
+								inChannel *next = &mixEngineRef->ins[segp-1];
 								next->requested = next->requested | change_play;
-								inchrec->posSeg = 0.0;
 								inchrec->segNext = 0;
+								inchrec->posSeg = 0.0;
 								inchrec->levelSeg = 0.0;
 							}
 						}

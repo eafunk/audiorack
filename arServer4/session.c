@@ -4254,7 +4254,7 @@ unsigned char handle_uadd(ctl_session *session){
 	int aInt;
 	int tx_length;
 	
-	// first parameter, position (-1 for end of list) or UID
+	// first parameter, position (-1 for end of list, or -2 for next item in queue) or UID
 	param = strtok_r(NULL, " ", &session->save_pointer);
 	if(param != NULL){
 		if(strlen(param) > 4){
@@ -4531,7 +4531,8 @@ unsigned char handle_fadeprior(ctl_session *session){
 	pthread_rwlock_rdlock(&queueLock);
 	while(--i >= 0){
 		if(rec = (queueRecord *)getNthNode((LinkedListEntry *)&queueList, i+1)){
-			if(getQueueRecStatus(rec, NULL) & status_hasPlayed){
+			// is playing, or start request already made
+			if((getQueueRecStatus(rec, &instance) & status_hasPlayed) || (instance && (instance->requested && change_play))){
 				// this is the most recent playing list item
 				// don't fade this one, but keep going back and fade earlier items in players
 				while(--i >= 0){

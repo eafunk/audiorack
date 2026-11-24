@@ -327,14 +327,25 @@ void db_result_attach(dbInstance *db, void *res){
 	}
 }
 
-unsigned char db_query(dbInstance *db, const char *querryStr){
+unsigned int db_query(dbInstance *db, const char *querryStr){
 	// returns 0 if no error.
 	switch(db->type){
 		case dbtype_mysql:
-
-			if(mysql_real_query((MYSQL*)db->instance, querryStr, strlen(querryStr))){
+			size_t len = strlen(querryStr);
+			if(mysql_real_query((MYSQL*)db->instance, querryStr, len)){
 				HandleDBerror(db);
-				return 1;
+				unsigned int err = mysql_errno((MYSQL*)db->instance);
+				if(err != 1213)
+					return err;
+				// handle error number 1213, deadlock, try again after delay between 1 and 5 seconds.
+				if(sleep((len % 5) + 1))  // slightly randomized based on string length
+					return err;	// sleep failed
+				if(mysql_real_query((MYSQL*)db->instance, querryStr, len)){
+					HandleDBerror(db);
+					err = mysql_errno((MYSQL*)db->instance);
+					return err;
+				}
+				
 			}else{
 				if(db->result)
 					db_result_free(db);
@@ -348,14 +359,14 @@ unsigned char db_query(dbInstance *db, const char *querryStr){
 			}
 			break;
 	}
-	return 1;
+	return UINT_MAX;
 }
 
-unsigned char db_queryf(dbInstance *db, const char *querryStr, ...){
+unsigned int db_queryf(dbInstance *db, const char *querryStr, ...){
 	// returns 0 if no error.
 	char *statement;
 	va_list ap;
-	unsigned char ret;
+	unsigned int ret;
 
 	va_start(ap, querryStr);
 	vasprintf(&statement, querryStr, ap);
@@ -493,6 +504,7 @@ unsigned char MakeLogEntry(ProgramLogRecord *rec){
 	char *prefix = NULL;
 	const char *tmp;
 	unsigned char ret_val = 0;
+	unsigned int err, again;
 	
 	instance = db_get_and_connect();
 	if(!instance)
@@ -520,7 +532,7 @@ unsigned char MakeLogEntry(ProgramLogRecord *rec){
 
 	Owner = strdup(rec->owner);
 	db_quote_string(instance, &Owner);
-			
+	
 	if(rec->logID && rec->played){
 		if(!db_queryf(instance, "UPDATE %slogs SET Item = %lu, Time = %ld, Name = %s, Artist = %s, Album = %s, "
 						"Added = %u, ArtistID = %lu, AlbumID = %lu, OwnerID = %lu, Comment = %s, Source = %s, Owner = %s WHERE ID = %lu", 
@@ -532,7 +544,7 @@ unsigned char MakeLogEntry(ProgramLogRecord *rec){
 			}
 		}
 	}
-	
+
 	// perform the sql insert function
 	if(!db_queryf(instance, "INSERT INTO %slogs (Item, Location, Time, Name, Artist, Album, Added, ArtistID, AlbumID, OwnerID, "
 				"Comment, Source, Owner) VALUES (%lu, %lu, %ld, %s, %s, %s, %u, %lu, %lu, %lu, %s, %s, %s)", 
