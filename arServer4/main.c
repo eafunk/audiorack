@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2019-2023 Ethan Funk
+  Copyright (C) 2019-2026 Ethan Funk
   
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU Lesser General Public License as published by
@@ -38,8 +38,8 @@
 
 /* program wide globals */
 unsigned int maxSessions = 25;
-const char *versionStr="4.1.4"; 
-const char *versionCR="2004-2025  Ethan Funk";
+const char *versionStr="4.1.5"; 
+const char *versionCR="2004-2026  Ethan Funk";
 mixEngineRecPtr mixEngine;
 unsigned char run;
 unsigned char quit;

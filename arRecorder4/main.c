@@ -1626,7 +1626,7 @@ int main(int argc, char *argv[]){
 			return 0;
 		}
 	}
-	fprintf(stderr, "arRecorder version 4.1.1\n\n"); 
+	fprintf(stderr, "arRecorder version 4.1.2\n\n"); 
 	fprintf(stderr, "Usage: (optional, in front of required) [required - in order]\n"); 
 	fprintf(stderr, "%s (-p) (-a file-path) (-s unix-start-time) (-l time-limit-seconds) (-b tags-bus-bit-number) [our unique Jack name] [control client name] [ctlUID] [jack port connection list] [gstreamer-pipline]\n\n", argv[0]);
 	fprintf(stderr, "-p optionaly enables jack connection persistance, causing arRecorder to keep running when jack connections are lost\n");
